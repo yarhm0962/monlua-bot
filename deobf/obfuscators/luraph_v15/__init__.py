@@ -23,6 +23,12 @@ class LuraphV15(Obfuscator):
         # headers can be a long multi-line comment block; search the first 4 KB
         m = HEADER.search(source[:4000])
         if m:
+            minor = m.group(2)
+            if minor is not None and minor != "0":
+                # an official v15.1+ header belongs to the v15.1 engine; this
+                # engine stays as a close relative one point below
+                self.last_evidence = ["official Luraph header comment (v15.%s; reported by the v15.1 engine)" % minor]
+                return 0.9
             self.last_evidence = ["official Luraph header comment (v%s)" % m.group(1)]
             return 1.0 if m.group(1) == "15" else 0.3     # other versions: probably close, not verified
         if HEADER_ANY.search(source[:4000]):

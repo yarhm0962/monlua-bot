@@ -12,6 +12,7 @@ import time
 import socket
 import subprocess
 import sys
+import traceback
 import tempfile
 import urllib.error
 import urllib.parse
@@ -80,8 +81,15 @@ bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 
 
+class _LoggedLayoutView(discord.ui.LayoutView):
+    """Surface component errors in the logs instead of swallowing them."""
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
+        print(f"View error for {item} in {type(self).__name__}: {error!r}\n{traceback.format_exc()}", flush=True)
+
+
 def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.LayoutView:
-    view = discord.ui.LayoutView()
+    view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(f"## {title}"))
     container.add_item(discord.ui.Separator())
@@ -112,7 +120,7 @@ def _human_size(n: int) -> str:
 
 
 def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "") -> discord.ui.LayoutView:
-    view = discord.ui.LayoutView()
+    view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
     container.add_item(discord.ui.TextDisplay("## \u2705 Deobfuscation complete"))
     container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
@@ -133,7 +141,7 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
 
 
 def error_view(title: str, detail: str) -> discord.ui.LayoutView:
-    view = discord.ui.LayoutView()
+    view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0xED4245)
     container.add_item(discord.ui.TextDisplay(f"## \u274c {title}"))
     container.add_item(discord.ui.Separator())
@@ -169,7 +177,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
     one_click = None
     if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED:
         one_click = (best_name, source)
-    view = discord.ui.LayoutView()
+    view = _LoggedLayoutView()
     if one_click:
         view.timeout = None          # keep the button usable for the process lifetime
     container = discord.ui.Container(accent_color=color)
@@ -213,8 +221,8 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
     if one_click:
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
+        # top-level ActionRow: the most reliably dispatched layout for V2 cards
+        view.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
     stats += ("\u2699\ufe0f The button below deobfuscates with this engine" if one_click
               else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate")
@@ -244,22 +252,30 @@ class _DeobfuscateButton(discord.ui.Button):
         self._source = source
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        view = _ConfirmDeobfView(self._engine, self._source)
-        await interaction.response.send_message(
-            f"Continue with {SUPPORTED[self._engine]['label']} Deobfuscator?", view=view)
+        try:
+            view = _ConfirmDeobfView(self._engine, self._source)
+        except Exception:
+            print(f"Deobfuscate button: confirm view failed:\n{traceback.format_exc()}", flush=True)
+            view = None
+        label = SUPPORTED[self._engine]["label"]
+        if view is None:
+            await interaction.response.send_message(
+                "\u26a0\ufe0f Couldn't open the confirmation card. Use the engine command directly (`.help`).",
+                ephemeral=True)
+            return
+        await interaction.response.send_message(f"Continue with {label} Deobfuscator?", view=view)
 
 
-class _ConfirmDeobfView(discord.ui.LayoutView):
+class _ConfirmDeobfView(discord.ui.View):
     def __init__(self, engine: str, source: tuple):
         super().__init__(timeout=None)
-        container = discord.ui.Container(accent_color=0x5865F2)
-        container.add_item(discord.ui.TextDisplay(
-            f"## \u2699\ufe0f Continue with {SUPPORTED[engine]['label']} Deobfuscator?"))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(
-            "This runs the full deobfuscation job on the same file you scanned."))
-        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(engine, source), _CancelDeobfButton()))
-        self.add_item(container)
+        self._engine = engine
+        self._source = source
+        self.add_item(_ConfirmDeobfButton(engine, source))
+        self.add_item(_CancelDeobfButton())
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
+        print(f"Confirm view error for {item}: {error!r}\n{traceback.format_exc()}", flush=True)
 
 
 class _ConfirmDeobfButton(discord.ui.Button):
@@ -296,6 +312,16 @@ class _CancelDeobfButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.edit_message(
             content="\ud83d\uddf1\ufe0f Cancelled \u2014 no job was started.", view=None)
+
+
+@bot.listen("on_interaction")
+async def _log_component_clicks(interaction: discord.Interaction) -> None:
+    """Every button click is logged, so a dead interaction is never silent."""
+    if interaction.type is not discord.InteractionType.component:
+        return
+    data = interaction.data or {}
+    print(f"component-click: custom_id={data.get('custom_id')} "
+          f"message={getattr(interaction.message, 'id', None)}", flush=True)
 
 
 def runtime_status() -> tuple[bool, str]:

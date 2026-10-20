@@ -8,12 +8,14 @@ confident; `--obfuscator NAME` forces one.
 """
 from obfuscators.base import Obfuscator, Job  # noqa: F401
 from obfuscators.luraph_v15 import LuraphV15
+from obfuscators.luraph_v151 import LuraphV151
 from obfuscators.ironbrew1 import Ironbrew1
 from obfuscators.moonsec_v3 import MoonsecV3
 from obfuscators.generic import Generic
 from obfuscators import extra_families
 
 PLUGINS = [
+    LuraphV151(),
     LuraphV15(),
     Ironbrew1(),
     MoonsecV3(),
