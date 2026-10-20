@@ -455,6 +455,16 @@ def _download_url(url: str, destination: Path) -> tuple[str, int]:
                     response = opener.open(request, timeout=URL_TIMEOUT)
                     break
                 except urllib.error.HTTPError as exc:
+                    if exc.code in (301, 302, 303, 307, 308):
+                        # Redirects are chased hop by hop at the top of the loop,
+                        # so every new host still goes through _validate_public_url.
+                        location = (exc.headers.get("Location") or "").strip()
+                        if not location:
+                            raise ValueError(
+                                f"Could not download the raw file (HTTP {exc.code} with no redirect target)."
+                            ) from exc
+                        current_url = urllib.parse.urljoin(current_url, location)
+                        break          # response/refused stay empty: hop loop retries the new URL
                     refused = exc
                     if exc.code in (401, 403, 406, 418, 429):
                         continue
