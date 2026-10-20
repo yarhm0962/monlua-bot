@@ -187,7 +187,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
         ))
         others = [(l, c) for n, c, l in engines if c > 0]
     if others:
-        others_text = " \u00b7 ".join(f"{l} ({int(round(c * 100))}%)" for _l, c in others[:3])
+        others_text = " \u00b7 ".join(f"{label} ({int(round(c * 100))}%)" for label, c in others[:3])
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Also considered: {others_text}"))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
