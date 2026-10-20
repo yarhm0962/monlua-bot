@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import html
 import ipaddress
 import json
@@ -21,6 +23,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 from types import SimpleNamespace
+from collections import OrderedDict
+from datetime import datetime
 
 import discord
 from discord.ext import commands
@@ -88,6 +92,23 @@ job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 # concurrent jobs MAX_CONCURRENT_JOBS allows.
 JOB_MEM_BUDGET_MB = 330
 _active_jobs = 0
+
+# Free cloud runner: big jobs are dispatched to the private GitHub Actions
+# repo in GH_JOBS_REPO (a runner has ~8 GB RAM and 2 dedicated cores), so big
+# files finish in a couple of minutes instead of exhausting the 512 MB
+# Render instance. Small files keep running locally; any cloud failure falls
+# back to the local engine. Identical re-runs are answered instantly from
+# _RESULT_CACHE.
+GH_JOBS_REPO = os.getenv("GH_JOBS_REPO", "yarhm0962/monlua-jobs")
+GH_DISPATCH_TOKEN = os.getenv("GH_DISPATCH_TOKEN", "")
+CLOUD_V151_MIN_BYTES = 150_000
+CLOUD_OTHER_MIN_BYTES = 1_000_000
+CLOUD_WAIT_SECONDS = 1500
+CLOUD_POLL_SECONDS = 8
+cloud_slots = asyncio.Semaphore(1)
+_RESULT_CACHE: OrderedDict = OrderedDict()
+_RESULT_CACHE_BYTES = 0
+_RESULT_CACHE_MAX_BYTES = 32 * 1024 * 1024
 
 
 class _LoggedLayoutView(discord.ui.LayoutView):
@@ -683,6 +704,144 @@ async def _run_process(args: list[str], timeout: int) -> tuple[int, bytes, bytes
     return proc.returncode or 0, stdout, stderr
 
 
+def _gh_time(value: str) -> float:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _gh_api(method: str, path: str, *, body=None, accept: str = "application/vnd.github+json") -> tuple[int, bytes]:
+    """One GitHub REST call. Returns (status, response bytes); HTTP errors are data."""
+    url = f"https://api.github.com{path}"
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        "Accept": accept,
+        "Authorization": f"Bearer {GH_DISPATCH_TOKEN}",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "monlua-bot",
+    })
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+
+
+def _cloud_upload_input(job_id: str, data: bytes) -> None:
+    body = {"message": f"input {job_id}", "content": base64.b64encode(data).decode("ascii")}
+    code, resp = _gh_api("PUT", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input", body=body)
+    if code not in (200, 201):
+        raise RuntimeError(f"input upload failed: HTTP {code}: {resp[:200]!r}")
+
+
+def _cloud_dispatch(engine: str, job_id: str) -> None:
+    code, resp = _gh_api(
+        "POST", f"/repos/{GH_JOBS_REPO}/actions/workflows/deobf.yml/dispatches",
+        body={"ref": "main", "inputs": {"engine": engine, "job_id": job_id}})
+    if code != 204:
+        raise RuntimeError(f"dispatch failed: HTTP {code}: {resp[:200]!r}")
+
+
+def _cloud_fetch_result(job_id: str) -> bytes:
+    code, out = _gh_api(
+        "GET", f"/repos/{GH_JOBS_REPO}/contents/results/{job_id}.luau?ref=result/{job_id}",
+        accept="application/vnd.github.raw")
+    if code == 200 and out:
+        return out
+    # large outputs: read the blob directly
+    code2, meta = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/contents/results/{job_id}.luau?ref=result/{job_id}")
+    if code2 == 200:
+        try:
+            sha = json.loads(meta.decode("utf-8", errors="replace")).get("sha", "")
+        except ValueError:
+            sha = ""
+        if sha:
+            code3, blob = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/git/blobs/{sha}")
+            if code3 == 200:
+                try:
+                    return base64.b64decode(json.loads(blob.decode("utf-8", errors="replace"))["content"])
+                except (ValueError, KeyError):
+                    pass
+    raise RuntimeError(f"result fetch failed: HTTP {code}")
+
+
+def _cloud_cleanup(job_id: str) -> None:
+    try:
+        code, meta = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input?ref=main")
+        if code == 200:
+            sha = json.loads(meta.decode("utf-8", errors="replace")).get("sha", "")
+            if sha:
+                _gh_api("DELETE", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input",
+                        body={"message": f"cleanup {job_id}", "sha": sha})
+    except Exception:
+        pass
+    _gh_api("DELETE", f"/repos/{GH_JOBS_REPO}/git/refs/heads/result/{job_id}")
+
+
+def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> bytes:
+    """Run one deobfuscation job on the free GitHub Actions runner."""
+    if not GH_DISPATCH_TOKEN:
+        raise RuntimeError("no GitHub token configured")
+    job_id = os.urandom(6).hex()
+    _cloud_upload_input(job_id, input_path.read_bytes())
+    _cloud_dispatch(engine, job_id)
+    started_unix = time.time()
+    deadline = started_unix + wait_seconds
+    conclusion = None
+    while time.time() < deadline:
+        code, resp = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/runs?event=workflow_dispatch&per_page=15")
+        if code == 200:
+            try:
+                runs = json.loads(resp.decode("utf-8", errors="replace")).get("workflow_runs") or []
+            except ValueError:
+                runs = []
+            for run in runs:
+                if run.get("head_branch") != "main":
+                    continue
+                if _gh_time(run.get("created_at", "")) < started_unix - 5:
+                    continue
+                if run.get("status") == "completed":
+                    conclusion = run.get("conclusion") or "unknown"
+                    break
+        if conclusion is not None:
+            break
+        time.sleep(CLOUD_POLL_SECONDS)
+    if conclusion is None:
+        raise RuntimeError("the cloud runner did not answer in time")
+    if conclusion != "success":
+        raise RuntimeError(f"cloud run {conclusion}")
+    out = _cloud_fetch_result(job_id)
+    _cloud_cleanup(job_id)
+    return out
+
+
+def _cache_key(engine: str, input_path: Path) -> tuple[str, str]:
+    try:
+        digest = hashlib.sha256()
+        with open(input_path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+        return engine, digest.hexdigest()
+    except OSError:
+        return ("", "")
+
+
+def _result_cache_store(key: tuple[str, str], data: bytes) -> None:
+    global _RESULT_CACHE_BYTES
+    if not key[0] or not data or len(data) > MAX_OUTPUT_BYTES:
+        return
+    if key in _RESULT_CACHE:
+        _RESULT_CACHE_BYTES -= len(_RESULT_CACHE.pop(key))
+    while _RESULT_CACHE and _RESULT_CACHE_BYTES + len(data) > _RESULT_CACHE_MAX_BYTES:
+        _, old = _RESULT_CACHE.popitem(last=False)
+        _RESULT_CACHE_BYTES -= len(old)
+    _RESULT_CACHE[key] = data
+    _RESULT_CACHE_BYTES += len(data)
+
+
 def result_embed(filename: str, label: str, size: int, desc: str, file_note: bool) -> discord.Embed:
     embed = discord.Embed(title=filename, color=0x57F287, description=desc[:4000])
     embed.add_field(name="Engine", value=label, inline=True)
@@ -789,49 +948,68 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     wait_note = " Large file: this can take a few minutes."
                 await status.edit(content=f"⚙️ Detected **{label}**. Devirtualizing `{filename}`…{wait_note}")
                 start_time = time.monotonic()
-                if engine == "luraph_v151":
-                    try:
-                        node_bin = await asyncio.to_thread(resolve_node)
-                    except Exception as exc:
-                        await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
-                        return
-                    # the v15.1 tool only accepts .lua/.luau inputs: hand it a
-                    # .lua-named copy when the upload came in as .txt
-                    node_input = workdir / f"{Path(filename).stem}.lua"
-                    if input_path != node_input:
-                        await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                    command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30))]
+                # result cache: an identical file + engine re-run is instant
+                cache_key = _cache_key(engine, input_path)
+                cached = _RESULT_CACHE.get(cache_key) if cache_key[0] else None
+                if cached is not None:
+                    output_path.write_bytes(cached)
                 else:
-                    command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
-                               "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
-                print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
-                try:
-                    returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
-                except asyncio.TimeoutError:
-                    await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
-                    return
-                except JobMemoryExceeded as exc:
-                    print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
-                    await status.edit(content=(
-                        f"🧠 `{filename}` needed more memory than the free server has ({exc}). "
-                        "The job was stopped early so the bot stays online.\n"
-                        "Try a smaller file, or run this engine on a bigger Render plan."
-                    ))
-                    return
+                    go_cloud = (size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES)
+                    if go_cloud and GH_DISPATCH_TOKEN:
+                        try:
+                            await status.edit(content=f"☁️ `{filename}` is a big file: running it on the free cloud runner…")
+                            async with cloud_slots:
+                                cloud_out = await asyncio.to_thread(
+                                    _cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS)
+                            output_path.write_bytes(cloud_out)
+                        except Exception as exc:
+                            print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
+                            await status.edit(content=f"☁️ Cloud runner unavailable ({str(exc)[:120]}). Running locally instead…")
+                    if not output_path.is_file():
+                        start_time = time.monotonic()
+                        if engine == "luraph_v151":
+                            try:
+                                node_bin = await asyncio.to_thread(resolve_node)
+                            except Exception as exc:
+                                await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
+                                return
+                            # the v15.1 tool only accepts .lua/.luau inputs: hand it a
+                            # .lua-named copy when the upload came in as .txt
+                            node_input = workdir / f"{Path(filename).stem}.lua"
+                            if input_path != node_input:
+                                await asyncio.to_thread(shutil.copyfile, input_path, node_input)
+                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30))]
+                        else:
+                            command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
+                                       "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
+                        print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
+                        try:
+                            returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
+                        except asyncio.TimeoutError:
+                            await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
+                            return
+                        except JobMemoryExceeded as exc:
+                            print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
+                            await status.edit(content=(
+                                f"🧠 `{filename}` needed more memory than the free server has ({exc}). "
+                                "The job was stopped early so the bot stays online.\n"
+                                "Try a smaller file, or run this engine on a bigger Render plan."
+                            ))
+                            return
 
-                if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
-                    detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
-                    try:
-                        await status.edit(content=None, view=error_view(
-                            f"Deobfuscation failed on `{filename}`",
-                            (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
-                        ))
-                    except discord.HTTPException:
-                        await status.edit(content=(
-                            f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
-                        )[:1900])
-                    print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
-                    return
+                        if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
+                            detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
+                            try:
+                                await status.edit(content=None, view=error_view(
+                                    f"Deobfuscation failed on `{filename}`",
+                                    (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
+                                ))
+                            except discord.HTTPException:
+                                await status.edit(content=(
+                                    f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
+                                )[:1900])
+                            print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
+                            return
 
                 out_text = output_path.read_text(encoding="utf-8", errors="replace")
                 if engine == "luraph_v151" and not out_text.startswith("-- [[ Deobfuscated by MonLua ]]"):
@@ -841,6 +1019,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 if output_size > MAX_OUTPUT_BYTES:
                     await status.edit(content=f"📦 Output too large: {output_size:,} bytes (limit {MAX_OUTPUT_BYTES:,}).")
                     return
+                _result_cache_store(cache_key, output_path.read_bytes())
                 elapsed_seconds = max(1, int(time.monotonic() - start_time))
                 elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
                 await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")

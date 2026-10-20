@@ -27,6 +27,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "v151_tool": os.path.isfile("deobf/v151/deob.js"),
                 "v151_node_archive": os.path.isfile("deobf/v151/vendor/node-v20.19.5-linux-x64.tar.gz"),
                 "uptime_seconds": int(time.time() - START_TIME),
+                "cloud_runner": bool(os.environ.get("GH_DISPATCH_TOKEN")),
             }
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
