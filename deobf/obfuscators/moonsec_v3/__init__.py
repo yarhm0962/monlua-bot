@@ -218,7 +218,5 @@ class MoonsecV3(Obfuscator):
             sys.exit("[!] MoonSec V3 deobfuscation failed: %s" % best_error)
         with open(out_path, encoding="utf-8", errors="replace") as f:
             dis = f.read()
-        header = (job.credit_header() +
-                  "-- Devirtualized MoonSec V3 bytecode, as a readable disassembly\n"
-                  "-- MoonSec V3 does not keep the original source; this is the recovered program\n")
+        header = job.credit_header()
         return job.write(job.path(".moonsec_dis.txt"), header + beautify_dis(dis) + "\n")

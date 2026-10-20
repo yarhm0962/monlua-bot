@@ -216,6 +216,14 @@ async def _run_process(args: list[str], timeout: int) -> tuple[int, bytes, bytes
     return proc.returncode or 0, stdout, stderr
 
 
+def result_embed(filename: str, label: str, size: int, desc: str, file_note: bool) -> discord.Embed:
+    embed = discord.Embed(title=filename, color=0x57F287, description=desc[:4000])
+    embed.add_field(name="Engine", value=label, inline=True)
+    embed.add_field(name="Size", value=f"{size:,} bytes", inline=True)
+    embed.set_footer(text="Output attached." if file_note else "Review before running.")
+    return embed
+
+
 async def process_input(ctx: commands.Context, engine: str, url: str = "") -> None:
     spec = SUPPORTED[engine]
     label = spec["label"]
@@ -283,7 +291,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 detected, diagnostic = await _scan_engine(input_path)
                 if detected is None:
                     await status.edit(content=(
-                        f"Couldn't identify the obfuscator in `{filename}`. Supported: **Luraph v15**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
+                        f"❓ Couldn't identify the obfuscator in `{filename}`.\nSupported: **Luraph v15**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
                     ))
                     return
                 if detected != engine:
@@ -293,33 +301,35 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     ))
                     return
 
-                await status.edit(content=f"Detected **{label}**. Deobfuscating `{filename}`…")
+                await status.edit(content=f"⚙️ Detected **{label}**. Deobfuscating `{filename}`…")
                 command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                            "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
                 try:
                     returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
                 except asyncio.TimeoutError:
-                    await status.edit(content=f"Timed out while processing `{filename}` after {JOB_TIMEOUT} seconds.")
+                    await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
                     return
 
                 if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                     detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
                     await status.edit(content=(
-                        f"Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
+                        f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
                     )[:1900])
                     print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                     return
 
                 output_size = output_path.stat().st_size
                 if output_size > MAX_OUTPUT_BYTES:
-                    await status.edit(content=f"Output is too large ({output_size:,} bytes); limit is {MAX_OUTPUT_BYTES:,} bytes.")
+                    await status.edit(content=f"📦 Output too large: {output_size:,} bytes (limit {MAX_OUTPUT_BYTES:,}).")
                     return
-                await status.edit(content=f"Done: `{filename}` deobfuscated with **{label}**. Review before running.")
+                await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")
                 out_text = output_path.read_text(encoding="utf-8", errors="replace")
                 if output_size <= 1600 and "```" not in out_text:
-                    await ctx.reply(content=f"Output for `{filename}`:\n```lua\n{out_text.rstrip()}\n```", mention_author=False)
+                    embed = result_embed(filename, label, output_size, f"```lua\n{out_text.rstrip()}\n```", False)
+                    await ctx.reply(embed=embed, mention_author=False)
                 else:
-                    await ctx.reply(content=f"Output for `{filename}`:", file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
+                    embed = result_embed(filename, label, output_size, "Recovered program attached as a file.", True)
+                    await ctx.reply(embed=embed, file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
             except ValueError as exc:
                 message = str(exc)
                 if status:

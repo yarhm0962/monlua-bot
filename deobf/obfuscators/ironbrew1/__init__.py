@@ -130,6 +130,5 @@ def lift(job, dump_path, dpath):
     print("[*]   %d functions, %d unlifted blocks, %d unstructured jumps (%.1fs)"
           % (st["functions"], st["errors"], st["fallbacks"], time.time() - t0), file=sys.stderr)
     text = backend.run_big_stack(lambda: backend.finish_text(backend.polish(text)))
-    header = (job.credit_header() +
-              "-- Local names are inferred from use (the original names are not in the bytecode)\n")
+    header = job.credit_header()
     job.write(dpath, header + "\n" + text + "\n")

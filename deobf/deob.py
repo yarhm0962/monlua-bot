@@ -150,7 +150,15 @@ def main():
             if not result or not os.path.exists(result):
                 sys.exit("[!] no result")
             import shutil
-            shutil.copyfile(result, final)
+            # every engine's final output gets exactly one header comment
+            with open(result, encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+            i = 0
+            while i < len(lines) and (not lines[i].strip() or lines[i].lstrip().startswith("--")):
+                i += 1
+            body = "\n".join(lines[i:]) + "\n"
+            with open(final, "w", encoding="utf-8", newline="\n") as f:
+                f.write("-- [[ Deobfuscated by MonLua ]]\n" + body)
             print("[+] result: " + final, file=sys.stderr)
     finally:
         if workdir:
