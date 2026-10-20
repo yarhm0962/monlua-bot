@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import ipaddress
+import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -67,8 +70,11 @@ def _validate_public_url(url: str) -> tuple[str, str]:
     if parsed.username or parsed.password:
         raise ValueError("URLs containing embedded credentials are not accepted.")
     filename = Path(urllib.parse.unquote(parsed.path)).name
-    if not filename or Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+    suffix = Path(filename).suffix.lower()
+    if not filename or (suffix and suffix not in ALLOWED_EXTENSIONS):
         raise ValueError("The raw URL must point directly to a `.lua`, `.luau`, or `.txt` file.")
+    if suffix not in ALLOWED_EXTENSIONS:
+        filename = "paste.lua"
     try:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except OSError as exc:
@@ -85,44 +91,85 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+_BOT_UA = "DeobfuscatorDiscordBot/1.0"
+
+
+def _extract_code_from_page(body: bytes) -> Optional[bytes]:
+    """A paste/view page instead of raw code: dig the script out of it."""
+    text = body.decode("utf-8", errors="replace")
+    candidates = []
+    for match in re.findall(
+        r"<(?:pre|code|textarea)(?:\s[^>]*)?>(.*?)</(?:pre|code|textarea)>",
+        text, re.IGNORECASE | re.DOTALL,
+    ):
+        candidates.append(html.unescape(match).strip("\r\n"))
+    for key in ("content", "code", "source", "sourceCode", "data"):
+        for chunk in re.findall(r'"%s"\s*:\s*"((?:[^"\\]|\\.)*)"' % key, text):
+            try:
+                candidates.append(json.loads('"%s"' % chunk))
+            except ValueError:
+                pass
+    candidates = [item for item in candidates if item.strip()]
+    if not candidates:
+        return None
+    return max(candidates, key=len).encode("utf-8")
+
+
 def _download_url(url: str, destination: Path) -> tuple[str, int]:
     current_url = url
     opener = urllib.request.build_opener(_NoRedirect)
     for _ in range(4):
         current_url, filename = _validate_public_url(current_url)
-        request = urllib.request.Request(current_url, headers={"User-Agent": "DeobfuscatorDiscordBot/1.0", "Accept": "text/plain, application/octet-stream, */*"})
-        try:
-            response = opener.open(request, timeout=URL_TIMEOUT)
-        except urllib.error.HTTPError as exc:
-            if exc.code in (301, 302, 303, 307, 308) and exc.headers.get("Location"):
-                current_url = urllib.parse.urljoin(current_url, exc.headers["Location"])
-                continue
-            raise ValueError(f"Could not download the raw file (HTTP {exc.code}).") from exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise ValueError("Could not download that raw URL. Make sure it is publicly accessible.") from exc
+        response = None
+        refused: Optional[urllib.error.HTTPError] = None
+        for agent in (_BROWSER_UA, _BOT_UA):
+            request = urllib.request.Request(current_url, headers={
+                "User-Agent": agent,
+                "Accept": "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
+            try:
+                response = opener.open(request, timeout=URL_TIMEOUT)
+                break
+            except urllib.error.HTTPError as exc:
+                refused = exc
+                if exc.code in (401, 403, 406, 418, 429):
+                    continue
+                raise ValueError(f"Could not download the raw file (HTTP {exc.code}).") from exc
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                raise ValueError("Could not download that raw URL. Make sure it is publicly accessible.") from exc
+        if response is None:
+            code = refused.code if refused is not None else 0
+            raise ValueError(
+                f"Could not download the raw file (HTTP {code}). The host refuses automated downloads; "
+                "attach the file directly in Discord instead."
+            )
         with response:
             final_url = response.geturl()
             if final_url != current_url:
                 _validate_public_url(final_url)
             content_type = response.headers.get_content_type().lower()
-            if content_type in {"text/html", "application/xhtml+xml"}:
-                raise ValueError("That link returned a web page, not a raw source file.")
             declared = response.headers.get("Content-Length")
             if declared and int(declared) > MAX_INPUT_BYTES:
                 raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
-            total = 0
-            with destination.open("wb") as output:
-                while True:
-                    chunk = response.read(64 * 1024)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > MAX_INPUT_BYTES:
-                        raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
-                    output.write(chunk)
-            if total == 0:
+            body = b""
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                body += chunk
+                if len(body) > MAX_INPUT_BYTES:
+                    raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
+            if content_type in {"text/html", "application/xhtml+xml"}:
+                extracted = _extract_code_from_page(body)
+                if extracted is None:
+                    raise ValueError("That link returned a web page with no script code inside it. Use a direct raw link.")
+                body = extracted
+            if not body:
                 raise ValueError("The source file is empty.")
-            return filename, total
+            destination.write_bytes(body)
+            return filename, len(body)
     raise ValueError("Too many redirects while downloading the raw file.")
 
 
