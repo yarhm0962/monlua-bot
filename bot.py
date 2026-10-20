@@ -97,7 +97,7 @@ def engines_body() -> str:
         "**MoonSec V3** \u2014 `.moonv3`\n\n"
         "Attach one `.lua`, `.luau`, or `.txt` file with the command, or pass a direct raw-file URL.\n"
         "Every file is scanned first: the command only runs when the detected engine matches.\n\n"
-        "-# `.deobfs` / `.engines` \u2014 engines \u00b7 `.help` \u2014 usage"
+        "-# `.detect` \u2014 identify an obfuscator \u00b7 `.deobfs` / `.engines` \u2014 engines \u00b7 `.help` \u2014 usage"
     )
 
 
@@ -129,6 +129,49 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"```text\n{detail}\n```"))
     container.add_item(discord.ui.TextDisplay("-# \U0001f4a1 `.help` lists the supported engines and file types"))
+    view.add_item(container)
+    return view
+
+
+DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
+
+
+def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
+    """Report card for `.detect`: every engine scored against the file."""
+    rows = [(n, c, l) for n, c, l in rows if n != "generic"]
+    best_name, best_conf, best_label = rows[0] if rows else ("", 0.0, "")
+    matched = best_conf >= 0.75
+    partial = 0.30 <= best_conf < 0.75
+    if matched:
+        color, title = 0x57F287, "## \U0001f50d Obfuscator identified"
+    elif partial:
+        color, title = 0xFAA61A, "## \U0001f50d Possible match"
+    else:
+        color, title = 0xED4245, "## \u2753 Unknown obfuscator"
+    view = discord.ui.LayoutView()
+    container = discord.ui.Container(accent_color=color)
+    container.add_item(discord.ui.TextDisplay(title))
+    container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
+    container.add_item(discord.ui.Separator())
+    if matched or partial:
+        verdict = "Identified" if matched else "Likely"
+        container.add_item(discord.ui.TextDisplay(
+            f"**{verdict}:** {best_label} \u2014 **{int(round(best_conf * 100))}%** confidence\n"
+            f"**Matched by:** {basis}"
+        ))
+        others = [(l, c) for n, c, l in rows[1:] if c > 0]
+    else:
+        container.add_item(discord.ui.TextDisplay(
+            f"No engine reached the 75% confidence threshold.\n**Matched by:** {basis}"
+        ))
+        others = [(l, c) for n, c, l in rows if c > 0]
+    if others:
+        others_text = " \u00b7 ".join(f"{l} ({int(round(c * 100))}%)" for _l, c in others[:3])
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Also considered: {others_text}"))
+    stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
+    stats += "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate"
+    container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
     view.add_item(container)
     return view
 
@@ -276,6 +319,43 @@ async def _scan_engine(source_path: Path) -> tuple[Optional[str], str]:
     if engine_name not in SUPPORTED or confidence < 0.75:
         return None, f"Detected engine: {engine_name}; confidence: {confidence:.2f}."
     return engine_name, f"Detected {SUPPORTED[engine_name]['label']} (confidence {confidence:.2f})."
+
+
+async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str]], str]:
+    """Score every engine against the file: [(name, confidence, label)], best first."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect-all", "--no-pypy",
+            cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except asyncio.TimeoutError:
+        raise ValueError("The detection scan timed out.")
+    except OSError as exc:
+        raise ValueError(f"Could not start the detection scan: {exc}")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip()
+        raise ValueError(f"The detection scan failed: {detail[-300:] or 'no diagnostic output'}")
+    rows: list[tuple[str, float, str]] = []
+    for line in stdout.decode("utf-8", errors="replace").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        try:
+            rows.append((parts[0], float(parts[1]), parts[2]))
+        except ValueError:
+            continue
+    if not rows:
+        raise ValueError("The detection scan returned no results.")
+    try:
+        head = source_path.read_bytes()[:600].decode("utf-8", errors="replace").lower()
+    except OSError:
+        head = ""
+    if any(h in head for h in DETECT_HEADER_HINTS):
+        basis = "header signature + code structure"
+    else:
+        basis = "code structure analysis (no header comment)"
+    return rows, basis
 
 
 async def _run_process(args: list[str], timeout: int) -> tuple[int, bytes, bytes]:
@@ -480,6 +560,67 @@ async def ibrw(ctx: commands.Context, *, url: str = "") -> None:
 @bot.command(name="moonv3")
 async def moonv3(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "moonsec_v3", url)
+
+
+@bot.command(name="detect")
+async def detect(ctx: commands.Context, *, url: str = "") -> None:
+    attachments = ctx.message.attachments
+    if attachments and url.strip():
+        await ctx.reply("Use either one attached file or one raw-file URL, not both.", mention_author=False)
+        return
+    if len(attachments) > 1:
+        await ctx.reply("Please send exactly one source file per command.", mention_author=False)
+        return
+    attachment = attachments[0] if attachments else None
+    source_url = url.strip().strip("<>")
+    if attachment is None and not source_url:
+        await ctx.reply(
+            "Use `.detect` with one `.lua`, `.luau`, or `.txt` attachment, or a direct raw-file URL.\n"
+            "Example: `.detect https://example.com/raw/script.lua`",
+            mention_author=False,
+        )
+        return
+    if attachment is not None:
+        filename = Path(attachment.filename).name
+        if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+            await ctx.reply("Unsupported file type. Only `.lua`, `.luau`, and `.txt` files are accepted.", mention_author=False)
+            return
+        if attachment.size > MAX_INPUT_BYTES:
+            await ctx.reply(f"File is too large. Maximum size is {MAX_INPUT_BYTES:,} bytes.", mention_author=False)
+            return
+    else:
+        try:
+            source_url, filename = _validate_public_url(source_url)
+        except ValueError as exc:
+            await ctx.reply(f"Invalid raw-file URL: {exc}", mention_author=False)
+            return
+    with tempfile.TemporaryDirectory(prefix="detect_bot_") as temp:
+        input_path = Path(temp) / filename
+        try:
+            if attachment is not None:
+                await attachment.save(input_path)
+                if input_path.stat().st_size == 0:
+                    await ctx.reply("That file is empty.", mention_author=False)
+                    return
+            else:
+                filename, _size = await asyncio.to_thread(_download_url, source_url, input_path)
+            status = await ctx.reply(f"Analyzing `{filename}`\u2026", mention_author=False)
+            start_time = time.monotonic()
+            try:
+                rows, basis = await _detect_scores(input_path)
+            except ValueError as exc:
+                await status.edit(content=str(exc)[:1900])
+                return
+            elapsed_seconds = max(1, int(time.monotonic() - start_time))
+            elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
+            try:
+                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed))
+            except discord.HTTPException:
+                best_label = rows[0][2] if rows else "nothing"
+                best_pct = int(round(rows[0][1] * 100)) if rows else 0
+                await status.edit(content=f"\U0001f50d Detection: {best_label} ({best_pct}%). Your Discord client may not show the full report.")
+        except discord.HTTPException:
+            print("Discord permission error during .detect: cannot read/send messages.", flush=True)
 
 
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])

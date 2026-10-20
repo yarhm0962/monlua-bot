@@ -37,6 +37,11 @@ class LuraphV15(Obfuscator):
                 re.search(r"\[\d+\]=(bit32|buffer|string|table|math)\.\w+", stripped[:20000])
                 or "LPH" in source[:200000]):
             return 0.8
+        # LPH_* markers alone (LPH_NO_VIRTUALIZE, LPH_JIT, LPH_ENCFUNC, ...) are
+        # Luraph's own pragmas: real obfuscator output, no header needed.
+        if re.search(r"\bLPH_(?:NO_VIRTUALIZE|JIT|CRASH|ENCFUNC|ENCSTR|DECFUNC|DECSTR|ENABLE_CHECKS?)\b",
+                     source[:200000]):
+            return 0.7
         return 0.0
 
     def add_arguments(self, ap):

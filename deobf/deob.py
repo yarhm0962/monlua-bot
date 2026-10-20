@@ -76,6 +76,8 @@ def parser():
                     help="skip detection and use this plugin (%s)" % ", ".join(p.name for p in obfuscators.PLUGINS))
     ap.add_argument("--detect", action="store_true",
                     help="only print the detected obfuscator (NAME<tab>confidence<tab>label) and exit")
+    ap.add_argument("--detect-all", action="store_true",
+                    help="print every plugin's confidence (NAME<tab>confidence<tab>label, best first) and exit")
     ap.add_argument("--timeout", type=int, default=90, help="hard timeout per run in seconds")
     ap.add_argument("--budget", type=int, default=30, help="soft time budget for the traced script")
     ap.add_argument("--executor", default="Wave", help="name returned by identifyexecutor()")
@@ -124,6 +126,10 @@ def main():
         plugin, conf = obfuscators.detect(source)
     if args.detect:
         print("%s\t%s\t%s" % (plugin.name, "forced" if conf is None else "%.2f" % conf, plugin.label))
+        return
+    if args.detect_all:
+        for c, p in obfuscators.scores(source):
+            print("%s\t%.2f\t%s" % (p.name, c, p.label))
         return
     maybe_reexec_pypy(args)
     print("[*] obfuscator: %s%s" % (plugin.label, "" if conf is None else " (detected, %.2f)" % conf),

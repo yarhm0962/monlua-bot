@@ -167,6 +167,18 @@ class MoonsecV3(Obfuscator):
             return 1.0
         if "moonsec v3" in source[:600].lower():
             return 0.8
+        # code-structure signals, not comment-based: MoonSec V3 wraps the
+        # script in a string-collector VM. Its decode calls look like
+        # r(N,"...") (a short name taking a number plus a long escaped
+        # string) and its encoded constants open with \4\8-style pairs.
+        head = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
+        if re.search(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"[^"]{60,}"\)', head[:20000]):
+            calls = re.findall(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"', head[:20000])
+            if len(calls) >= 5:
+                return 0.75
+            return 0.5
+        if re.search(r"\\4\\8", source[:20000]):
+            return 0.6
         return 0.0
 
     def deobfuscate(self, job):

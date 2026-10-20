@@ -22,6 +22,10 @@ HEADER = re.compile(r"--\s*this file was generated using ironbrew1\b", re.I)
 # table, or `local bh,bi,bj,...` (the wrapper takes 30+ library parameters)
 SHAPE = re.compile(r"^return\s*\(\s*function\s*\((?:[a-z]{1,2},){20,}\.\.\.\)\s*"
                    r"local [a-z]{1,3}(?:=\{-?\d+,|(?:,[a-z]{1,3}){10,})")
+# weaker shape: the same wrapper family (30+ tiny lowercase parameters, an
+# integer constant table right after) without the strict opening line
+SHAPE_LOOSE = re.compile(r"^\s*\(?\s*function\s*\((?:[a-z]{1,2},){20,}\.\.\.\)\s*"
+                         r"local [a-z]{1,3}=\{-?\d+,")
 # watchdog checks (2^20 dispatch steps each) without environment access that
 # count as an endless loop. The VM decodes its constants with VM bytecode
 # before the script starts (no environment access): a 200 KB string constant
@@ -38,8 +42,11 @@ class Ironbrew1(Obfuscator):
     def detect(self, source):
         if HEADER.search(source[:300]):
             return 1.0
-        if SHAPE.match(source.lstrip()[:600]):
+        head = source.lstrip()[:600]
+        if SHAPE.match(head):
             return 0.8
+        if SHAPE_LOOSE.match(head):
+            return 0.65
         return 0.0
 
     def deobfuscate(self, job):
