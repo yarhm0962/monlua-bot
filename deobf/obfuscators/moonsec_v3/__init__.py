@@ -106,6 +106,32 @@ def unescape_source(text):
     return "".join(out)
 
 
+def unwrap_string_dump(text):
+    """Recover a script that was dumped inside a string literal.
+
+    Paste sites wrap the whole obfuscated script in print("...") (or a similar
+    call) without escaping it, so the wrapper's own quotes are the only
+    structure to strip: take the text between the first and last quote.
+    Returns the recovered script, or None when the file is not that shape.
+    """
+    q1 = text.find('"')
+    quote = '"'
+    if q1 == -1:
+        q1 = text.find("'")
+        quote = "'"
+        if q1 == -1:
+            return None
+    prefix = text[:q1].rstrip()
+    if q1 > 40 or not re.fullmatch(r"[A-Za-z_][\w.]*\(", prefix):
+        return None
+    q2 = text.rfind(quote)
+    if q2 <= q1:
+        return None
+    inner = text[q1 + 1:q2]
+    if not HEADER.search(inner[:600]):
+        return None
+    return inner
+
 def strip_stray_backslashes(text):
     return scan_source(text)["cleaned"]
 
@@ -128,8 +154,16 @@ class MoonsecV3(Obfuscator):
             sys.exit("[!] the MoonSec V3 binary is missing (deobf/bin/MoonsecDeobfuscator)")
         with open(job.source_path, encoding="utf-8", errors="replace") as f:
             source = f.read()
-        scan = scan_source(source)
+        unwrap = unwrap_string_dump(source)
         candidates = []
+        if unwrap is not None:
+            base = unwrap.rstrip()
+            if base.endswith("."):
+                candidates.append(base[:-1].rstrip())
+            candidates.append(base)
+            candidates.append(unescape_source(base))
+        scan = scan_source(source)
+
         if scan["escaped_quote"]:
             candidates.append(strip_stray_backslashes(unescape_source(source)))
         candidates.append(source)
