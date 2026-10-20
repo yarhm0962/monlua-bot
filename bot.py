@@ -137,11 +137,12 @@ DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
 
 
 def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
-    """Report card for `.detect`: every engine scored against the file."""
-    rows = [(n, c, l) for n, c, l in rows if n != "generic"]
-    general = next(((c, l) for n, c, l in rows if n in ("obfuscated", "plain")), None)
-    engines = [(n, c, l) for n, c, l in rows if n not in ("obfuscated", "plain")]
-    best_name, best_conf, best_label = engines[0] if engines else ("", 0.0, "")
+    """Report card for `.detect`: every engine scored against the file, with
+    the concrete signals each score came from."""
+    rows = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
+    general = next(((c, l, e) for n, c, l, e in rows if n in ("obfuscated", "plain")), None)
+    engines = [(n, c, l, e) for n, c, l, e in rows if n not in ("obfuscated", "plain")]
+    best_name, best_conf, best_label, best_ev = engines[0] if engines else ("", 0.0, "", [])
     matched = best_conf >= 0.75
     partial = 0.30 <= best_conf < 0.75
     if matched:
@@ -167,14 +168,14 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
             f"**{verdict}:** {best_label} \u2014 **{int(round(best_conf * 100))}%** confidence{note}\n"
             f"**Matched by:** {basis}"
         ))
-        others = [(l, c) for n, c, l in engines[1:] if c > 0]
+        others = [(l, c) for n, c, l, e in engines[1:] if c > 0]
     elif general and general[0] >= 0.5:
         container.add_item(discord.ui.TextDisplay(
             f"The file **is obfuscated** ({int(round(general[0] * 100))}% structural match), but it does not match "
             "any of the supported engines or known families. Likely a custom or private obfuscator.\n"
             "**Matched by:** " + basis
         ))
-        others = [(l, c) for n, c, l in engines if c > 0]
+        others = [(l, c) for n, c, l, e in engines if c > 0]
     elif general:
         container.add_item(discord.ui.TextDisplay(
             "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.\n"
@@ -185,11 +186,16 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
         container.add_item(discord.ui.TextDisplay(
             f"No engine reached the 75% confidence threshold.\n**Matched by:** {basis}"
         ))
-        others = [(l, c) for n, c, l in engines if c > 0]
+        others = [(l, c) for n, c, l, e in engines if c > 0]
     if others:
         others_text = " \u00b7 ".join(f"{label} ({int(round(c * 100))}%)" for label, c in others[:3])
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Also considered: {others_text}"))
+    ev = best_ev if (matched or partial) else (general[2] if general and general[0] >= 0.5 else [])
+    if ev:
+        shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
     stats += "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate"
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
@@ -351,8 +357,9 @@ async def _scan_engine(source_path: Path) -> tuple[Optional[str], str]:
     return engine_name, f"Detected {SUPPORTED[engine_name]['label']} (confidence {confidence:.2f})."
 
 
-async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str]], str]:
-    """Score every engine against the file: [(name, confidence, label)], best first."""
+async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str, list[str]]], str]:
+    """Score every engine against the file:
+    [(name, confidence, label, evidence), ...], best first."""
     try:
         proc = await asyncio.create_subprocess_exec(
             PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect-all", "--no-pypy",
@@ -366,13 +373,14 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str]
     if proc.returncode != 0:
         detail = stderr.decode("utf-8", errors="replace").strip()
         raise ValueError(f"The detection scan failed: {detail[-300:] or 'no diagnostic output'}")
-    rows: list[tuple[str, float, str]] = []
+    rows: list[tuple[str, float, str, list[str]]] = []
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         parts = line.split("\t")
         if len(parts) < 3:
             continue
         try:
-            rows.append((parts[0], float(parts[1]), parts[2]))
+            evidence = parts[3].split(" | ") if len(parts) > 3 and parts[3].strip() else []
+            rows.append((parts[0], float(parts[1]), parts[2], evidence))
         except ValueError:
             continue
     if not rows:
@@ -382,9 +390,9 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str]
     except OSError:
         head = ""
     if any(h in head for h in DETECT_HEADER_HINTS):
-        basis = "header signature + code structure"
+        basis = "header signature + full-file code structure"
     else:
-        basis = "code structure analysis (no header comment)"
+        basis = "full-file code-structure analysis (no header comment)"
     return rows, basis
 
 

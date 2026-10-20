@@ -43,15 +43,19 @@ def scores(source):
 
 
 def all_scores(source):
-    """Rows for `--detect-all`: every plugin, then detection-only families,
-    then one family-agnostic obfuscation meter line."""
-    rows = [(p.name, c, p.label) for c, p in scores(source)]
+    """Rows for `--detect-all`: (name, confidence, label, evidence) for every
+    plugin, then detection-only families, then the family-agnostic meter.
+    Each evidence list states exactly which signals matched and their measured
+    counts, so the confidence figure is auditable rather than invented."""
+    rows = []
+    for c, p in scores(source):
+        rows.append((p.name, c, p.label, list(getattr(p, "last_evidence", []) or [])))
     rows.extend(extra_families.family_scores(source))
-    obs = extra_families.obfuscation_score(source)
+    obs, ev = extra_families.obfuscation_score(source)
     if obs >= 0.5:
-        rows.append(("obfuscated", obs, "Obfuscated (unknown engine)"))
+        rows.append(("obfuscated", obs, "Obfuscated (unknown engine)", ev))
     else:
-        rows.append(("plain", obs, "No obfuscation detected"))
+        rows.append(("plain", obs, "No obfuscation detected", ev))
     return rows
 
 

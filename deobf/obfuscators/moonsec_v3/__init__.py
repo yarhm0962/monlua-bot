@@ -157,28 +157,48 @@ def beautify_dis(text):
             out.append(line)
     return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
+_DEC_CALL = re.compile(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"[^"]{60,}"')
+_ESC8 = re.compile(r"\\4\\8")
+
+
 class MoonsecV3(Obfuscator):
     name = "moonsec_v3"
     label = "MoonSec V3"
     doc = "MOONSECV3.md"
 
     def detect(self, source):
-        if HEADER.search(source[:600]):
+        if HEADER.search(source[:4000]):
+            self.last_evidence = ["MoonSec V3 header comment"]
             return 1.0
-        if "moonsec v3" in source[:600].lower():
+        if "moonsec v3" in source[:4000].lower():
+            self.last_evidence = ["MoonSec V3 version mention in the header area"]
             return 0.8
         # code-structure signals, not comment-based: MoonSec V3 wraps the
         # script in a string-collector VM. Its decode calls look like
         # r(N,"...") (a short name taking a number plus a long escaped
         # string) and its encoded constants open with \4\8-style pairs.
+        # Both signals are counted across the WHOLE file, not a window.
         head = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
-        if re.search(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"[^"]{60,}"\)', head[:20000]):
-            calls = re.findall(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"', head[:20000])
-            if len(calls) >= 5:
-                return 0.8
-            return 0.5
-        if re.search(r"\\4\\8", source[:20000]):
+        calls = sum(1 for _ in _DEC_CALL.finditer(head))
+        esc8 = sum(1 for _ in _ESC8.finditer(source))
+        if calls >= 5:
+            conf = 0.8 if calls < 25 else 0.85
+            ev = ["%d string-decoder call sites (%.1f per KB, need 5)" % (calls, 1000.0 * calls / max(1, len(source)))]
+            if esc8:
+                conf = min(0.9, conf + 0.05)
+                ev.append("%d encoded-constant strings" % esc8)
+            self.last_evidence = ev
+            return conf
+        if calls:
+            self.last_evidence = ["%d string-decoder call sites (need 5 for a confident match)" % calls]
+            return 0.65 if calls >= 2 else 0.5
+        if esc8 >= 5:
+            self.last_evidence = ["%d encoded-constant strings, no decoder calls" % esc8]
             return 0.65
+        if esc8:
+            self.last_evidence = ["%d encoded-constant string(s), no decoder calls" % esc8]
+            return 0.55
+        self.last_evidence = []
         return 0.0
 
     def deobfuscate(self, job):

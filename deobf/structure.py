@@ -15,6 +15,34 @@ Pipeline (see lift_function):
                  named, locals declared.
 """
 import copy
+
+
+def _fastcopy(x, memo=None):
+    """copy.deepcopy for plain AST data (dict/list/tuple/str/num) only; anything
+    else falls back to copy.deepcopy with the same memo. Several times faster on
+    large ASTs, and output-identical."""
+    t = type(x)
+    if t is dict:
+        if memo is not None:
+            got = memo.get(id(x))
+            if got is not None:
+                return got
+            y = {}
+            memo[id(x)] = y
+            for k, v in x.items():
+                y[k] = _fastcopy(v, memo)
+            return y
+        return {k: _fastcopy(v) for k, v in x.items()}
+    if t is list:
+        return [_fastcopy(v, memo) for v in x]
+    if t is tuple:
+        return tuple(_fastcopy(v, memo) for v in x)
+    if t in (str, int, float, bool) or x is None:
+        return x
+    if memo is not None:
+        return copy.deepcopy(x, memo)
+    return copy.deepcopy(x)
+
 import re
 import sys
 import os
@@ -823,7 +851,7 @@ class Structurer:
             seen.add(cur)
             b = self.blocks[cur]
             # copies: declare() marks statements (is_local) per position
-            out += [copy.deepcopy(s) for s in b.stmts]
+            out += [_fastcopy(s) for s in b.stmts]
             if len(out) > limit:
                 return None
             if b.kind == "ret":
@@ -1047,9 +1075,9 @@ def copy_region(blocks, region):
     memo = {}
     for r in region:
         o, c = blocks[r], blocks[m[r]]
-        c.stmts = copy.deepcopy(o.stmts, memo)
-        c.cond = copy.deepcopy(o.cond, memo)
-        c.values = copy.deepcopy(o.values, memo)
+        c.stmts = _fastcopy(o.stmts, memo)
+        c.cond = _fastcopy(o.cond, memo)
+        c.values = _fastcopy(o.values, memo)
         c.kind, c.error, c.origin, c.path = o.kind, o.error, o.origin, o.path
         c.succ = [m.get(s, s) for s in o.succ]
     return m

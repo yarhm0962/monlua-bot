@@ -437,7 +437,7 @@ def iter_nodes(n):
         curr = pop()
         if type(curr) is dict:
             yield curr
-            for v in reversed(curr.values()):
+            for v in reversed(list(curr.values())):
                 t = type(v)
                 if t is dict or t is list:
                     stack.append(v)
@@ -5295,3 +5295,4 @@ run_big_stack = backend.run_big_stack
 
 if __name__ == "__main__":
     run_big_stack(main)
+

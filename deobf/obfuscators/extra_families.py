@@ -52,25 +52,39 @@ FAMILIES = [
 ]
 
 
+def _count(rx, text, cap=200000):
+    """Count regex hits over the whole text without building a result list."""
+    n = 0
+    for _m in rx.finditer(text):
+        n += 1
+        if n >= cap:
+            break
+    return n
+
+
 def family_scores(source):
-    """[(name, confidence, label)] for families the bot recognizes but cannot
-    deobfuscate. Header evidence beats shape evidence; shape hits are counted
-    across the whole file, not just the head."""
+    """[(name, confidence, label, evidence)] for families the bot recognizes
+    but cannot deobfuscate. Header evidence beats shape evidence; shape hits
+    are counted across the whole file."""
     head = source[:800]
-    body = source[:200000]
     out = []
     for name, label, header_rx, shape_rx, min_hits, conf, weak in FAMILIES:
         if header_rx.search(head):
-            out.append((name, conf, label))
+            out.append((name, conf, label, ["official header line"]))
             continue
         if shape_rx is None:
             continue
-        hits = len(shape_rx.findall(body))
+        hits = _count(shape_rx, source)
         if hits >= min_hits * 3:
-            out.append((name, conf, label))
+            out.append((name, conf, label, ["%d pattern hits (need %d)" % (hits, min_hits * 3)]))
         elif min_hits and hits >= min_hits:
-            out.append((name, weak, label))
+            out.append((name, weak, label, ["%d pattern hits (need %d for a confident match)" % (hits, min_hits * 3)]))
     return out
+
+
+_ESC_RX = re.compile(r"\\x[0-9a-fA-F]{2}|\\\d{1,3}")
+_IDENT_RX = re.compile(r"\b[A-Za-z_]\w*\b")
+_BLOB_RX = re.compile(r"\"[^\"\\]{500,}\"|'[^'\\]{500,}'")
 
 
 # ------------------------------------------------------------------
@@ -79,39 +93,52 @@ def family_scores(source):
 # ------------------------------------------------------------------
 
 def obfuscation_score(source):
-    """0..1 structural obfuscation level (family-agnostic)."""
-    body = source[:60000]
+    """(score, evidence) 0..1 structural obfuscation level, family-agnostic.
+    Every signal is measured over the whole file, and each fired signal is
+    reported with its measured number so the confidence is auditable."""
     score = 0.0
-    size = max(1, len(body))
+    evidence = []
+    size = max(1, len(source))
     per_kb = 1000.0 / size
 
     # 1. minified: a real obfuscator usually collapses everything to few lines
-    newlines = body.count("\n")
+    newlines = source.count("\n")
     if size > 4000 and newlines < size / 2000.0:
         score += 0.2
+        evidence.append("minified (%.0f newlines in %.0f KB)" % (newlines, size / 1000.0))
 
     # 2. escaped-string density: \\xNN / \\ddd byte escapes in bulk
-    escapes = len(re.findall(r"\\x[0-9a-fA-F]{2}|\\\d{1,3}", body))
+    escapes = _count(_ESC_RX, source)
     if escapes * per_kb > 20:
         score += 0.2
+        evidence.append("%.0f string escapes per KB" % (escapes * per_kb))
 
     # 3. machine-looking identifiers: dense runs of very short names
-    idents = re.findall(r"\b[A-Za-z_]\w*\b", body)
-    if idents:
-        short = sum(1 for i in idents if len(i) <= 2)
-        if short / len(idents) > 0.35:
-            score += 0.2
+    total = short = 0
+    for m in _IDENT_RX.finditer(source):
+        total += 1
+        if len(m.group(0)) <= 2:
+            short += 1
+        if total >= 1500000:
+            break
+    if total >= 500 and short / total > 0.35:
+        score += 0.2
+        evidence.append("%.0f%% 1-2-character identifiers" % (100.0 * short / total))
 
     # 4. big numeric constant tables (VM bytecode as integers)
-    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", body):
+    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", source):
         score += 0.2
+        evidence.append("large numeric constant tables (VM bytecode)")
 
     # 5. dispatcher loop + table-index dispatch
-    if re.search(r"\bwhile\s+true\s+do\b", body) and re.search(r"\[\s*\w+\s*\]\s*\(", body):
+    if re.search(r"\bwhile\s+true\s+do\b", source) and re.search(r"\[\s*\w+\s*\]\s*\(", source):
         score += 0.15
+        evidence.append("while-true dispatch loop with table-index calls")
 
     # 6. giant opaque string blobs
-    if re.search(r"\"[^\"\\]{500,}\"|'[^'\\]{500,}'", body):
+    blobs = _count(_BLOB_RX, source, cap=50)
+    if blobs:
         score += 0.15
+        evidence.append("%d opaque 500+ character string blobs" % blobs)
 
-    return min(1.0, score)
+    return min(1.0, score), evidence

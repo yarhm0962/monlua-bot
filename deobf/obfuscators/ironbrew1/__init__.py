@@ -40,13 +40,19 @@ class Ironbrew1(Obfuscator):
     doc = "IRONBREW1.md"
 
     def detect(self, source):
-        if HEADER.search(source[:300]):
+        # the IronBrew wrapper sits at the top of the file by construction, so
+        # the window stays small; the evidence lines record exactly what matched
+        if HEADER.search(source[:600]):
+            self.last_evidence = ["official IronBrew header comment"]
             return 1.0
         head = source.lstrip()[:600]
         if SHAPE.match(head):
+            self.last_evidence = ["IronBrew wrapper shape: 30+ tiny params + integer constant table"]
             return 0.85
         if SHAPE_LOOSE.match(head):
+            self.last_evidence = ["loose IronBrew wrapper shape (params + integer constant table)"]
             return 0.7
+        self.last_evidence = []
         return 0.0
 
     def deobfuscate(self, job):
