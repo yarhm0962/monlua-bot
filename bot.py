@@ -41,20 +41,51 @@ bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 
 
-def supported_embed() -> discord.Embed:
-    embed = discord.Embed(
-        title="Supported deobfuscators",
-        description=(
-            "The bot scans the source first. It only processes a file when the detected "
-            "obfuscator matches the command used."
-        ),
-        color=discord.Color.blurple(),
+def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView()
+    container = discord.ui.Container(accent_color=color)
+    container.add_item(discord.ui.TextDisplay(f"## {title}"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(body))
+    view.add_item(container)
+    return view
+
+
+def engines_body() -> str:
+    return (
+        "**Luraph v15** \u2014 `.lph15`\n"
+        "**IronBrew1** \u2014 `.ibrw`\n"
+        "**MoonSec V3** \u2014 `.moonv3`\n\n"
+        "Each takes one `.lua`, `.luau`, or `.txt` attachment or a raw-file URL. "
+        "The bot scans the source first and only runs when the detected engine matches the command.\n\n"
+        "\u2003`.deobfs` / `.engines` \u2014 list engines\n"
+        "\u2003`.help` \u2014 usage"
     )
-    embed.add_field(name="Luraph v15 — `.lph15`", value="Accepts one `.lua`, `.luau`, or `.txt` attachment or raw-file URL.", inline=False)
-    embed.add_field(name="IronBrew1 — `.ibrw`", value="Accepts one `.lua`, `.luau`, or `.txt` attachment or raw-file URL.", inline=False)
-    embed.add_field(name="Input rules", value="No other file extensions, web pages, or generic/unknown obfuscators are accepted.", inline=False)
-    embed.add_field(name="Other commands", value="`.deobfs` / `.engines` — list engines\n`.help` — usage", inline=False)
-    return embed
+
+
+def result_view(filename: str, label: str, size: int, code_text, file_name) -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView()
+    container = discord.ui.Container(accent_color=0x57F287)
+    container.add_item(discord.ui.TextDisplay(f"\u2705 **Deobfuscated** `{filename}`"))
+    container.add_item(discord.ui.Separator())
+    if code_text is not None:
+        container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
+    if file_name is not None:
+        container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"-# Engine **{label}** \u00b7 Size {size:,} bytes \u00b7 Review before running"))
+    view.add_item(container)
+    return view
+
+
+def error_view(title: str, detail: str) -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView()
+    container = discord.ui.Container(accent_color=0xED4245)
+    container.add_item(discord.ui.TextDisplay(f"\u274c **{title}**"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"```text\n{detail}\n```"))
+    view.add_item(container)
+    return view
 
 
 def runtime_status() -> tuple[bool, str]:
@@ -312,9 +343,15 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
 
                 if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                     detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
-                    await status.edit(content=(
-                        f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
-                    )[:1900])
+                    try:
+                        await status.edit(content=None, view=error_view(
+                            f"Deobfuscation failed on `{filename}`",
+                            (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
+                        ))
+                    except discord.HTTPException:
+                        await status.edit(content=(
+                            f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
+                        )[:1900])
                     print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                     return
 
@@ -325,11 +362,13 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")
                 out_text = output_path.read_text(encoding="utf-8", errors="replace")
                 if output_size <= 1600 and "```" not in out_text:
-                    embed = result_embed(filename, label, output_size, f"```lua\n{out_text.rstrip()}\n```", False)
-                    await ctx.reply(embed=embed, mention_author=False)
+                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None), mention_author=False)
                 else:
-                    embed = result_embed(filename, label, output_size, "Recovered program attached as a file.", True)
-                    await ctx.reply(embed=embed, file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
+                    await ctx.reply(
+                        view=result_view(filename, label, output_size, None, output_path.name),
+                        file=discord.File(str(output_path), filename=output_path.name),
+                        mention_author=False,
+                    )
             except ValueError as exc:
                 message = str(exc)
                 if status:
@@ -375,18 +414,16 @@ async def moonv3(ctx: commands.Context, *, url: str = "") -> None:
 
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
 async def deobfs(ctx: commands.Context) -> None:
-    await ctx.reply(embed=supported_embed(), mention_author=False)
+    await ctx.reply(view=info_view("Supported deobfuscators", engines_body()), mention_author=False)
 
 
 @bot.command(name="help")
 async def help_command(ctx: commands.Context) -> None:
-    embed = supported_embed()
-    embed.description = (
-        "Attach one source file or provide a direct raw-file URL. The bot scans the source first and rejects "
-        "unsupported engines or commands that do not match the detected engine.\n\n"
+    body = engines_body() + (
+        "\n\nAttach one source file or give a direct raw-file URL. "
         "Examples: `.lph15 https://host/path/script.lua` or `.ibrw` with a file attached."
     )
-    await ctx.reply(embed=embed, mention_author=False)
+    await ctx.reply(view=info_view("How to use MonLua", body), mention_author=False)
 
 
 @bot.event

@@ -158,7 +158,7 @@ def main():
                 i += 1
             body = "\n".join(lines[i:]) + "\n"
             with open(final, "w", encoding="utf-8", newline="\n") as f:
-                f.write("-- [[ Deobfuscated by MonLua ]]\n" + body)
+                f.write("-- [[ Deobfuscated by MonLua ]]\n\n" + body)
             print("[+] result: " + final, file=sys.stderr)
     finally:
         if workdir:
