@@ -32,6 +32,7 @@ ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".lph15"},
     "ironbrew1": {"label": "IronBrew1", "command": ".ibrw"},
+    "moonsec_v3": {"label": "MoonSec V3", "command": ".moonv3"},
 }
 
 intents = discord.Intents.default()
@@ -282,7 +283,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 detected, diagnostic = await _scan_engine(input_path)
                 if detected is None:
                     await status.edit(content=(
-                        f"Unsupported obfuscator for `{filename}`. This bot only supports **Luraph v15** and **IronBrew1**. "
+                        f"Unsupported obfuscator for `{filename}`. This bot only supports **Luraph v15**, **IronBrew1**, and **MoonSec V3**. "
                         f"Your file was not processed.\n`{diagnostic[:500]}`"
                     ))
                     return
@@ -354,6 +355,11 @@ async def lph15(ctx: commands.Context, *, url: str = "") -> None:
 @bot.command(name="ibrw")
 async def ibrw(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "ironbrew1", url)
+
+
+@bot.command(name="moonv3")
+async def moonv3(ctx: commands.Context, *, url: str = "") -> None:
+    await process_input(ctx, "moonsec_v3", url)
 
 
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
