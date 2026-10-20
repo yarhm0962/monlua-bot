@@ -28,9 +28,9 @@ DEOB_SCRIPT = DEOB_DIR / "deob.py"
 PYTHON = os.getenv("PYTHON", sys.executable or "python3")
 MAX_INPUT_BYTES = max(1, int(os.getenv("MAX_INPUT_BYTES", str(8 * 1024 * 1024))))
 MAX_OUTPUT_BYTES = max(1, int(os.getenv("MAX_OUTPUT_BYTES", str(24 * 1024 * 1024))))
-JOB_TIMEOUT = max(10, min(600, int(os.getenv("DEOB_TIMEOUT", "600"))))
+JOB_TIMEOUT = max(10, min(1800, int(os.getenv("DEOB_TIMEOUT", "900"))))  # 15 min headroom for ~2 MB files
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
-URL_TIMEOUT = max(5, min(45, int(os.getenv("URL_TIMEOUT", "20"))))
+URL_TIMEOUT = max(5, min(180, int(os.getenv("URL_TIMEOUT", "60"))))
 ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".lph15"},
@@ -259,58 +259,67 @@ def _extract_code_from_page(body: bytes) -> Optional[bytes]:
 
 def _download_url(url: str, destination: Path) -> tuple[str, int]:
     current_url = url
+    last_net_error: Optional[Exception] = None
     opener = urllib.request.build_opener(_NoRedirect)
-    for _ in range(4):
-        current_url, filename = _validate_public_url(current_url)
-        response = None
-        refused: Optional[urllib.error.HTTPError] = None
-        for agent in (_BROWSER_UA, _BOT_UA):
-            request = urllib.request.Request(current_url, headers={
-                "User-Agent": agent,
-                "Accept": "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-            })
-            try:
-                response = opener.open(request, timeout=URL_TIMEOUT)
-                break
-            except urllib.error.HTTPError as exc:
-                refused = exc
-                if exc.code in (401, 403, 406, 418, 429):
-                    continue
-                raise ValueError(f"Could not download the raw file (HTTP {exc.code}).") from exc
-            except (urllib.error.URLError, TimeoutError, OSError) as exc:
-                raise ValueError("Could not download that raw URL. Make sure it is publicly accessible.") from exc
-        if response is None:
-            code = refused.code if refused is not None else 0
-            raise ValueError(
-                f"Could not download the raw file (HTTP {code}). The host refuses automated downloads; "
-                "attach the file directly in Discord instead."
-            )
-        with response:
-            final_url = response.geturl()
-            if final_url != current_url:
-                _validate_public_url(final_url)
-            content_type = response.headers.get_content_type().lower()
-            declared = response.headers.get("Content-Length")
-            if declared and int(declared) > MAX_INPUT_BYTES:
-                raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
-            body = b""
-            while True:
-                chunk = response.read(64 * 1024)
-                if not chunk:
+    for attempt in range(2):          # one retry for transient network drops
+        if attempt:
+            time.sleep(2)             # brief backoff, then the same ladder again
+        for _ in range(4):
+            current_url, filename = _validate_public_url(current_url)
+            response = None
+            refused: Optional[urllib.error.HTTPError] = None
+            for agent in (_BROWSER_UA, _BOT_UA):
+                request = urllib.request.Request(current_url, headers={
+                    "User-Agent": agent,
+                    "Accept": "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                })
+                try:
+                    response = opener.open(request, timeout=URL_TIMEOUT)
                     break
-                body += chunk
-                if len(body) > MAX_INPUT_BYTES:
+                except urllib.error.HTTPError as exc:
+                    refused = exc
+                    if exc.code in (401, 403, 406, 418, 429):
+                        continue
+                    raise ValueError(f"Could not download the raw file (HTTP {exc.code}).") from exc
+                except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                    last_net_error = exc
+                    continue
+            if response is None:
+                if refused is None:
+                    continue          # both user agents hit network errors: retry via the outer loop
+                code = refused.code
+                raise ValueError(
+                    f"Could not download the raw file (HTTP {code}). The host refuses automated downloads; "
+                    "attach the file directly in Discord instead."
+                )
+            with response:
+                final_url = response.geturl()
+                if final_url != current_url:
+                    _validate_public_url(final_url)
+                content_type = response.headers.get_content_type().lower()
+                declared = response.headers.get("Content-Length")
+                if declared and int(declared) > MAX_INPUT_BYTES:
                     raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
-            if content_type in {"text/html", "application/xhtml+xml"}:
-                extracted = _extract_code_from_page(body)
-                if extracted is None:
-                    raise ValueError("That link returned a web page with no script code inside it. Use a direct raw link.")
-                body = extracted
-            if not body:
-                raise ValueError("The source file is empty.")
-            destination.write_bytes(body)
-            return filename, len(body)
+                body = b""
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    body += chunk
+                    if len(body) > MAX_INPUT_BYTES:
+                        raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
+                if content_type in {"text/html", "application/xhtml+xml"}:
+                    extracted = _extract_code_from_page(body)
+                    if extracted is None:
+                        raise ValueError("That link returned a web page with no script code inside it. Use a direct raw link.")
+                    body = extracted
+                if not body:
+                    raise ValueError("The source file is empty.")
+                destination.write_bytes(body)
+                return filename, len(body)
+    if last_net_error is not None:
+        raise ValueError("Could not download that raw URL even after a retry. Make sure it is publicly accessible.")
     raise ValueError("Too many redirects while downloading the raw file.")
 
 
@@ -478,7 +487,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     ))
                     return
 
-                wait_note = " This engine can take a few minutes on bigger files." if engine == "luraph_v151" else ""
+                wait_note = ""
+                if engine == "luraph_v151":
+                    wait_note = " This engine can take a few minutes on bigger files."
+                elif input_path.stat().st_size > 1024 * 1024:
+                    wait_note = " Large file: this can take a few minutes."
                 await status.edit(content=f"⚙️ Detected **{label}**. Devirtualizing `{filename}`…{wait_note}")
                 start_time = time.monotonic()
                 if engine == "luraph_v151":
@@ -492,7 +505,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     node_input = workdir / f"{Path(filename).stem}.lua"
                     if input_path != node_input:
                         await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                    command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", "150"]
+                    command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30))]
                 else:
                     command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
