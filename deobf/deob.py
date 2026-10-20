@@ -128,8 +128,8 @@ def main():
         print("%s\t%s\t%s" % (plugin.name, "forced" if conf is None else "%.2f" % conf, plugin.label))
         return
     if args.detect_all:
-        for c, p in obfuscators.scores(source):
-            print("%s\t%.2f\t%s" % (p.name, c, p.label))
+        for name, c, label in obfuscators.all_scores(source):
+            print("%s\t%.2f\t%s" % (name, c, label))
         return
     maybe_reexec_pypy(args)
     print("[*] obfuscator: %s%s" % (plugin.label, "" if conf is None else " (detected, %.2f)" % conf),

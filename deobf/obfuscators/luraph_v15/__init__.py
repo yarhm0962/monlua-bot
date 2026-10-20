@@ -41,7 +41,7 @@ class LuraphV15(Obfuscator):
         # Luraph's own pragmas: real obfuscator output, no header needed.
         if re.search(r"\bLPH_(?:NO_VIRTUALIZE|JIT|CRASH|ENCFUNC|ENCSTR|DECFUNC|DECSTR|ENABLE_CHECKS?)\b",
                      source[:200000]):
-            return 0.7
+            return 0.85
         return 0.0
 
     def add_arguments(self, ap):

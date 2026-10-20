@@ -44,9 +44,9 @@ class Ironbrew1(Obfuscator):
             return 1.0
         head = source.lstrip()[:600]
         if SHAPE.match(head):
-            return 0.8
+            return 0.85
         if SHAPE_LOOSE.match(head):
-            return 0.65
+            return 0.7
         return 0.0
 
     def deobfuscate(self, job):

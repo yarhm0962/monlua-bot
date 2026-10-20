@@ -139,13 +139,19 @@ DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
 def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
     """Report card for `.detect`: every engine scored against the file."""
     rows = [(n, c, l) for n, c, l in rows if n != "generic"]
-    best_name, best_conf, best_label = rows[0] if rows else ("", 0.0, "")
+    general = next(((c, l) for n, c, l in rows if n in ("obfuscated", "plain")), None)
+    engines = [(n, c, l) for n, c, l in rows if n not in ("obfuscated", "plain")]
+    best_name, best_conf, best_label = engines[0] if engines else ("", 0.0, "")
     matched = best_conf >= 0.75
     partial = 0.30 <= best_conf < 0.75
     if matched:
         color, title = 0x57F287, "## \U0001f50d Obfuscator identified"
     elif partial:
         color, title = 0xFAA61A, "## \U0001f50d Possible match"
+    elif general and general[0] >= 0.5:
+        color, title = 0xFAA61A, "## \U0001f50d Obfuscated, engine not supported"
+    elif general:
+        color, title = 0x5865F2, "## \u2139\ufe0f No obfuscation detected"
     else:
         color, title = 0xED4245, "## \u2753 Unknown obfuscator"
     view = discord.ui.LayoutView()
@@ -155,16 +161,31 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
     container.add_item(discord.ui.Separator())
     if matched or partial:
         verdict = "Identified" if matched else "Likely"
+        detection_only = best_name not in ("luraph_v15", "luraph_v151", "ironbrew1", "moonsec_v3")
+        note = " \u00b7 detection only" if detection_only else ""
         container.add_item(discord.ui.TextDisplay(
-            f"**{verdict}:** {best_label} \u2014 **{int(round(best_conf * 100))}%** confidence\n"
+            f"**{verdict}:** {best_label} \u2014 **{int(round(best_conf * 100))}%** confidence{note}\n"
             f"**Matched by:** {basis}"
         ))
-        others = [(l, c) for n, c, l in rows[1:] if c > 0]
+        others = [(l, c) for n, c, l in engines[1:] if c > 0]
+    elif general and general[0] >= 0.5:
+        container.add_item(discord.ui.TextDisplay(
+            f"The file **is obfuscated** ({int(round(general[0] * 100))}% structural match), but it does not match "
+            "any of the supported engines or known families. Likely a custom or private obfuscator.\n"
+            "**Matched by:** " + basis
+        ))
+        others = [(l, c) for n, c, l in engines if c > 0]
+    elif general:
+        container.add_item(discord.ui.TextDisplay(
+            "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.\n"
+            "**Matched by:** " + basis
+        ))
+        others = []
     else:
         container.add_item(discord.ui.TextDisplay(
             f"No engine reached the 75% confidence threshold.\n**Matched by:** {basis}"
         ))
-        others = [(l, c) for n, c, l in rows if c > 0]
+        others = [(l, c) for n, c, l in engines if c > 0]
     if others:
         others_text = " \u00b7 ".join(f"{l} ({int(round(c * 100))}%)" for _l, c in others[:3])
         container.add_item(discord.ui.Separator())

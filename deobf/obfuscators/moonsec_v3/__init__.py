@@ -175,10 +175,10 @@ class MoonsecV3(Obfuscator):
         if re.search(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"[^"]{60,}"\)', head[:20000]):
             calls = re.findall(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"', head[:20000])
             if len(calls) >= 5:
-                return 0.75
+                return 0.8
             return 0.5
         if re.search(r"\\4\\8", source[:20000]):
-            return 0.6
+            return 0.65
         return 0.0
 
     def deobfuscate(self, job):

@@ -11,6 +11,7 @@ from obfuscators.luraph_v15 import LuraphV15
 from obfuscators.ironbrew1 import Ironbrew1
 from obfuscators.moonsec_v3 import MoonsecV3
 from obfuscators.generic import Generic
+from obfuscators import extra_families
 
 PLUGINS = [
     LuraphV15(),
@@ -39,6 +40,19 @@ def scores(source):
             c = 0.0
         out.append((c, p))
     return sorted(out, key=lambda cp: -cp[0])
+
+
+def all_scores(source):
+    """Rows for `--detect-all`: every plugin, then detection-only families,
+    then one family-agnostic obfuscation meter line."""
+    rows = [(p.name, c, p.label) for c, p in scores(source)]
+    rows.extend(extra_families.family_scores(source))
+    obs = extra_families.obfuscation_score(source)
+    if obs >= 0.5:
+        rows.append(("obfuscated", obs, "Obfuscated (unknown engine)"))
+    else:
+        rows.append(("plain", obs, "No obfuscation detected"))
+    return rows
 
 
 def detect(source):
