@@ -198,7 +198,7 @@ def _decompile_with_unluac(dev_path, job):
         return None
     try:
         proc = subprocess.run(
-            [java, "-Xmx256m", "-XX:+UseSerialGC", "-jar", jar, dev_path],
+            [java, "-Xmx256m", "-XX:+UseSerialGC", "-jar", jar, "--nodebug", dev_path],
             capture_output=True, timeout=job.args.timeout)
     except subprocess.TimeoutExpired:
         return None
