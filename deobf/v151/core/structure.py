@@ -2,9 +2,9 @@ import copy
 
 
 def _fastcopy(x, memo=None):
-    """copy.deepcopy for plain AST data (dict/list/tuple/str/num) only; anything
-    else falls back to copy.deepcopy with the same memo. Several times faster on
-    large ASTs, and output-identical."""
+    """copy.deepcopy for plain AST data (dict/list/tuple/str/num) and plain
+    datacarrier instances; anything exotic falls back to copy.deepcopy with
+    the same memo. Several times faster on large ASTs, and output-identical."""
     t = type(x)
     if t is dict:
         if memo is not None:
@@ -23,10 +23,24 @@ def _fastcopy(x, memo=None):
         return tuple(_fastcopy(v, memo) for v in x)
     if t in (str, int, float, bool) or x is None:
         return x
-    if memo is not None:
-        return copy.deepcopy(x, memo)
-    return copy.deepcopy(x)
-
+    if isinstance(x, (list, dict, tuple, set, frozenset, bytearray)):
+        # builtin subclasses carry contents + __dict__; leave those to deepcopy
+        return copy.deepcopy(x, memo) if memo is not None else copy.deepcopy(x)
+    d = getattr(x, "__dict__", None)
+    if (type(d) is dict and t.__reduce_ex__ is object.__reduce_ex__
+            and not hasattr(t, "__deepcopy__")):
+        # same result as deepcopy's default reconstruct: new instance whose
+        # __dict__ is a deep copy of the original's
+        if memo is None:
+            memo = {}
+        got = memo.get(id(x))
+        if got is not None:
+            return got
+        y = object.__new__(t)
+        memo[id(x)] = y
+        y.__dict__ = _fastcopy(d, memo)
+        return y
+    return copy.deepcopy(x, memo) if memo is not None else copy.deepcopy(x)
 import re
 import sys
 import os
