@@ -279,23 +279,21 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 else:
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
-                status = await ctx.reply(f"Scanning `{filename}` to identify its obfuscator…", mention_author=False)
+                status = await ctx.reply(f"Checking `{filename}`…", mention_author=False)
                 detected, diagnostic = await _scan_engine(input_path)
                 if detected is None:
                     await status.edit(content=(
-                        f"Unsupported obfuscator for `{filename}`. This bot only supports **Luraph v15**, **IronBrew1**, and **MoonSec V3**. "
-                        f"Your file was not processed.\n`{diagnostic[:500]}`"
+                        f"Couldn't identify the obfuscator in `{filename}`. Supported: **Luraph v15**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
                     ))
                     return
                 if detected != engine:
                     detected_label = SUPPORTED[detected]["label"]
                     await status.edit(content=(
-                        f"Command mismatch: this file was detected as **{detected_label}**, but you used `{spec['command']}`. "
-                        f"Nothing was deobfuscated. Use `{SUPPORTED[detected]['command']}` instead."
+                        f"That file is **{detected_label}**. Use `{SUPPORTED[detected]['command']}` instead."
                     ))
                     return
 
-                await status.edit(content=f"{diagnostic} Processing `{filename}` with **{label}**…")
+                await status.edit(content=f"Detected **{label}**. Deobfuscating `{filename}`…")
                 command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                            "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
                 try:
@@ -307,8 +305,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                     detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
                     await status.edit(content=(
-                        f"The file was identified as **{label}**, but deobfuscation failed. This version or script structure "
-                        f"may not be supported.\n```text\n{detail[-800:] or 'No diagnostic output.'}\n```"
+                        f"Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
                     )[:1900])
                     print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                     return
@@ -317,8 +314,8 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 if output_size > MAX_OUTPUT_BYTES:
                     await status.edit(content=f"Output is too large ({output_size:,} bytes); limit is {MAX_OUTPUT_BYTES:,} bytes.")
                     return
-                await status.edit(content=f"Successfully processed `{filename}` with **{label}**. Review the output before running it.")
-                await ctx.reply(content=f"Deobfuscated output for `{filename}`:", file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
+                await status.edit(content=f"Done: `{filename}` deobfuscated with **{label}**. Review before running.")
+                await ctx.reply(content=f"Output for `{filename}`:", file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
             except ValueError as exc:
                 message = str(exc)
                 if status:
