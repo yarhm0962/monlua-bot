@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Optional
+from types import SimpleNamespace
 
 import discord
 from discord.ext import commands
@@ -95,10 +96,19 @@ def engines_body() -> str:
         "**Luraph v15** \u2014 `.lph15`\n"
         "**IronBrew1** \u2014 `.ibrw`\n"
         "**MoonSec V3** \u2014 `.moonv3`\n\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file with the command, or pass a direct raw-file URL.\n"
-        "Every file is scanned first: the command only runs when the detected engine matches.\n\n"
-        "-# `.detect` \u2014 identify an obfuscator \u00b7 `.deobfs` / `.engines` \u2014 engines \u00b7 `.help` \u2014 usage"
+        "**Input** one `.lua` / `.luau` / `.txt` file, attached or as a direct raw-file URL\n"
+        "**Scan first** every file is identified before a job runs, so a command only proceeds "
+        "when the engine matches\n\n"
+        "-# `.detect` identify an obfuscator \u00b7 `.engines` this list \u00b7 `.help` usage"
     )
+
+
+def _human_size(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.2f} MB"
 
 
 def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "") -> discord.ui.LayoutView:
@@ -111,13 +121,13 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
-        container.add_item(discord.ui.TextDisplay("**Output:** attached above \u2b06"))
+        container.add_item(discord.ui.TextDisplay("\U0001f4ce Output attached above \u2b06"))
     container.add_item(discord.ui.Separator())
-    stats = f"-# \u2699\ufe0f Engine **{label}** \u00b7 \U0001f4e6 {size:,} bytes"
+    stats = f"\u2699\ufe0f Engine **{label}** \u00b7 \U0001f4e6 {_human_size(size)}"
     if elapsed:
         stats += f" \u00b7 \u23f1\ufe0f {elapsed}"
-    stats += " \u00b7 \u26a0\ufe0f Review before running"
     container.add_item(discord.ui.TextDisplay(stats))
+    container.add_item(discord.ui.TextDisplay("-# \u26a0\ufe0f Review the output before running it"))
     view.add_item(container)
     return view
 
@@ -128,7 +138,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     container.add_item(discord.ui.TextDisplay(f"## \u274c {title}"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"```text\n{detail}\n```"))
-    container.add_item(discord.ui.TextDisplay("-# \U0001f4a1 `.help` lists the supported engines and file types"))
+    container.add_item(discord.ui.TextDisplay("-# \U0001f4a1 `.detect` identifies the obfuscator first \u00b7 `.help` lists engines and file types"))
     view.add_item(container)
     return view
 
@@ -136,9 +146,10 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
 DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
 
 
-def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
+def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None) -> discord.ui.LayoutView:
     """Report card for `.detect`: every engine scored against the file, with
-    the concrete signals each score came from."""
+    the concrete signals each score came from. `source` enables the one-click
+    Deobfuscate button when the best match is 100% on a supported engine."""
     rows = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
     general = next(((c, l, e) for n, c, l, e in rows if n in ("obfuscated", "plain")), None)
     engines = [(n, c, l, e) for n, c, l, e in rows if n not in ("obfuscated", "plain")]
@@ -155,7 +166,12 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
         color, title = 0x5865F2, "## \u2139\ufe0f No obfuscation detected"
     else:
         color, title = 0xED4245, "## \u2753 Unknown obfuscator"
+    one_click = None
+    if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED:
+        one_click = (best_name, source)
     view = discord.ui.LayoutView()
+    if one_click:
+        view.timeout = None          # keep the button usable for the process lifetime
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(title))
     container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
@@ -196,11 +212,90 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.u
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
+    if one_click:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
-    stats += "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate"
+    stats += ("\u2699\ufe0f The button below deobfuscates with this engine" if one_click
+              else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate")
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
     view.add_item(container)
     return view
+
+
+class _DetectInvoker:
+    """Stands in for commands.Context so the .detect button can reuse process_input."""
+
+    def __init__(self, channel):
+        self.channel = channel
+        self.message = SimpleNamespace(attachments=[])
+
+    async def reply(self, content=None, view=None, file=None, mention_author=False):
+        return await self.channel.send(content, view=view, file=file)
+
+
+class _DeobfuscateButton(discord.ui.Button):
+    """The one-click run button on a 100%-confidence .detect report."""
+
+    def __init__(self, engine: str, source: tuple):
+        super().__init__(label="Deobfuscate", emoji="\u2699\ufe0f",
+                         style=discord.ButtonStyle.success, custom_id="deobf_run")
+        self._engine = engine
+        self._source = source
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = _ConfirmDeobfView(self._engine, self._source)
+        await interaction.response.send_message(
+            f"Continue with {SUPPORTED[self._engine]['label']} Deobfuscator?", view=view)
+
+
+class _ConfirmDeobfView(discord.ui.LayoutView):
+    def __init__(self, engine: str, source: tuple):
+        super().__init__(timeout=None)
+        container = discord.ui.Container(accent_color=0x5865F2)
+        container.add_item(discord.ui.TextDisplay(
+            f"## \u2699\ufe0f Continue with {SUPPORTED[engine]['label']} Deobfuscator?"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            "This runs the full deobfuscation job on the same file you scanned."))
+        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(engine, source), _CancelDeobfButton()))
+        self.add_item(container)
+
+
+class _ConfirmDeobfButton(discord.ui.Button):
+    def __init__(self, engine: str, source: tuple):
+        super().__init__(label="Continue", style=discord.ButtonStyle.success, custom_id="deobf_confirm")
+        self._engine = engine
+        self._source = source
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        try:
+            await interaction.message.edit(content="\u2699\ufe0f Starting the deobfuscation job\u2026", view=None)
+        except discord.HTTPException:
+            pass
+        engine, source = self._engine, self._source
+        url = source[1] if source[0] == "url" else ""
+        preset = (source[1], source[2]) if source[0] == "attachment" else None
+        invoker = _DetectInvoker(interaction.channel)
+        try:
+            await process_input(invoker, engine, url=url, preset=preset)
+        except Exception as exc:
+            print(f"Deobfuscate button job failed: {type(exc).__name__}: {exc}", flush=True)
+            try:
+                await interaction.channel.send(
+                    view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
+            except discord.HTTPException:
+                pass
+
+
+class _CancelDeobfButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="deobf_cancel")
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            content="\ud83d\uddf1\ufe0f Cancelled \u2014 no job was started.", view=None)
 
 
 def runtime_status() -> tuple[bool, str]:
@@ -418,20 +513,26 @@ def result_embed(filename: str, label: str, size: int, desc: str, file_note: boo
     return embed
 
 
-async def process_input(ctx: commands.Context, engine: str, url: str = "") -> None:
+async def process_input(ctx: commands.Context, engine: str, url: str = "", preset=None) -> None:
     spec = SUPPORTED[engine]
     label = spec["label"]
     attachments = ctx.message.attachments
-    if attachments and url.strip():
+    if preset is not None:
+        # the .detect one-click button re-runs a source already held in memory
+        filename, preset_bytes = preset
+        attachment = None
+        source_url = ""
+    elif attachments and url.strip():
         await ctx.reply("Use either one attached file or one raw-file URL, not both.", mention_author=False)
         return
     if len(attachments) > 1:
         await ctx.reply("Please send exactly one source file per command.", mention_author=False)
         return
-    attachment = attachments[0] if attachments else None
-    source_url = url.strip().strip("<>")
-
-    if attachment is None and not source_url:
+    if preset is None:
+        attachment = attachments[0] if attachments else None
+        source_url = url.strip().strip("<>")
+        preset_bytes = None
+    if preset is None and attachment is None and not source_url:
         await ctx.reply(
             f"Use `{spec['command']}` with one `.lua`, `.luau`, or `.txt` attachment, or a direct raw-file URL.\n"
             f"Example: `{spec['command']} https://example.com/raw/script.lua`",
@@ -439,7 +540,9 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
         )
         return
 
-    if attachment is not None:
+    if preset is not None:
+        pass
+    elif attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
             await ctx.reply("Unsupported file type. Only `.lua`, `.luau`, and `.txt` files are accepted.", mention_author=False)
@@ -469,7 +572,13 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
             output_path = workdir / f"{Path(filename).stem}_deobfuscated.luau"
             status: Optional[discord.Message] = None
             try:
-                if attachment is not None:
+                if preset_bytes is not None:
+                    input_path.write_bytes(preset_bytes)
+                    size = input_path.stat().st_size
+                    if size == 0:
+                        await ctx.reply("That file is empty.", mention_author=False)
+                        return
+                elif attachment is not None:
                     await attachment.save(input_path)
                     size = input_path.stat().st_size
                     if size == 0:
@@ -655,8 +764,16 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
                 return
             elapsed_seconds = max(1, int(time.monotonic() - start_time))
             elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
+            source = None
+            best = max(((c, n) for n, c, _l, _e in rows
+                        if n not in ("obfuscated", "plain", "generic")), default=(0.0, ""))
+            if best[0] >= 0.999 and best[1] in SUPPORTED:
+                if attachment is not None:
+                    source = ("attachment", filename, input_path.read_bytes())
+                else:
+                    source = ("url", source_url)
             try:
-                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed))
+                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed, source=source))
             except discord.HTTPException:
                 best_label = rows[0][2] if rows else "nothing"
                 best_pct = int(round(rows[0][1] * 100)) if rows else 0

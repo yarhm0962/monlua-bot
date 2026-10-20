@@ -3,13 +3,18 @@ moonsec_v3: MoonSec V3 (header "This file was protected with MoonSec V3
 by ..."). Notes: MOONSECV3.md. A C# devirtualizer (bin/MoonsecDeobfuscator,
 built from tupsutumppu/MoonsecDeobfuscator) parses the script, unfolds its
 string/constant decoding and rewrites the VM loader into Lua 5.1 bytecode.
-The plugin runs it and writes the bytecode back as a readable disassembly
-(the original source is gone in MoonSec V3; this is what the tool produces).
+The plugin runs it with -dev, which writes the recovered code as a real
+Lua 5.1 bytecode chunk, then decompiles that chunk with vendored unluac
+(bin/unluac.jar + bin/jre17.tar.gz, unpacked to /tmp/monlua-jre) so the
+output is actual Lua source. If the decompiler is unavailable or rejects
+the bytecode, the plugin falls back to the tool's -dis listing.
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tarfile
 
 from obfuscators.base import Obfuscator
 
@@ -157,6 +162,56 @@ def beautify_dis(text):
             out.append(line)
     return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
+def _find_java():
+    """A Java runtime for unluac: system java first, else the vendored JRE."""
+    sys_java = shutil.which("java")
+    if sys_java:
+        return sys_java
+    base = os.path.join("/tmp", "monlua-jre")
+    java = os.path.join(base, "jdk-17.0.20.1+1-jre", "bin", "java")
+    if os.path.isfile(java):
+        return java
+    archive = os.path.join(ROOT, "bin", "jre17.tar.gz")
+    if not os.path.isfile(archive):
+        return None
+    try:
+        if os.path.isdir(base) and not os.listdir(base):
+            os.rmdir(base)               # clean a failed extract before retrying
+        os.makedirs(base, exist_ok=True)
+        with tarfile.open(archive, "r:gz") as t:
+            try:
+                t.extractall(base, filter="data")
+            except TypeError:            # pre-3.12 tarfile has no filter=
+                t.extractall(base)
+    except Exception:
+        return None
+    return java if os.path.isfile(java) else None
+
+
+def _decompile_with_unluac(dev_path, job):
+    """unluac turns the recovered Lua 5.1 bytecode back into Lua source."""
+    java = _find_java()
+    if not java:
+        return None
+    jar = os.path.join(ROOT, "bin", "unluac.jar")
+    if not os.path.isfile(jar):
+        return None
+    try:
+        proc = subprocess.run(
+            [java, "-Xmx256m", "-XX:+UseSerialGC", "-jar", jar, dev_path],
+            capture_output=True, timeout=job.args.timeout)
+    except subprocess.TimeoutExpired:
+        return None
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    lua = proc.stdout.decode("utf-8", "replace")
+    if not lua.strip():
+        return None
+    return lua
+
+
 _DEC_CALL = re.compile(r'\br\((?:\d+|0x[0-9a-fA-F]+)\s*,\s*"[^"]{60,}"')
 _ESC8 = re.compile(r"\\4\\8")
 
@@ -222,21 +277,23 @@ class MoonsecV3(Obfuscator):
         candidates.append(source)
         if scan["strays"] and scan["cleaned"] != source:
             candidates.append(scan["cleaned"])
-        out_path = job.path(".moonsec.dis")
         env = dict(os.environ, DOTNET_SYSTEM_GLOBALIZATION_INVARIANT="1", DOTNET_CLI_TELEMETRY_OPTOUT="1")
         cand_path = job.path(".moonsec_in.lua")
+        dev_path = job.path(".moonsec.bytecode")
         best_error = "no diagnostic output"
-        for cand in candidates:
+
+        def _run(mode, out_path, cand):
+            nonlocal best_error
             with open(cand_path, "w", encoding="utf-8") as f:
                 f.write(cand)
             try:
                 proc = subprocess.run(
-                    [exe, "-dis", "-i", cand_path, "-o", out_path],
+                    [exe, mode, "-i", cand_path, "-o", out_path],
                     capture_output=True, timeout=job.args.timeout, env=env)
             except subprocess.TimeoutExpired:
                 sys.exit("[!] MoonSec V3 deobfuscation timed out after %ds" % job.args.timeout)
             if proc.returncode == 0 and os.path.isfile(out_path) and os.path.getsize(out_path) > 0:
-                break
+                return True
             text = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace")
             best_error = "no diagnostic output"
             for line in text.splitlines():
@@ -246,9 +303,35 @@ class MoonsecV3(Obfuscator):
             else:
                 if text.strip():
                     best_error = text.strip()[:300]
+            return False
+
+        # Pass 1: recover the bytecode (-dev). Pass 2: decompile it back to
+        # real Lua source with unluac. Only if that rail is unavailable do we
+        # fall back to the tool's -dis listing.
+        for cand in candidates:
+            if _run("-dev", dev_path, cand):
+                lua = _decompile_with_unluac(dev_path, job)
+                if lua is not None:
+                    return job.write(job.path(".moonsec.lua"), job.credit_header() + lua + "\n")
+                break                       # bytecode ok, decompiler failed -> listing
         else:
-            sys.exit("[!] MoonSec V3 deobfuscation failed: %s" % best_error)
-        with open(out_path, encoding="utf-8", errors="replace") as f:
-            dis = f.read()
-        header = job.credit_header()
-        return job.write(job.path(".moonsec_dis.txt"), header + beautify_dis(dis) + "\n")
+            dev_path = None
+        if dev_path is None:
+            out_path = job.path(".moonsec.dis")
+            for cand in candidates:
+                if _run("-dis", out_path, cand):
+                    break
+            else:
+                sys.exit("[!] MoonSec V3 deobfuscation failed: %s" % best_error)
+            with open(out_path, encoding="utf-8", errors="replace") as f:
+                dis = f.read()
+            header = job.credit_header()
+            return job.write(job.path(".moonsec_dis.txt"), header + beautify_dis(dis) + "\n")
+        # decompiler failed but bytecode exists: still produce the listing
+        out_path = job.path(".moonsec.dis")
+        if _run("-dis", out_path, candidates[0]):
+            with open(out_path, encoding="utf-8", errors="replace") as f:
+                dis = f.read()
+            header = job.credit_header()
+            return job.write(job.path(".moonsec_dis.txt"), header + beautify_dis(dis) + "\n")
+        sys.exit("[!] MoonSec V3 deobfuscation failed: %s" % best_error)

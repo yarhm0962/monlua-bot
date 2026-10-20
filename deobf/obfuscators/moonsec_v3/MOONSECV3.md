@@ -15,3 +15,8 @@ tool, so source recovery stops at the disassembly.
 
 Failure mode: a non-MoonSec input throws a .NET exception; the plugin
 surfaces the first Exception line as a clean error.
+
+
+## Update 2026-10-20: real Lua output
+
+The deobfuscator now runs the upstream binary's `-dev` mode per candidate (real Lua 5.1 bytecode, `\x1bLuaQ` header) and decompiles it with unluac (Java, vendored JRE 17 + unluac.jar in `../bin/`, extracted to /tmp/monlua-jre at runtime). Result is genuine Lua source, not a bytecode listing. Falls back to `-dis` + beautify when Java or unluac fails. Previously the bot output raw VM bytecode blocks (`function func_XXXX(...)  [Slots: ...]`).
