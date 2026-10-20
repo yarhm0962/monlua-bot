@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import tarfile
 import time
 import socket
@@ -79,6 +80,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+# Render's free instance has 512 MiB total for everything. A deobfuscation job
+# that runs past this budget is stopped (with a clear error card) instead of
+# letting the container OOM-kill the whole service and leave the user's
+# "Devirtualizing..." message hanging forever. The budget is shared across the
+# concurrent jobs MAX_CONCURRENT_JOBS allows.
+JOB_MEM_BUDGET_MB = 330
+_active_jobs = 0
 
 
 class _LoggedLayoutView(discord.ui.LayoutView):
@@ -577,17 +586,100 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str,
     return rows, basis
 
 
+class JobMemoryExceeded(Exception):
+    pass
+
+
+def _self_rss_mb() -> int:
+    try:
+        with open("/proc/self/status") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        pass
+    return 0
+
+
+def _tree_rss_kb(pgid: int) -> int:
+    """Total resident memory of every process in the process group, in KiB."""
+    total = 0
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return 0
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat", "rb") as fh:
+                tail = fh.read().rsplit(b")", 1)[1].split()
+            if int(tail[2]) != pgid:  # after comm: state, ppid, pgrp
+                continue
+            with open(f"/proc/{entry}/status") as fh:
+                for line in fh:
+                    if line.startswith("VmRSS:"):
+                        total += int(line.split()[1])
+                        break
+        except (OSError, ValueError, IndexError):
+            continue
+    return total
+
+
 async def _run_process(args: list[str], timeout: int) -> tuple[int, bytes, bytes]:
+    global _active_jobs
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
     )
+    try:
+        pgid = os.getpgid(proc.pid)
+    except ProcessLookupError:
+        pgid = proc.pid
+    ceiling_mb = 0
+    if JOB_MEM_BUDGET_MB:
+        _active_jobs += 1
+        ceiling_mb = max(160, JOB_MEM_BUDGET_MB // _active_jobs)
+    mem_peak_kb = 0
+    mem_exceeded = False
+
+    async def _watch_memory() -> None:
+        nonlocal mem_peak_kb, mem_exceeded
+        while proc.returncode is None:
+            await asyncio.sleep(0.5)
+            rss = _tree_rss_kb(pgid)
+            if rss > mem_peak_kb:
+                mem_peak_kb = rss
+            if ceiling_mb and rss > ceiling_mb * 1024:
+                mem_exceeded = True
+                print(f"Memory ceiling hit ({rss // 1024} MB > {ceiling_mb} MB), stopping the job tree", flush=True)
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    watcher = asyncio.ensure_future(_watch_memory()) if ceiling_mb else None
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
         if proc.returncode is None:
-            proc.kill()
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         await proc.communicate()
         raise
+    finally:
+        if ceiling_mb:
+            _active_jobs -= 1
+        if watcher:
+            watcher.cancel()
+            try:
+                await watcher
+            except (asyncio.CancelledError, Exception):
+                pass
+    if mem_exceeded:
+        raise JobMemoryExceeded(f"it peaked around {max(1, mem_peak_kb // 1024)} MB")
     return proc.returncode or 0, stdout, stderr
 
 
@@ -712,10 +804,19 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
+                print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
                 try:
                     returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
                 except asyncio.TimeoutError:
                     await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
+                    return
+                except JobMemoryExceeded as exc:
+                    print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
+                    await status.edit(content=(
+                        f"🧠 `{filename}` needed more memory than the free server has ({exc}). "
+                        "The job was stopped early so the bot stays online.\n"
+                        "Try a smaller file, or run this engine on a bigger Render plan."
+                    ))
                     return
 
                 if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
