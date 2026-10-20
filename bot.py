@@ -6,6 +6,9 @@ import ipaddress
 import json
 import os
 import re
+import shutil
+import tarfile
+import time
 import socket
 import subprocess
 import sys
@@ -31,9 +34,44 @@ URL_TIMEOUT = max(5, min(45, int(os.getenv("URL_TIMEOUT", "20"))))
 ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".lph15"},
+    "luraph_v151": {"label": "Luraph v15.1", "command": ".lph15.1"},
     "ironbrew1": {"label": "IronBrew1", "command": ".ibrw"},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".moonv3"},
 }
+
+V151_DIR = DEOB_DIR / "v151"
+V151_SCRIPT = V151_DIR / "deob.js"
+V151_NODE_ARCHIVE = V151_DIR / "vendor" / "node-v20.19.5-linux-x64.tar.gz"
+V151_NODE_DIRNAME = "node-v20.19.5-linux-x64"
+_node_bin: Optional[str] = None
+
+
+def resolve_node() -> str:
+    """Path to a node binary: system node if present, else the vendored runtime."""
+    global _node_bin
+    if _node_bin:
+        return _node_bin
+    found = shutil.which("node")
+    if found:
+        _node_bin = found
+        return _node_bin
+    if not V151_NODE_ARCHIVE.is_file():
+        raise RuntimeError("vendored node runtime archive is missing")
+    target = Path(tempfile.gettempdir()) / "monlua-node"
+    node_exe = target / V151_NODE_DIRNAME / "bin" / "node"
+    if not node_exe.is_file():
+        target.mkdir(parents=True, exist_ok=True)
+        try:
+            with tarfile.open(V151_NODE_ARCHIVE, "r:gz") as archive:
+                archive.extractall(target, filter="data")
+        except TypeError:
+            with tarfile.open(V151_NODE_ARCHIVE, "r:gz") as archive:
+                archive.extractall(target)
+    if not node_exe.is_file():
+        raise RuntimeError("could not unpack the vendored node runtime")
+    node_exe.chmod(0o755)
+    _node_bin = str(node_exe)
+    return _node_bin
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -53,27 +91,33 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     return (
+        "**Luraph v15.1** \u2014 `.lph15.1`\n"
         "**Luraph v15** \u2014 `.lph15`\n"
         "**IronBrew1** \u2014 `.ibrw`\n"
         "**MoonSec V3** \u2014 `.moonv3`\n\n"
-        "Each takes one `.lua`, `.luau`, or `.txt` attachment or a raw-file URL. "
-        "The bot scans the source first and only runs when the detected engine matches the command.\n\n"
-        "\u2003`.deobfs` / `.engines` \u2014 list engines\n"
-        "\u2003`.help` \u2014 usage"
+        "Attach one `.lua`, `.luau`, or `.txt` file with the command, or pass a direct raw-file URL.\n"
+        "Every file is scanned first: the command only runs when the detected engine matches.\n\n"
+        "-# `.deobfs` / `.engines` \u2014 engines \u00b7 `.help` \u2014 usage"
     )
 
 
-def result_view(filename: str, label: str, size: int, code_text, file_name) -> discord.ui.LayoutView:
+def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "") -> discord.ui.LayoutView:
     view = discord.ui.LayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
-    container.add_item(discord.ui.TextDisplay(f"\u2705 **Deobfuscated** `{filename}`"))
+    container.add_item(discord.ui.TextDisplay("## \u2705 Deobfuscation complete"))
+    container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
+        container.add_item(discord.ui.TextDisplay("**Output:** attached above \u2b06"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay(f"-# Engine **{label}** \u00b7 Size {size:,} bytes \u00b7 Review before running"))
+    stats = f"-# \u2699\ufe0f Engine **{label}** \u00b7 \U0001f4e6 {size:,} bytes"
+    if elapsed:
+        stats += f" \u00b7 \u23f1\ufe0f {elapsed}"
+    stats += " \u00b7 \u26a0\ufe0f Review before running"
+    container.add_item(discord.ui.TextDisplay(stats))
     view.add_item(container)
     return view
 
@@ -81,9 +125,10 @@ def result_view(filename: str, label: str, size: int, code_text, file_name) -> d
 def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView()
     container = discord.ui.Container(accent_color=0xED4245)
-    container.add_item(discord.ui.TextDisplay(f"\u274c **{title}**"))
+    container.add_item(discord.ui.TextDisplay(f"## \u274c {title}"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"```text\n{detail}\n```"))
+    container.add_item(discord.ui.TextDisplay("-# \U0001f4a1 `.help` lists the supported engines and file types"))
     view.add_item(container)
     return view
 
@@ -322,19 +367,29 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                 detected, diagnostic = await _scan_engine(input_path)
                 if detected is None:
                     await status.edit(content=(
-                        f"❓ Couldn't identify the obfuscator in `{filename}`.\nSupported: **Luraph v15**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
+                        f"❓ Couldn't identify the obfuscator in `{filename}`.\nSupported: **Luraph v15/v15.1**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
                     ))
                     return
-                if detected != engine:
+                if detected != engine and not (engine == "luraph_v151" and detected == "luraph_v15"):
                     detected_label = SUPPORTED[detected]["label"]
                     await status.edit(content=(
                         f"That file is **{detected_label}**. Use `{SUPPORTED[detected]['command']}` instead."
                     ))
                     return
 
-                await status.edit(content=f"⚙️ Detected **{label}**. Deobfuscating `{filename}`…")
-                command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
-                           "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
+                wait_note = " This engine can take a few minutes on bigger files." if engine == "luraph_v151" else ""
+                await status.edit(content=f"⚙️ Detected **{label}**. Devirtualizing `{filename}`…{wait_note}")
+                start_time = time.monotonic()
+                if engine == "luraph_v151":
+                    try:
+                        node_bin = await asyncio.to_thread(resolve_node)
+                    except Exception as exc:
+                        await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
+                        return
+                    command = [node_bin, str(V151_SCRIPT), str(input_path), "-o", str(output_path), "--timeout", "150"]
+                else:
+                    command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
+                               "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
                 try:
                     returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
                 except asyncio.TimeoutError:
@@ -355,17 +410,22 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                     return
 
+                out_text = output_path.read_text(encoding="utf-8", errors="replace")
+                if engine == "luraph_v151" and not out_text.startswith("-- [[ Deobfuscated by MonLua ]]"):
+                    out_text = "-- [[ Deobfuscated by MonLua ]]\n\n" + out_text.lstrip("\ufeff")
+                    output_path.write_text(out_text, encoding="utf-8")
                 output_size = output_path.stat().st_size
                 if output_size > MAX_OUTPUT_BYTES:
                     await status.edit(content=f"📦 Output too large: {output_size:,} bytes (limit {MAX_OUTPUT_BYTES:,}).")
                     return
+                elapsed_seconds = max(1, int(time.monotonic() - start_time))
+                elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
                 await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")
-                out_text = output_path.read_text(encoding="utf-8", errors="replace")
                 if output_size <= 1600 and "```" not in out_text:
-                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None), mention_author=False)
+                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed), mention_author=False)
                 else:
                     await ctx.reply(
-                        view=result_view(filename, label, output_size, None, output_path.name),
+                        view=result_view(filename, label, output_size, None, output_path.name, elapsed),
                         file=discord.File(str(output_path), filename=output_path.name),
                         mention_author=False,
                     )
@@ -402,6 +462,11 @@ async def lph15(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "luraph_v15", url)
 
 
+@bot.command(name="lph15.1")
+async def lph15_1(ctx: commands.Context, *, url: str = "") -> None:
+    await process_input(ctx, "luraph_v151", url)
+
+
 @bot.command(name="ibrw")
 async def ibrw(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "ironbrew1", url)
@@ -421,7 +486,7 @@ async def deobfs(ctx: commands.Context) -> None:
 async def help_command(ctx: commands.Context) -> None:
     body = engines_body() + (
         "\n\nAttach one source file or give a direct raw-file URL. "
-        "Examples: `.lph15 https://host/path/script.lua` or `.ibrw` with a file attached."
+        "Examples: `.lph15.1 https://host/path/script.lua`, or `.moonv3` with a file attached."
     )
     await ctx.reply(view=info_view("How to use MonLua", body), mention_author=False)
 
@@ -434,6 +499,8 @@ async def on_ready() -> None:
         print(f"Native runtimes found: {detail}", flush=True)
     else:
         print(f"WARNING: native runtimes missing or not executable: {detail}", flush=True)
+    if not (V151_SCRIPT.is_file() and V151_NODE_ARCHIVE.is_file()):
+        print("WARNING: v15.1 runtime incomplete; .lph15.1 will be unavailable.", flush=True)
 
 
 @bot.event
