@@ -55,7 +55,7 @@ def supported_embed() -> discord.Embed:
 
 def runtime_status() -> tuple[bool, str]:
     suffix = ".exe" if os.name == "nt" else ""
-    required = (DEOB_DIR / "bin" / f"luau{suffix}", DEOB_DIR / "bin" / f"luau-ast{suffix}")
+    required = (DEOB_DIR / "bin" / f"luau{suffix}", DEOB_DIR / "bin" / f"luau-ast{suffix}", DEOB_SCRIPT)
     missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
@@ -354,7 +354,12 @@ async def main() -> None:
     if not token:
         raise RuntimeError("Missing required environment variable: DISCORD_BOT_TOKEN")
     if not DEOB_SCRIPT.is_file():
-        raise RuntimeError(f"Cannot find deobfuscator CLI: {DEOB_SCRIPT}")
+        print(
+            f"WARNING: deobfuscator CLI not found: {DEOB_SCRIPT}. "
+            "The bot is coming online, but deobfuscation commands will be unavailable "
+            "until the deobf folder is added.",
+            flush=True,
+        )
     await bot.start(token)
 
 
