@@ -104,9 +104,10 @@ def engines_body() -> str:
         "**Luraph v15** \u2014 `.lph15`\n"
         "**IronBrew1** \u2014 `.ibrw`\n"
         "**MoonSec V3** \u2014 `.moonv3`\n\n"
-        "**Input** one `.lua` / `.luau` / `.txt` file, attached or as a direct raw-file URL\n"
-        "**Scan first** every file is identified before a job runs, so a command only proceeds "
-        "when the engine matches\n\n"
+        "**Input** one `.lua` / `.luau` / `.txt` file\n"
+        "Attach it or send a direct raw-file URL\n\n"
+        "**Scan first** every file is identified before a job runs.\n"
+        "A command only proceeds when the engine matches.\n\n"
         "-# `.detect` identify an obfuscator \u00b7 `.engines` this list \u00b7 `.help` usage"
     )
 
@@ -189,26 +190,27 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         detection_only = best_name not in ("luraph_v15", "luraph_v151", "ironbrew1", "moonsec_v3")
         note = " \u00b7 detection only" if detection_only else ""
         container.add_item(discord.ui.TextDisplay(
-            f"**{verdict}:** {best_label} \u2014 **{int(round(best_conf * 100))}%** confidence{note}\n"
-            f"**Matched by:** {basis}"
+            f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}\n"
+            f"-# Matched by {basis}"
         ))
         others = [(l, c) for n, c, l, e in engines[1:] if c > 0]
     elif general and general[0] >= 0.5:
         container.add_item(discord.ui.TextDisplay(
-            f"The file **is obfuscated** ({int(round(general[0] * 100))}% structural match), but it does not match "
-            "any of the supported engines or known families. Likely a custom or private obfuscator.\n"
-            "**Matched by:** " + basis
+            f"Obfuscated ({int(round(general[0] * 100))}% structural match), "
+            "but no supported engine or known family fits.\n"
+            "Likely a custom or private obfuscator.\n"
+            f"-# Matched by {basis}"
         ))
         others = [(l, c) for n, c, l, e in engines if c > 0]
     elif general:
         container.add_item(discord.ui.TextDisplay(
             "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.\n"
-            "**Matched by:** " + basis
+            f"-# Matched by {basis}"
         ))
         others = []
     else:
         container.add_item(discord.ui.TextDisplay(
-            f"No engine reached the 75% confidence threshold.\n**Matched by:** {basis}"
+            f"No engine reached the 75% confidence threshold.\n-# Matched by {basis}"
         ))
         others = [(l, c) for n, c, l, e in engines if c > 0]
     if others:
@@ -221,8 +223,8 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
-    stats += ("\u2699\ufe0f The button below deobfuscates with this engine" if one_click
-              else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate")
+    stats += ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
+              else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's command to deobfuscate")
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
     if one_click:
         container.add_item(discord.ui.Separator())
@@ -263,7 +265,8 @@ class _DeobfuscateButton(discord.ui.Button):
                 "\u26a0\ufe0f Couldn't open the confirmation card. Use the engine command directly (`.help`).",
                 ephemeral=True)
             return
-        await interaction.response.send_message(f"Continue with {label} Deobfuscator?", view=view)
+        src_name = self._source[1] if self._source[0] == "attachment" else "the linked file"
+        await interaction.response.send_message(f"Deobfuscate `{src_name}` with **{label}**?", view=view)
 
 
 class _ConfirmDeobfView(discord.ui.View):
@@ -815,9 +818,18 @@ async def deobfs(ctx: commands.Context) -> None:
 
 @bot.command(name="help")
 async def help_command(ctx: commands.Context) -> None:
-    body = engines_body() + (
-        "\n\nAttach one source file or give a direct raw-file URL. "
-        "Examples: `.lph15.1 https://host/path/script.lua`, or `.moonv3` with a file attached."
+    body = (
+        "**Luraph v15.1** \u2014 `.lph15.1`\n"
+        "**Luraph v15** \u2014 `.lph15`\n"
+        "**IronBrew1** \u2014 `.ibrw`\n"
+        "**MoonSec V3** \u2014 `.moonv3`\n\n"
+        "**Input** one `.lua` / `.luau` / `.txt` file\n"
+        "Attach it or send a direct raw-file URL\n\n"
+        "**Scan first** every file is identified before a job runs.\n"
+        "A command only proceeds when the engine matches.\n\n"
+        "**Example** `.lph15.1 https://host/raw/script.lua`\n"
+        "Or `.moonv3` with the file attached\n\n"
+        "-# `.detect` identify an obfuscator \u00b7 `.engines` this list \u00b7 `.help` usage"
     )
     await ctx.reply(view=info_view("How to use MonLua", body), mention_author=False)
 
