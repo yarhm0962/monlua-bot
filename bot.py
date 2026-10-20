@@ -220,13 +220,13 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
-    if one_click:
-        # top-level ActionRow: the most reliably dispatched layout for V2 cards
-        view.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
     stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
     stats += ("\u2699\ufe0f The button below deobfuscates with this engine" if one_click
               else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's own command to deobfuscate")
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
+    if one_click:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
     view.add_item(container)
     return view
 
@@ -287,9 +287,9 @@ class _ConfirmDeobfButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         try:
-            await interaction.message.edit(content="\u2699\ufe0f Starting the deobfuscation job\u2026", view=None)
+            await interaction.message.delete()
         except discord.HTTPException:
-            pass
+            print(f"Confirm card delete failed:\n{traceback.format_exc()}", flush=True)
         engine, source = self._engine, self._source
         url = source[1] if source[0] == "url" else ""
         preset = (source[1], source[2]) if source[0] == "attachment" else None
