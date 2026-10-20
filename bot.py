@@ -120,7 +120,35 @@ def _human_size(n: int) -> str:
     return f"{n / (1024 * 1024):.2f} MB"
 
 
-def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "") -> discord.ui.LayoutView:
+PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
+PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
+PASTEFY_MAX_BYTES = 1_000_000   # bigger outputs stay as Discord attachments only
+
+
+def _pastefy_upload(text: str, title: str) -> str:
+    """Upload the deobfuscated output to Pastefy; returns the paste URL or "" on any failure."""
+    if not PASTEFY_TOKEN or not text or len(text.encode("utf-8")) > PASTEFY_MAX_BYTES:
+        return ""
+    request = urllib.request.Request(PASTEFY_API_URL, data=json.dumps({
+        "content": text,
+        "title": title[:120],
+    }).encode("utf-8"), headers={
+        "Content-Type": "application/json",
+        "Authorization": PASTEFY_TOKEN,   # Pastefy rejects "Bearer" on this endpoint
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8", errors="replace"))
+        paste_id = (data.get("paste") or {}).get("id")
+        if paste_id:
+            return f"https://pastefy.app/{paste_id}"
+        print(f"Pastefy upload rejected: {str(data)[:200]}", flush=True)
+    except Exception as exc:
+        print(f"Pastefy upload failed: {type(exc).__name__}: {exc}", flush=True)
+    return ""
+
+
+def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", pastefy_url: str = "") -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
     stats = f"\u2699\ufe0f **{label}** \u00b7 \U0001f4e6 {_human_size(size)}"
@@ -135,6 +163,9 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
         container.add_item(discord.ui.TextDisplay("\U0001f4ce Output attached above \u2b06"))
+    if pastefy_url:
+        container.add_item(discord.ui.TextDisplay(
+            f"\U0001f517 [Pastefy]({pastefy_url}) \u00b7 [raw]({pastefy_url}/raw)"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("-# \u26a0\ufe0f Review the output before running it"))
     view.add_item(container)
@@ -702,11 +733,17 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 elapsed_seconds = max(1, int(time.monotonic() - start_time))
                 elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
                 await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")
+                pastefy_url = ""
+                try:
+                    pastefy_url = await asyncio.to_thread(
+                        _pastefy_upload, out_text.rstrip(), Path(filename).stem)
+                except Exception as exc:
+                    print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
                 if output_size <= 1600 and "```" not in out_text:
-                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed), mention_author=False)
+                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed, pastefy_url=pastefy_url), mention_author=False)
                 else:
                     await ctx.reply(
-                        view=result_view(filename, label, output_size, None, output_path.name, elapsed),
+                        view=result_view(filename, label, output_size, None, output_path.name, elapsed, pastefy_url=pastefy_url),
                         file=discord.File(str(output_path), filename=output_path.name),
                         mention_author=False,
                     )
