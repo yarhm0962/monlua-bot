@@ -255,7 +255,7 @@ class _DeobfuscateButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         try:
-            view = _ConfirmDeobfView(self._engine, self._source)
+            view = _ConfirmDeobfView(self._engine, self._source, interaction.message, self.view)
         except Exception:
             print(f"Deobfuscate button: confirm view failed:\n{traceback.format_exc()}", flush=True)
             view = None
@@ -270,10 +270,12 @@ class _DeobfuscateButton(discord.ui.Button):
 
 
 class _ConfirmDeobfView(discord.ui.View):
-    def __init__(self, engine: str, source: tuple):
+    def __init__(self, engine: str, source: tuple, detect_message=None, detect_layout=None):
         super().__init__(timeout=None)
         self._engine = engine
         self._source = source
+        self._detect_message = detect_message
+        self._detect_layout = detect_layout
         self.add_item(_ConfirmDeobfButton(engine, source))
         self.add_item(_CancelDeobfButton())
 
@@ -293,6 +295,17 @@ class _ConfirmDeobfButton(discord.ui.Button):
             await interaction.message.delete()
         except discord.HTTPException:
             print(f"Confirm card delete failed:\n{traceback.format_exc()}", flush=True)
+        # the one-click run is spent: grey out the Deobfuscate button on the report card
+        detect_message = getattr(self.view, "_detect_message", None)
+        detect_layout = getattr(self.view, "_detect_layout", None)
+        if detect_message is not None and detect_layout is not None:
+            try:
+                for item in detect_layout.walk_children():
+                    if isinstance(item, discord.ui.Button) and item.custom_id == "deobf_run":
+                        item.disabled = True
+                await detect_message.edit(view=detect_layout)
+            except Exception:
+                print(f"Detect button disable failed:\n{traceback.format_exc()}", flush=True)
         engine, source = self._engine, self._source
         url = source[1] if source[0] == "url" else ""
         preset = (source[1], source[2]) if source[0] == "attachment" else None
