@@ -123,8 +123,12 @@ def _human_size(n: int) -> str:
 def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "") -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
+    stats = f"\u2699\ufe0f **{label}** \u00b7 \U0001f4e6 {_human_size(size)}"
+    if elapsed:
+        stats += f" \u00b7 \u23f1\ufe0f {elapsed}"
     container.add_item(discord.ui.TextDisplay("## \u2705 Deobfuscation complete"))
-    container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
+    container.add_item(discord.ui.TextDisplay(stats))
+    container.add_item(discord.ui.TextDisplay(f"-# `{filename}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
@@ -132,10 +136,6 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
         container.add_item(discord.ui.TextDisplay("\U0001f4ce Output attached above \u2b06"))
     container.add_item(discord.ui.Separator())
-    stats = f"\u2699\ufe0f Engine **{label}** \u00b7 \U0001f4e6 {_human_size(size)}"
-    if elapsed:
-        stats += f" \u00b7 \u23f1\ufe0f {elapsed}"
-    container.add_item(discord.ui.TextDisplay(stats))
     container.add_item(discord.ui.TextDisplay("-# \u26a0\ufe0f Review the output before running it"))
     view.add_item(container)
     return view
@@ -147,6 +147,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     container.add_item(discord.ui.TextDisplay(f"## \u274c {title}"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"```text\n{detail}\n```"))
+    container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("-# \U0001f4a1 `.detect` identifies the obfuscator first \u00b7 `.help` lists engines and file types"))
     view.add_item(container)
     return view
@@ -183,48 +184,50 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         view.timeout = None          # keep the button usable for the process lifetime
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(title))
-    container.add_item(discord.ui.TextDisplay(f"**File:** `{filename}`"))
+    head = f"-# `{filename}`"
+    if elapsed:
+        head += f" \u00b7 \u23f1\ufe0f {elapsed}"
+    container.add_item(discord.ui.TextDisplay(head))
     container.add_item(discord.ui.Separator())
     if matched or partial:
         verdict = "Identified" if matched else "Likely"
         detection_only = best_name not in ("luraph_v15", "luraph_v151", "ironbrew1", "moonsec_v3")
         note = " \u00b7 detection only" if detection_only else ""
         container.add_item(discord.ui.TextDisplay(
-            f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}\n"
-            f"-# Matched by {basis}"
+            f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}"
         ))
         others = [(l, c) for n, c, l, e in engines[1:] if c > 0]
+        ev = best_ev
     elif general and general[0] >= 0.5:
         container.add_item(discord.ui.TextDisplay(
             f"Obfuscated ({int(round(general[0] * 100))}% structural match), "
             "but no supported engine or known family fits.\n"
-            "Likely a custom or private obfuscator.\n"
-            f"-# Matched by {basis}"
+            "Likely a custom or private obfuscator."
         ))
         others = [(l, c) for n, c, l, e in engines if c > 0]
+        ev = general[2]
     elif general:
         container.add_item(discord.ui.TextDisplay(
-            "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.\n"
-            f"-# Matched by {basis}"
+            "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it."
         ))
         others = []
+        ev = []
     else:
         container.add_item(discord.ui.TextDisplay(
-            f"No engine reached the 75% confidence threshold.\n-# Matched by {basis}"
+            "No engine reached the 75% confidence threshold."
         ))
         others = [(l, c) for n, c, l, e in engines if c > 0]
+        ev = []
+    details = [f"Matched by {basis}"]
     if others:
-        others_text = " \u00b7 ".join(f"{label} ({int(round(c * 100))}%)" for label, c in others[:3])
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"-# Also considered: {others_text}"))
-    ev = best_ev if (matched or partial) else (general[2] if general and general[0] >= 0.5 else [])
+        others_text = " \u00b7 ".join(f"{lab} ({int(round(c * 100))}%)" for lab, c in others[:3])
+        details.append(f"Also considered: {others_text}")
     if ev:
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"-# Signals: {shown}"))
-    stats = f"\u23f1\ufe0f {elapsed} \u00b7 " if elapsed else ""
-    stats += ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
-              else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's command to deobfuscate")
+        details.append(f"Signals: {shown}")
+    container.add_item(discord.ui.TextDisplay("\n".join(f"-# {d}" for d in details)))
+    stats = ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
+             else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's command to deobfuscate")
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
     if one_click:
         container.add_item(discord.ui.Separator())
