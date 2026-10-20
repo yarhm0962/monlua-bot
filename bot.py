@@ -315,7 +315,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     await status.edit(content=f"Output is too large ({output_size:,} bytes); limit is {MAX_OUTPUT_BYTES:,} bytes.")
                     return
                 await status.edit(content=f"Done: `{filename}` deobfuscated with **{label}**. Review before running.")
-                await ctx.reply(content=f"Output for `{filename}`:", file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
+                out_text = output_path.read_text(encoding="utf-8", errors="replace")
+                if output_size <= 1600 and "```" not in out_text:
+                    await ctx.reply(content=f"Output for `{filename}`:\n```lua\n{out_text.rstrip()}\n```", mention_author=False)
+                else:
+                    await ctx.reply(content=f"Output for `{filename}`:", file=discord.File(str(output_path), filename=output_path.name), mention_author=False)
             except ValueError as exc:
                 message = str(exc)
                 if status:

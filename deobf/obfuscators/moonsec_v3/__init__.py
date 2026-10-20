@@ -136,6 +136,27 @@ def strip_stray_backslashes(text):
     return scan_source(text)["cleaned"]
 
 
+_INSTR = re.compile(
+    r"^(\t*)\[\s*(\d+)\]\t+\s*([A-Za-z_]\w*)\t+\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\t?(.*)$")
+
+
+def beautify_dis(text):
+    """Tidy the tool's tab-and-pipe instruction table into aligned columns."""
+    out = []
+    for line in text.splitlines():
+        m = _INSTR.match(line)
+        if m:
+            indent, idx, op, a, b, c, code = m.groups()
+            out.append("%s    [%5d] %-14s %s %s %s   %s" % (
+                indent.replace("\t", "    "), int(idx), op, a.rjust(4), b.rjust(4), c.rjust(4), code.strip()))
+        elif line.lstrip().startswith("function "):
+            if out and out[-1].strip():
+                out.append("")
+            out.append(line)
+        else:
+            out.append(line)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
 class MoonsecV3(Obfuscator):
     name = "moonsec_v3"
     label = "MoonSec V3"
@@ -200,4 +221,4 @@ class MoonsecV3(Obfuscator):
         header = (job.credit_header() +
                   "-- Devirtualized MoonSec V3 bytecode, as a readable disassembly\n"
                   "-- MoonSec V3 does not keep the original source; this is the recovered program\n")
-        return job.write(job.path(".moonsec_dis.txt"), header + dis + "\n")
+        return job.write(job.path(".moonsec_dis.txt"), header + beautify_dis(dis) + "\n")
