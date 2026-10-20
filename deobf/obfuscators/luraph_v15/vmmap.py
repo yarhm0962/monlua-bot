@@ -18,8 +18,12 @@ def load_ast(path):
     r = subprocess.run([exe, path], capture_output=True)
     errs = r.stderr.decode("latin-1").strip().splitlines()
     if r.returncode != 0 or (errs and errs[0].startswith("Parse errors")):
-        raise SyntaxError("not valid Luau (%s)" % (errs[1].strip() if len(errs) > 1 else "luau-ast exit %#x"
-                                                   % (r.returncode & 0xFFFFFFFF)))
+        detail = [ln.strip() for ln in errs
+                  if ln.strip() and not ln.strip().startswith("Parse errors")]
+        text = "; ".join(detail[:3])[:220]
+        if not text:
+            text = "luau-ast exit %#x" % (r.returncode & 0xFFFFFFFF)
+        raise SyntaxError("not valid Luau (%s)" % text)
     out = r.stdout
     return json.loads(out.decode("latin-1"))["root"]
 
