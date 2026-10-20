@@ -28,9 +28,14 @@ class LuraphV15(Obfuscator):
         # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
         # Skip leading comment lines first: a rebranded header comment must not
         # hide the VM shape behind it.
-        head = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())[:2000]
+        stripped = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
+        head = stripped[:2000]
+        # code-shape signals, not comment-based: the VM object opens with
+        # `return setmetatable({...})` and its library slots / LPH markers can
+        # sit deep in an 800 KB file, so look well past the first 2 KB
         if head.startswith("return setmetatable({") and (
-                re.search(r"\[\d+\]=(bit32|buffer|string|table|math)\.\w+", head) or "LPH" in source[:200000]):
+                re.search(r"\[\d+\]=(bit32|buffer|string|table|math)\.\w+", stripped[:20000])
+                or "LPH" in source[:200000]):
             return 0.8
         return 0.0
 

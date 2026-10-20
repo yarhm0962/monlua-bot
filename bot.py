@@ -386,7 +386,12 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "") -> No
                     except Exception as exc:
                         await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
                         return
-                    command = [node_bin, str(V151_SCRIPT), str(input_path), "-o", str(output_path), "--timeout", "150"]
+                    # the v15.1 tool only accepts .lua/.luau inputs: hand it a
+                    # .lua-named copy when the upload came in as .txt
+                    node_input = workdir / f"{Path(filename).stem}.lua"
+                    if input_path != node_input:
+                        await asyncio.to_thread(shutil.copyfile, input_path, node_input)
+                    command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", "150"]
                 else:
                     command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
