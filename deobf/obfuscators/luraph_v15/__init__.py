@@ -5,6 +5,9 @@ import sys
 from obfuscators.base import Obfuscator
 
 HEADER = re.compile(r"This file was protected using Luraph Obfuscator v(\d+)(?:\.(\d+))?")
+# rebranded/repacked Luraph builds keep the VM but reword the header ("obfuscated by"
+# "Luraph Skid Lol", custom marketing URLs), so match the brand without requiring a version.
+HEADER_ANY = re.compile(r"(?:protected using|obfuscated by|generated using)\s+Luraph\b", re.I)
 HEADER_LINE = re.compile(r"\s*--[ \t]*This file was protected using Luraph Obfuscator v[\d.]+[ \t]*"
                          r"\[https?://lura\.ph/?\]")
 
@@ -18,9 +21,14 @@ class LuraphV15(Obfuscator):
         m = HEADER.search(source[:500])
         if m:
             return 1.0 if m.group(1) == "15" else 0.3     # other versions: probably close, not verified
+        if HEADER_ANY.search(source[:500]):
+            # Luraph brand without the official version line (repacked builds): same VM.
+            return 0.95
         # header stripped: v15's shape is `return setmetatable({...VM object...}, ...)`
-        # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers
-        head = source.lstrip()[:2000]
+        # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
+        # Skip leading comment lines first: a rebranded header comment must not
+        # hide the VM shape behind it.
+        head = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())[:2000]
         if head.startswith("return setmetatable({") and (
                 re.search(r"\[\d+\]=(bit32|buffer|string|table|math)\.\w+", head) or "LPH" in source[:200000]):
             return 0.8

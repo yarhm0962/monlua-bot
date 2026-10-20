@@ -4271,9 +4271,13 @@ class Program:
                 self.vms[tag] = vm
                 self.ctors[id(vm)] = ctor
                 vm.src_lines = lines
-        self.dump.vm_names = {vm.maker["args"][0]["name"] for vm in self.vms.values()} | {
+        def _maker_name(vm):
+            # a repacked VM's maker can have zero declared args; don't IndexError on it
+            a = vm.maker.get("args") if hasattr(vm.maker, "get") else vm.maker["args"]
+            return a[0]["name"] if a else None
+        self.dump.vm_names = {n for n in (_maker_name(vm) for vm in self.vms.values()) if n} | {
             vm.info["chain"][0]["args"][0]["name"] for vm in self.vms.values()
-            if vm.info.get("chain") and vm.info["chain"][0].get("args")
+            if vm.info.get("chain") and vm.info["chain"][0].get("args") and vm.info["chain"][0]["args"]
         }
 
         # dump protos captured under a different chunk name (the harness may
