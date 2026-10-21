@@ -40,10 +40,11 @@ MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
 URL_TIMEOUT = max(5, min(180, int(os.getenv("URL_TIMEOUT", "60"))))
 ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
-    "luraph_v15": {"label": "Luraph v15", "command": ".lph15"},
-    "luraph_v151": {"label": "Luraph v15.1", "command": ".lph15.1"},
-    "ironbrew1": {"label": "IronBrew1", "command": ".ibrw"},
-    "moonsec_v3": {"label": "MoonSec V3", "command": ".moonv3"},
+    "luraph_v15": {"label": "Luraph v15", "command": ".lrph15"},
+    "luraph_v151": {"label": "Luraph v15.1", "command": ".lrph15.1"},
+    "ironbrew1": {"label": "IronBrew1", "command": ".iron"},
+    "moonsec_v3": {"label": "MoonSec V3", "command": ".moon"},
+    "centurion": {"label": "Centurion", "command": ".cent"},
 }
 
 V151_DIR = DEOB_DIR / "v151"
@@ -130,10 +131,12 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     return (
-        "**Luraph v15.1** \u2014 `.lph15.1`\n"
-        "**Luraph v15** \u2014 `.lph15`\n"
-        "**IronBrew1** \u2014 `.ibrw`\n"
-        "**MoonSec V3** \u2014 `.moonv3`\n\n"
+        "**Luraph v15.1** \u2014 `.lrph15.1`\n"
+        "**Luraph v15** \u2014 `.lrph15`\n"
+        "**IronBrew1** \u2014 `.iron`\n"
+        "**MoonSec V3** \u2014 `.moon`\n"
+        "**Centurion** \u2014 `.cent`\n\n"
+
         "**Input** one `.lua` / `.luau` / `.txt` file\n"
         "Attach it or send a direct raw-file URL\n\n"
         "**Scan first** every file is identified before a job runs.\n"
@@ -1065,24 +1068,29 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     await ctx.reply(message, mention_author=False)
 
 
-@bot.command(name="lph15")
-async def lph15(ctx: commands.Context, *, url: str = "") -> None:
+@bot.command(name="lrph15")
+async def lrph15(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "luraph_v15", url)
 
 
-@bot.command(name="lph15.1")
-async def lph15_1(ctx: commands.Context, *, url: str = "") -> None:
+@bot.command(name="lrph15.1")
+async def lrph15_1(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "luraph_v151", url)
 
 
-@bot.command(name="ibrw")
-async def ibrw(ctx: commands.Context, *, url: str = "") -> None:
+@bot.command(name="iron")
+async def iron(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "ironbrew1", url)
 
 
-@bot.command(name="moonv3")
-async def moonv3(ctx: commands.Context, *, url: str = "") -> None:
+@bot.command(name="moon")
+async def moon(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "moonsec_v3", url)
+
+
+@bot.command(name="cent")
+async def cent(ctx: commands.Context, *, url: str = "") -> None:
+    await process_input(ctx, "centurion", url)
 
 
 @bot.command(name="detect")
@@ -1162,16 +1170,18 @@ async def deobfs(ctx: commands.Context) -> None:
 @bot.command(name="help")
 async def help_command(ctx: commands.Context) -> None:
     body = (
-        "**Luraph v15.1** \u2014 `.lph15.1`\n"
-        "**Luraph v15** \u2014 `.lph15`\n"
-        "**IronBrew1** \u2014 `.ibrw`\n"
-        "**MoonSec V3** \u2014 `.moonv3`\n\n"
+        "**Luraph v15.1** \u2014 `.lrph15.1`\n"
+        "**Luraph v15** \u2014 `.lrph15`\n"
+        "**IronBrew1** \u2014 `.iron`\n"
+        "**MoonSec V3** \u2014 `.moon`\n"
+        "**Centurion** \u2014 `.cent`\n\n"
+
         "**Input** one `.lua` / `.luau` / `.txt` file\n"
         "Attach it or send a direct raw-file URL\n\n"
         "**Scan first** every file is identified before a job runs.\n"
         "A command only proceeds when the engine matches.\n\n"
-        "**Example** `.lph15.1 https://host/raw/script.lua`\n"
-        "Or `.moonv3` with the file attached\n\n"
+        "**Example** `.lrph15.1 https://host/raw/script.lua`\n"
+        "Or `.moon` with the file attached\n\n"
         "-# `.detect` identify an obfuscator \u00b7 `.engines` this list \u00b7 `.help` usage"
     )
     await ctx.reply(view=info_view("How to use MonLua", body), mention_author=False)
@@ -1186,7 +1196,7 @@ async def on_ready() -> None:
     else:
         print(f"WARNING: native runtimes missing or not executable: {detail}", flush=True)
     if not (V151_SCRIPT.is_file() and V151_NODE_ARCHIVE.is_file()):
-        print("WARNING: v15.1 runtime incomplete; .lph15.1 will be unavailable.", flush=True)
+        print("WARNING: v15.1 runtime incomplete; .lrph15.1 will be unavailable.", flush=True)
 
 
 @bot.event

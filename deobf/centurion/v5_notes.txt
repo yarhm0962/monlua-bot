@@ -1,0 +1,48 @@
+v5 (centuration5thobf.lua, 130682B) white-box notes, 2026-10-02/03 offline session.
+Live baseplate full runs: 2 (dump-only harnesses, farm blocked, no crash).
+
+ADDENDUM (live-vs-offline path divergence):
+- Live baseplate takes a DIFFERENT PATH FROM THE START: ~50 creates (first
+  20 sizes byte-identical to offline: 8,35795,224,...), exactly 2 successful
+  pcalls, clean early return. Zero service calls, zero strings, zero chunks.
+- Offline takes 16 statements (Camera/IntValue/Path2D/SoundService probes).
+- Ruled out as causes: tostring swallow-vs-faithful, pcall wrapper frames,
+  pairs order, dict candidate (9-way grid identical), spawn nil-vs-thread
+  (identical live outcome both ways).
+- Enhanced live harness ready (cent61_full5.luau in Temp/opencode): logs
+  pcall ARG SHAPES (#args + per-arg type/preview) to identify the 2 live
+  PCOKs. Next baseplate window: execute + read, then mirror exactly offline.
+
+ARCHITECTURE (from static source scan):
+- Register VM, NOT factory-table VM. No c3/HA-style spans exist (span
+  harvest returns 0 for QS/D/S/O_): payload lives as bytecode interpreted
+  by an opcode loop, so v6 static techniques do not transfer. Full static
+  lift = devirtualize the interpreter (Luraph-lifter scale, out of scope).
+- QS = register file/stack (65 indexed writes: QS[V-1]=args init,
+  QS[i](...) calls, (QS)[i]=T stores). S = second stack. I = upvalue table
+  (resolved in a loop: g[3]=g[1][g[2]]). D = constants. T = temps.
+- Dispatcher: GN=Lb(...) opcode fetch + ranged if-chains (19-23, 23-32,
+  26-31...); M/H secondary dispatchers; Uy/fO/E/M operand decoders;
+  nU() arg packing. Opaque-predicate style: (k+n)%2, vS*vS%7/%11.
+- getfenv x2 adjacent: Qt=getfenv captured to Qt/e (env table reads only;
+  no pairs() anywhere in source -> no env enumeration).
+
+OFFLINE SANDBOX STATE (envlog + 5 copy hooks):
+- 13-16 statements then nil-index death at composition (missing table).
+- P2D int-index calls: fallthrough (proxy success) goes furthest (16);
+  any error replay shortens (13-15). Live answers for all 4 still unknown
+  except GetControlPoint|table (v1: cast error) -- v5 int-index live shape
+  never captured (no client when needed).
+- 26-string pool decodes offline (Camera/Path2D/service names,
+  isfunctionhooked, env-lib errors). Per-sample token: 'lkqtf'.
+- Dict reads: 14x readu8 (-1226..-1213), entropy-best picks 43642-window
+  (233,64,162,...) over 41296-window (17x14 padding). Dict-pin grid (9
+  candidates): all identical -> dict bytes don't move the wall.
+- pcall census: ~650 calls, 7 fails (4 GetTextSize-pattern + UDim2 x2 +
+  1 script-raised Array-to-int). tostring/readstring taps: tostring never
+  fires pre-death; readstring yields the 26 pool strings.
+
+NEXT: full protected live run in baseplate (alloc caps, farm block,
+write-file dump). Never attempted for v5; v1/v2/v3 all decoded live.
+If live exits early with ~2 pcalls (baseplate wrong-game gate), v5 needs
+its target game (ask owner). If live decodes, census + rebuild as usual.
