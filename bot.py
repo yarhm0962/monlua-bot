@@ -157,30 +157,52 @@ def _human_size(n: int) -> str:
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
-PASTEFY_MAX_BYTES = 1_000_000   # bigger outputs stay as Discord attachments only
+PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
+PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
+PASTEFY_CHUNK_CHARS = 450_000   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
+
+
+def _pastefy_post(payload: dict):
+    headers = {"Content-Type": "application/json"}
+    attempts = ([{"Authorization": PASTEFY_TOKEN}] if PASTEFY_TOKEN else []) + [{}]
+    for auth in attempts:
+        try:
+            request = urllib.request.Request(
+                PASTEFY_API_URL, data=json.dumps(payload).encode("utf-8"),
+                headers={**headers, **auth})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8", errors="replace"))
+            paste = data.get("paste") or {}
+            if paste.get("id"):
+                return paste
+            print(f"Pastefy upload rejected: {str(data)[:200]}", flush=True)
+        except Exception as exc:
+            print(f"Pastefy upload failed ({'with token' if auth else 'anonymous'}): {type(exc).__name__}: {exc}", flush=True)
+    return None
 
 
 def _pastefy_upload(text: str, title: str) -> str:
-    """Upload the deobfuscated output to Pastefy; returns the paste URL or "" on any failure."""
-    if not PASTEFY_TOKEN or not text or len(text.encode("utf-8")) > PASTEFY_MAX_BYTES:
+    """Upload output to Pastefy; outputs past the ~1 MB per-paste cap are split into
+    numbered parts with an index paste holding every link. Returns the paste URL or ""."""
+    if not text:
         return ""
-    request = urllib.request.Request(PASTEFY_API_URL, data=json.dumps({
-        "content": text,
-        "title": title[:120],
-    }).encode("utf-8"), headers={
-        "Content-Type": "application/json",
-        "Authorization": PASTEFY_TOKEN,   # Pastefy rejects "Bearer" on this endpoint
-    })
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8", errors="replace"))
-        paste_id = (data.get("paste") or {}).get("id")
-        if paste_id:
-            return f"https://pastefy.app/{paste_id}"
-        print(f"Pastefy upload rejected: {str(data)[:200]}", flush=True)
-    except Exception as exc:
-        print(f"Pastefy upload failed: {type(exc).__name__}: {exc}", flush=True)
-    return ""
+    chunks = [text[i:i + PASTEFY_CHUNK_CHARS] for i in range(0, len(text), PASTEFY_CHUNK_CHARS)]
+    urls = []
+    for i, chunk in enumerate(chunks, 1):
+        part_title = title[:110] if len(chunks) == 1 else f"{title[:96]} ({i}/{len(chunks)})"
+        paste = _pastefy_post({"content": chunk, "title": part_title})
+        if not paste:
+            return ""
+        urls.append(f"https://pastefy.app/{paste['id']}")
+    if len(urls) == 1:
+        return urls[0]
+    index = _pastefy_post({
+        "content": "Full output split across Pastefy parts (in order):\n\n"
+                   + "\n".join(f"Part {i}: {u}" for i, u in enumerate(urls, 1)),
+        "title": f"{title[:96]} - index"})
+    if index:
+        return f"https://pastefy.app/{index['id']}"
+    return urls[0]
 
 
 def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", pastefy_url: str = "") -> discord.ui.LayoutView:
@@ -1097,14 +1119,22 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         base = Path(filename).name or "raw.txt"
         if not base.lower().endswith((".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")):
             base = base + ".txt"
+        data = tmp.read_bytes()
+        text = data.decode("utf-8", errors="replace")
+        pastefy_url = ""
+        if size > 1800:
+            try:
+                pastefy_url = await asyncio.to_thread(_pastefy_upload, text, Path(filename).stem or "raw")
+            except Exception as exc:
+                print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
+        link = f"\n\U0001f517 [Pastefy]({pastefy_url}) \u00b7 [raw]({pastefy_url}/raw)" if pastefy_url else ""
         if size <= 1800:
-            text = tmp.read_bytes().decode("utf-8", errors="replace")
             await status.edit(content=f"`{filename}` ({_human_size(size)}):\n```\n{text[:1800]}\n```")
         elif size <= 7 * 1024 * 1024:
-            await status.edit(content=f"`{filename}` ({_human_size(size)}) \u2014 attached below.")
+            await status.edit(content=f"`{filename}` ({_human_size(size)}) \u2014 attached below.{link}")
             await ctx.send(file=discord.File(fp=str(tmp), filename=base))
         else:
-            await status.edit(content=f"`{filename}` is {_human_size(size)} \u2014 too big to send (7 MB attachment cap).")
+            await status.edit(content=f"`{filename}` is {_human_size(size)} \u2014 too big to attach, uploaded to Pastefy instead.{link}")
     except Exception as exc:
         await status.edit(content=f"Couldn't fetch that link: {str(exc)[:200]}")
     finally:
