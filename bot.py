@@ -425,8 +425,8 @@ def _validate_public_url(url: str, allow_any_ext: bool = False) -> tuple[str, st
     filename = Path(urllib.parse.unquote(parsed.path)).name
     suffix = Path(filename).suffix.lower()
     if not filename or (suffix and suffix not in ALLOWED_EXTENSIONS):
-                    if not allow_any_ext:
-                    raise ValueError("The raw URL must point directly to a `.lua`, `.luau`, or `.txt` file.")
+        if not allow_any_ext:
+            raise ValueError("The raw URL must point directly to a `.lua`, `.luau`, or `.txt` file.")
     if suffix not in ALLOWED_EXTENSIONS:
         filename = "paste.lua"
     try:
