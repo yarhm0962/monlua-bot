@@ -26,6 +26,13 @@ class LuraphV151(LuraphV15):
             # stays one point below on the very same signal.
             self.last_evidence = ["rebranded Luraph header (brand, no version line; reported as v15.1)"]
             return 0.96
+        if re.search(r"luraph", source[:4000], re.I):
+            vm = re.search(r"v?(1[3-6])\.(\d+)", source[:4000], re.I)
+            if vm and vm.group(1) == "15" and vm.group(2) != "0":
+                self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
+                return 1.0
+            self.last_evidence = ["Luraph named in the header area (no version line; reported as v15.1)"]
+            return 0.96
         # header fully stripped: same shape signals as v15, one point above so
         # the family reports under v15.1
         stripped = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
@@ -40,7 +47,7 @@ class LuraphV151(LuraphV15):
             self.last_evidence = [
                 "%s and %d LPH pragmas total (version not stated; reported as v15.1)" % (first, pragmas)]
             return 0.86
-        if slots >= 3:
+        if slots >= 1:
             self.last_evidence = ["%d numeric library slots (Luraph VM artifact, no header/VM shape)" % slots]
             return 0.56
         self.last_evidence = []

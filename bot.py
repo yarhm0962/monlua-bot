@@ -574,7 +574,7 @@ async def _scan_engine(source_path: Path) -> tuple[Optional[str], str]:
             PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect", "--no-pypy",
             cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
     except asyncio.TimeoutError:
         return None, "The source scan timed out."
     except OSError as exc:
@@ -604,7 +604,7 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str,
             PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect-all", "--no-pypy",
             cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
     except asyncio.TimeoutError:
         raise ValueError("The detection scan timed out.")
     except OSError as exc:
@@ -1003,7 +1003,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             node_input = workdir / f"{Path(filename).stem}.lua"
                             if input_path != node_input:
                                 await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15"]
+                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15", "--max-old-space-size", "6144"]
                         else:
                             command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                        "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]

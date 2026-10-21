@@ -35,6 +35,15 @@ class LuraphV15(Obfuscator):
             # Luraph brand without the official version line (repacked builds): same VM.
             self.last_evidence = ["rebranded Luraph header (brand, no official version line)"]
             return 0.95
+        if re.search(r"luraph", source[:4000], re.I):
+            # newer or further-reworded builds may drop both official phrases;
+            # the name itself in the header area is still the family's signature
+            vm = re.search(r"v?(1[3-6])\.(\d+)", source[:4000], re.I)
+            if vm and vm.group(1) == "15" and vm.group(2) != "0":
+                self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
+                return 0.9
+            self.last_evidence = ["Luraph named in the header area (no version line)"]
+            return 0.95
         # header stripped: v15's shape is `return setmetatable({...VM object...}, ...)`
         # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
         # Skip leading comment lines first: a rebranded header comment must not
@@ -61,7 +70,7 @@ class LuraphV15(Obfuscator):
             first = LPH_RX.search(source).group(0)
             self.last_evidence = ["%s and %d LPH pragmas total (Luraph's own directives)" % (first, pragmas)]
             return 0.85
-        if slots >= 3:
+        if slots >= 1:
             # numeric library-slot tables are a VM artifact, rare in hand-written code:
             # honest "possible match", never a confident verdict
             self.last_evidence = ["%d numeric library slots (Luraph VM artifact, no header/VM shape)" % slots]
