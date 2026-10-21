@@ -136,6 +136,8 @@ def engines_body() -> str:
         "**IronBrew1** \u2014 `.iron`\n"
         "**MoonSec V3** \u2014 `.moon`\n"
         "**Centurion** \u2014 `.cent`\n\n"
+        "**Raw fetch** \u2014 `.get <url>`\n\n"
+        "**Raw fetch** \u2014 `.get <url>`\n\n"
 
         "**Input** one `.lua` / `.luau` / `.txt` file\n"
         "Attach it or send a direct raw-file URL\n\n"
@@ -414,7 +416,7 @@ def runtime_status() -> tuple[bool, str]:
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
-def _validate_public_url(url: str) -> tuple[str, str]:
+def _validate_public_url(url: str, allow_any_ext: bool = False) -> tuple[str, str]:
     parsed = urllib.parse.urlparse(url.strip().strip("<>"))
     if parsed.scheme not in ("https", "http") or not parsed.hostname:
         raise ValueError("Please provide a direct HTTP(S) raw-file URL.")
@@ -423,7 +425,8 @@ def _validate_public_url(url: str) -> tuple[str, str]:
     filename = Path(urllib.parse.unquote(parsed.path)).name
     suffix = Path(filename).suffix.lower()
     if not filename or (suffix and suffix not in ALLOWED_EXTENSIONS):
-        raise ValueError("The raw URL must point directly to a `.lua`, `.luau`, or `.txt` file.")
+                    if not allow_any_ext:
+                    raise ValueError("The raw URL must point directly to a `.lua`, `.luau`, or `.txt` file.")
     if suffix not in ALLOWED_EXTENSIONS:
         filename = "paste.lua"
     try:
@@ -467,7 +470,7 @@ def _extract_code_from_page(body: bytes) -> Optional[bytes]:
     return max(candidates, key=len).encode("utf-8")
 
 
-def _download_url(url: str, destination: Path) -> tuple[str, int]:
+def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> tuple[str, int]:
     current_url = url
     last_net_error: Optional[Exception] = None
     opener = urllib.request.build_opener(_NoRedirect)
@@ -475,7 +478,7 @@ def _download_url(url: str, destination: Path) -> tuple[str, int]:
         if attempt:
             time.sleep(2)             # brief backoff, then the same ladder again
         for _ in range(4):
-            current_url, filename = _validate_public_url(current_url)
+            current_url, filename = _validate_public_url(current_url, allow_any_ext=allow_any_ext)
             response = None
             refused: Optional[urllib.error.HTTPError] = None
             for agent in (_BROWSER_UA, _BOT_UA):
@@ -933,11 +936,8 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 status = await ctx.reply(f"Checking `{filename}`…", mention_author=False)
                 detected, diagnostic = await _scan_engine(input_path)
                 if detected is None:
-                    await status.edit(content=(
-                        f"❓ Couldn't identify the obfuscator in `{filename}`.\nSupported: **Luraph v15/v15.1**, **IronBrew1**, **MoonSec V3**.\n`{diagnostic[:200]}`"
-                    ))
-                    return
-                if detected != engine and not (engine == "luraph_v151" and detected == "luraph_v15"):
+                    print(f"scan uncertain on {filename} ({diagnostic[:120]}); proceeding with the requested engine {engine}", flush=True)
+                if detected is not None and detected != engine and not (engine == "luraph_v151" and detected == "luraph_v15"):
                     detected_label = SUPPORTED[detected]["label"]
                     await status.edit(content=(
                         f"That file is **{detected_label}**. Use `{SUPPORTED[detected]['command']}` instead."
@@ -981,7 +981,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             node_input = workdir / f"{Path(filename).stem}.lua"
                             if input_path != node_input:
                                 await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30))]
+                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15"]
                         else:
                             command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                        "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
@@ -1076,6 +1076,42 @@ async def lrph15(ctx: commands.Context, *, url: str = "") -> None:
 @bot.command(name="lrph15.1")
 async def lrph15_1(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "luraph_v151", url)
+
+@bot.command(name="get")
+async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
+    """Fetch the raw content of a link and send it back."""
+    url = (url or "").strip().strip("<>")
+    if not url:
+        await ctx.reply("Usage: `.get <url>` \u2014 fetches a link's raw content.", mention_author=False)
+        return
+    gh = re.match(r"https://github\.com/([^/]+)/([^/]+)/blob/(\S+)", url)
+    if gh:
+        url = f"https://raw.githubusercontent.com/{gh.group(1)}/{gh.group(2)}/{gh.group(3)}"
+    pb = re.match(r"https?://pastebin\.com/(?:raw/)?([A-Za-z0-9]+)/?$", url)
+    if pb:
+        url = f"https://pastebin.com/raw/{pb.group(1)}"
+    status = await ctx.reply("Fetching\u2026", mention_author=False)
+    tmp = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
+    try:
+        filename, size = await asyncio.to_thread(_download_url, url, tmp, True)
+        base = Path(filename).name or "raw.txt"
+        if not base.lower().endswith((".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")):
+            base = base + ".txt"
+        if size <= 1800:
+            text = tmp.read_bytes().decode("utf-8", errors="replace")
+            await status.edit(content=f"`{filename}` ({_human_size(size)}):\n```\n{text[:1800]}\n```")
+        elif size <= 7 * 1024 * 1024:
+            await status.edit(content=f"`{filename}` ({_human_size(size)}) \u2014 attached below.")
+            await ctx.send(file=discord.File(fp=str(tmp), filename=base))
+        else:
+            await status.edit(content=f"`{filename}` is {_human_size(size)} \u2014 too big to send (7 MB attachment cap).")
+    except Exception as exc:
+        await status.edit(content=f"Couldn't fetch that link: {str(exc)[:200]}")
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 @bot.command(name="iron")
