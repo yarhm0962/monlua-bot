@@ -2233,31 +2233,155 @@ E.buffer = (function()
 		if ROBLOX_BUFFER[k] then b[k] = f end
 	end
 	if CFG.centurion_bigzero then
-		-- Centurion's VM allocates huge buffers/tables up front; cap them to a
-		-- big zero-filled allocation so the run continues offline.
+		-- Centurion's VM allocates huge buffers. Honor the DECLARED size in
+		-- len()/bounds arithmetic while backing the buffer with a capped
+		-- zero-filled store; offsets past the store read back as zeros,
+		-- exactly like the zero-filled buffer the script asked for.
 		local cap = R.tonumber(CFG.centurion_bigzero) or 8388608
-		local realcreate = b.create
-		b.create = function(n)
+		local function isbw(v) return R.type(v) == "table" and v.__buf ~= nil end
+		local function mkbuf(n)
 			n = R.tonumber(n) or 0
-			if n < 0 or n > cap then n = cap end
-			return realcreate(n)
+			if n < 0 then n = 0 end
+			return { __buf = buffer.create(math.min(n, cap)), declared = n }
 		end
-	end
-	if CFG.centurion_oob then
-		-- Out-of-bounds reads/writes on the scratch buffer answer 0 / no-op
-		-- up to a cap, then fail loudly again.
-		local cap = R.tonumber(CFG.centurion_oob_cap) or 500
-		local oobn = 0
-		for _, nm in { "readbits", "readf32", "readf64", "readi16", "readi32", "readi8", "readstring", "readu16", "readu32", "readu8" } do
-			local orig = b[nm]
-			if orig then
-				b[nm] = function(buf, ...)
-					local ok, a, r = R.pcall(orig, buf, ...)
-					if ok then return a, r end
-					oobn += 1
-					if oobn > cap then R.error("centurion oob cap exceeded", 0) end
-					if nm == "readstring" then return "" end
-					return 0
+		local function backed(bw, off, count)
+			return off >= 0 and count >= 0 and off + count <= buffer.len(bw.__buf)
+		end
+		local function check(bw, off, count)
+			if not (off >= 0 and count >= 0 and off + count <= bw.declared) then
+				R.error("Offsets must be non-negative and less than buffer length", 0)
+			end
+		end
+		local function rb(bw, off)
+			if backed(bw, off, 1) then return buffer.readu8(bw.__buf, off) end
+			return 0
+		end
+		local function wb(bw, off, v)
+			if backed(bw, off, 1) then buffer.writeu8(bw.__buf, off, v % 256) end
+		end
+		local function rd(bw, off, count)
+			local v = 0
+			for i = 0, count - 1 do v += rb(bw, off + i) * 256 ^ i end
+			return math.floor(v)
+		end
+		local function wr(bw, off, v, count)
+			v = math.floor(R.tonumber(v) or 0)
+			for i = 0, count - 1 do wb(bw, off + i, math.floor(v / 256 ^ i) % 256) end
+		end
+		local prox = {
+			create = function(n) return mkbuf(n) end,
+			len = function(bw) if isbw(bw) then return bw.declared end return buffer.len(bw) end,
+			copy = function(dst, doff, src, soff, count)
+				if isbw(dst) or isbw(src) then
+					count = R.tonumber(count) or (isbw(src) and (src.declared - soff) or (buffer.len(src) - soff))
+					for i = 0, count - 1 do wb(dst, doff + i, rb(src, soff + i)) end
+					return
+				end
+				return buffer.copy(dst, doff, src, soff, count)
+			end,
+			fill = function(bw, off, value, count)
+				if isbw(bw) then
+					count = R.tonumber(count) or bw.declared - off
+					for i = 0, count - 1 do wb(bw, off + i, value) end
+					return
+				end
+				return buffer.fill(bw, off, value, count)
+			end,
+			fromstring = function(x) return buffer.fromstring(x) end,
+			readstring = function(bw, off, count)
+				if isbw(bw) then
+					check(bw, off, count)
+					local parts = {}
+					for i = 0, count - 1 do R.insert(parts, string.char(rb(bw, off + i))) end
+					return table.concat(parts)
+				end
+				return buffer.readstring(bw, off, count)
+			end,
+			tostring = function(bw)
+				if isbw(bw) then return buffer.tostring(bw.__buf) end
+				return buffer.tostring(bw)
+			end,
+			readf32 = function(bw, off)
+				if isbw(bw) then check(bw, off, 4) if backed(bw, off, 4) then return buffer.readf32(bw.__buf, off) end return 0 end
+				return buffer.readf32(bw, off)
+			end,
+			readf64 = function(bw, off)
+				if isbw(bw) then check(bw, off, 8) if backed(bw, off, 8) then return buffer.readf64(bw.__buf, off) end return 0 end
+				return buffer.readf64(bw, off)
+			end,
+			writef32 = function(bw, off, v)
+				if isbw(bw) then if backed(bw, off, 4) then buffer.writef32(bw.__buf, off, v) end return end
+				return buffer.writef32(bw, off, v)
+			end,
+			writef64 = function(bw, off, v)
+				if isbw(bw) then if backed(bw, off, 8) then buffer.writef64(bw.__buf, off, v) end return end
+				return buffer.writef64(bw, off, v)
+			end,
+			readbits = function(bw, off, count)
+				if isbw(bw) then
+					check(bw, 0, math.floor((off + count + 7) / 8))
+					local v = 0
+					for i = 0, count - 1 do
+						local byte = rb(bw, math.floor((off + i) / 8))
+						v += (math.floor(byte / 2 ^ ((off + i) % 8)) % 2) * 2 ^ i
+					end
+					return math.floor(v)
+				end
+				return buffer.readbits(bw, off, count)
+			end,
+			writebits = function(bw, off, value, count)
+				if isbw(bw) then
+					value = math.floor(R.tonumber(value) or 0)
+					for i = 0, count - 1 do
+						local bit = math.floor(value / 2 ^ i) % 2
+						local bi = off + i
+						local byte = rb(bw, math.floor(bi / 8))
+						local mask = 2 ^ (bi % 8)
+						local has = byte % (mask * 2) >= mask
+						local nb = byte
+						if bit == 1 and not has then nb = byte + mask elseif bit == 0 and has then nb = byte - mask end
+						wb(bw, math.floor(bi / 8), nb)
+					end
+					return
+				end
+				return buffer.writebits(bw, off, value, count)
+			end,
+		}
+		for _, spec in { { "readu8", 1 }, { "readu16", 2 }, { "readu32", 4 }, { "readi8", 1 }, { "readi16", 2 }, { "readi32", 4 } } do
+			local name, size = spec[1], spec[2]
+			local signed = string.sub(name, 5, 5) == "i"
+			prox[name] = function(bw, off)
+				if isbw(bw) then
+					check(bw, off, size)
+					local v = rd(bw, off, size)
+					if signed then
+						local half = 2 ^ (8 * size - 1)
+						if v >= half then v -= 2 * half end
+					end
+					return v
+				end
+				return buffer[name](bw, off)
+			end
+		end
+		for _, spec in { { "writeu8", 1 }, { "writeu16", 2 }, { "writeu32", 4 } } do
+			local name, size = spec[1], spec[2]
+			prox[name] = function(bw, off, v)
+				if isbw(bw) then check(bw, off, size) wr(bw, off, v, size) return end
+				return buffer[name](bw, off, v)
+			end
+		end
+		prox.writei8 = prox.writeu8
+		prox.writei16 = prox.writeu16
+		prox.writei32 = prox.writeu32
+		for k, f in R.pairs(prox) do
+			if k == "create" or k == "fromstring" then
+				b[k] = f
+			else
+				local orig = b[k]
+				b[k] = function(...)
+					local first = ...
+					if isbw(first) then return f(...) end
+					if orig then return orig(...) end
 				end
 			end
 		end
@@ -2271,8 +2395,9 @@ E.buffer = (function()
 	local lastOff = -1
 	local undo = {}
 	for _, nm in { "writei32", "writeu32" } do
-		local orig = buffer[nm]
+		local orig = b[nm]
 		b[nm] = function(buf, off, v)
+			if R.type(buf) == "table" and buf.__buf ~= nil then return orig(buf, off, v) end
 			if tamperCount > 0 and v >= 0 and v < 256 and off ~= lastOff + 4 and buffer.len(buf) > 4096 then
 				-- the routine survived our error (caught by the script): keep it harmless
 				R.error(TAMPER, 0)
@@ -2298,13 +2423,15 @@ E.buffer = (function()
 		end
 	end
 	if not CFG.dump_strings then return b end
+	local prev_readstring = b.readstring
 	b.readstring = function(buf, off, len)
-		local s = buffer.readstring(buf, off, len)
+		local s = prev_readstring(buf, off, len)
 		R.insert(collected, s)
 		return s
 	end
+	local prev_tostring = b.tostring
 	b.tostring = function(buf)
-		local s = buffer.tostring(buf)
+		local s = prev_tostring(buf)
 		R.insert(collected, s)
 		return s
 	end

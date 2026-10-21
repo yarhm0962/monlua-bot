@@ -30,14 +30,30 @@ class Centurion(Obfuscator):
     doc = "CENTURION.md"
 
     def detect(self, source):
-        head = source[:4000]
-        if HEADER.search(head):
-            self.last_evidence = ["Centurion header (centurion.best)"]
+        # code first, comments second: the vendor banner is definitive when
+        # present, but detection must not depend on it surviving.
+        if HEADER.search(source[:4000]):
+            self.last_evidence = ["Centurion vendor header (centurion.best)"]
+            return 1.0
+        ev = []
+        if "centurion.best" in source:
+            ev.append("centurion.best URL in body")
+            self.last_evidence = ev
             return 0.95
-        n = len(SHAPE.findall(source[:20000]))
-        if n >= 20:
-            self.last_evidence = ["%d c3[N]=function(Z) payload factories" % n]
-            return 0.55
+        c3 = len(re.findall(r"\bc3\[", source))
+        fz = len(re.findall(r"function\(Z\)", source))
+        if c3 >= 50 and fz >= 20:
+            ev.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
+            self.last_evidence = ev
+            return 0.85
+        if c3 >= 20 and fz >= 10:
+            ev.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
+            self.last_evidence = ev
+            return 0.7
+        if c3 >= 5 or fz >= 5:
+            ev.append("%d c3[N] refs + %d function(Z) factories (weak shape)" % (c3, fz))
+            self.last_evidence = ev
+            return 0.5
         self.last_evidence = []
         return 0.0
 
