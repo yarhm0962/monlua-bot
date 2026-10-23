@@ -47,8 +47,8 @@ class LuraphV151(LuraphV15):
             if vm:
                 self.last_evidence = ["Luraph mentioned with a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
                 return 0.2
-            self.last_evidence = ["Luraph named in a leading comment without a validated version/banner"]
-            return 0.62
+            self.last_evidence = ["Unverified Luraph mention in a leading comment (not a validated banner)"]
+            return 0.25
         # header fully stripped: same shape signals as v15, one point above so
         # the family reports under v15.1
         stripped = structure.lstrip()
