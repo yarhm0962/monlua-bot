@@ -10,9 +10,13 @@ function getPythonBin() {
     _cachedPython = process.env.PYTHON_BIN;
     return _cachedPython;
   }
+  // The symbolic lifter is CPU-bound pure Python. Prefer PyPy when it is
+  // installed: its JIT substantially reduces large Luraph v15.1 lift times.
+  // Keep the explicit PYTHON_BIN override authoritative, and fall back to
+  // the platform's normal Python if PyPy is unavailable.
   const candidates = process.platform === 'win32'
-    ? ['python', 'py', 'python3']
-    : ['python3', 'python'];
+    ? ['pypy3', 'pypy', 'python', 'py', 'python3']
+    : ['pypy3', 'pypy', 'python3', 'python'];
 
   for (const cmd of candidates) {
     try {
