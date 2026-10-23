@@ -78,6 +78,41 @@ def strip_lua_comments(source):
     return scan_lua_source(source)[0]
 
 
+def strip_lua_strings(source):
+    """Mask quoted and long-bracket literals when measuring code structure."""
+    out = []
+    i, n = 0, len(source)
+    while i < n:
+        char = source[i]
+        if char == "'" or char == '"' or char == chr(96):
+            start = i
+            quote = char
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    i += 2
+                    continue
+                if source[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            out.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[start:i]))
+            continue
+        if char == "[":
+            opened = _long_bracket_open(source, i)
+            if opened is not None:
+                level, after_open = opened
+                close = "]" + "=" * level + "]"
+                found = source.find(close, after_open)
+                end = n if found < 0 else found + len(close)
+                out.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[i:end]))
+                i = end
+                continue
+        out.append(char)
+        i += 1
+    return "".join(out)
+
+
 def leading_lua_comments(source):
     """Return only comment blocks before the first real Lua token."""
     result = []
@@ -153,6 +188,7 @@ def _count(rx, text, cap=200000):
 def family_scores(source):
     """Rank detection-only families using leading comments and executable-code shape."""
     code, _comments = scan_lua_source(source)
+    structure = strip_lua_strings(code)
     header = leading_lua_comments(source)[:800]
     out = []
     for name, label, header_rx, shape_rx, min_hits, conf, weak in FAMILIES:
@@ -161,7 +197,7 @@ def family_scores(source):
             continue
         if shape_rx is None:
             continue
-        hits = _count(shape_rx, code)
+        hits = _count(shape_rx, structure)
         if hits >= min_hits * 3:
             out.append((name, conf, label, ["%d code-pattern hits (need %d)" % (hits, min_hits * 3)]))
         elif min_hits and hits >= min_hits:
@@ -184,13 +220,16 @@ def obfuscation_score(source):
     Every signal is measured over the whole file, and each fired signal is
     reported with its measured number so the confidence is auditable."""
     code = strip_lua_comments(source)
+    structure = strip_lua_strings(code)
     score = 0.0
     evidence = []
-    size = max(1, len(code))
+    # Ignore whitespace left where comments were removed; include literal
+    # bytes in the size denominator so escaped payloads aren't over-weighted.
+    size = max(1, sum(1 for char in code if not char.isspace()))
     per_kb = 1000.0 / size
 
     # 1. minified: a real obfuscator usually collapses everything to few lines
-    newlines = code.count("\n")
+    newlines = structure.count("\n")
     if size > 4000 and newlines < size / 2000.0:
         score += 0.2
         evidence.append("minified (%.0f newlines in %.0f KB)" % (newlines, size / 1000.0))
@@ -203,7 +242,7 @@ def obfuscation_score(source):
 
     # 3. machine-looking identifiers: dense runs of very short names
     total = short = 0
-    for m in _IDENT_RX.finditer(code):
+    for m in _IDENT_RX.finditer(structure):
         total += 1
         if len(m.group(0)) <= 2:
             short += 1
@@ -214,12 +253,12 @@ def obfuscation_score(source):
         evidence.append("%.0f%% 1-2-character identifiers" % (100.0 * short / total))
 
     # 4. big numeric constant tables (VM bytecode as integers)
-    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", code):
+    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", structure):
         score += 0.2
         evidence.append("large numeric constant tables (VM bytecode)")
 
     # 5. dispatcher loop + table-index dispatch
-    if re.search(r"\bwhile\s+true\s+do\b", code) and re.search(r"\[\s*\w+\s*\]\s*\(", code):
+    if re.search(r"\bwhile\s+true\s+do\b", structure) and re.search(r"\[\s*\w+\s*\]\s*\(", structure):
         score += 0.15
         evidence.append("while-true dispatch loop with table-index calls")
 
