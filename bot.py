@@ -83,26 +83,35 @@ def resolve_node() -> str:
     return _node_bin
 
 CHANNEL_CONFIG_PATH = ROOT / "channel_restrictions.json"
+CHANNEL_CONFIG_LOAD_FAILED = False
 
 
 def _load_channel_restrictions() -> dict[str, list[int]]:
-    """Load per-guild command-channel allowlists, tolerating a missing/corrupt file."""
+    """Load per-guild allowlists; malformed/unreadable settings fail closed."""
+    global CHANNEL_CONFIG_LOAD_FAILED
     try:
         raw = json.loads(CHANNEL_CONFIG_PATH.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
-            return {}
+            raise ValueError("expected a JSON object keyed by guild ID")
         result: dict[str, list[int]] = {}
         for guild_id, values in raw.items():
-            if not isinstance(values, list):
-                continue
-            valid = sorted({int(value) for value in values if str(value).isdigit()})
+            if not str(guild_id).isdigit() or not isinstance(values, list):
+                raise ValueError("invalid guild ID or channel list in settings")
+            if any(not str(value).isdigit() for value in values):
+                raise ValueError("invalid channel ID in settings")
+            valid = sorted({int(value) for value in values})
             if valid:
                 result[str(int(guild_id))] = valid
         return result
     except FileNotFoundError:
         return {}
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-        print(f"WARNING: couldn't load channel restrictions: {type(exc).__name__}: {exc}", flush=True)
+        CHANNEL_CONFIG_LOAD_FAILED = True
+        print(
+            f"WARNING: channel restrictions failed to load; commands will fail closed until repaired: "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
         return {}
 
 
@@ -118,7 +127,6 @@ def _persist_channel_restrictions(updated: dict[str, list[int]]) -> None:
         except FileNotFoundError:
             pass
 
-
 CHANNEL_RESTRICTIONS: dict[str, list[int]] = _load_channel_restrictions()
 _channel_settings_lock = asyncio.Lock()
 
@@ -132,6 +140,8 @@ def _allowed_channel_ids(guild_id: Optional[int]) -> list[int]:
 
 
 def _channel_is_allowed(guild_id: Optional[int], channel_id: Optional[int]) -> bool:
+    if CHANNEL_CONFIG_LOAD_FAILED:
+        return False
     configured = _allowed_channel_ids(guild_id)
     if guild_id is None:
         return not CHANNEL_RESTRICTIONS
@@ -169,7 +179,9 @@ class ChannelRestrictedCommandTree(app_commands.CommandTree):
         if _channel_is_allowed(guild_id, channel_id):
             return True
         configured = _allowed_channel_ids(guild_id)
-        if guild_id is None and CHANNEL_RESTRICTIONS:
+        if CHANNEL_CONFIG_LOAD_FAILED:
+            message = "Command-channel settings could not be loaded. An administrator must use /set channel to repair them."
+        elif guild_id is None and CHANNEL_RESTRICTIONS:
             message = "Bot commands are disabled in DMs while channel restrictions are configured."
         elif configured:
             mentions = ", ".join(f"<#{cid}>" for cid in configured)
@@ -1475,6 +1487,7 @@ set_group = app_commands.Group(
 @set_group.command(name="channel", description="Allow bot commands only in this channel (add it to the allowlist).")
 @app_commands.describe(channel="Text channel where bot commands are allowed.")
 async def set_channel_command(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    global CHANNEL_CONFIG_LOAD_FAILED
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
@@ -1509,6 +1522,7 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
             return
         CHANNEL_RESTRICTIONS.clear()
         CHANNEL_RESTRICTIONS.update(updated)
+        CHANNEL_CONFIG_LOAD_FAILED = False
         configured_count = len(updated[guild_key])
     await interaction.response.send_message(
         f"Command-channel restriction saved. Bot commands in this server now work only in {channel.mention}"
@@ -1533,6 +1547,7 @@ remove_set_group = app_commands.Group(
 @remove_set_group.command(name="channel", description="Remove a channel from the bot-command allowlist.")
 @app_commands.describe(channel="Previously configured text channel to remove.")
 async def remove_set_channel_command(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    global CHANNEL_CONFIG_LOAD_FAILED
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
@@ -1570,6 +1585,7 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
             return
         CHANNEL_RESTRICTIONS.clear()
         CHANNEL_RESTRICTIONS.update(updated)
+        CHANNEL_CONFIG_LOAD_FAILED = False
         remaining = len(current)
     if remaining:
         message = f"Removed {channel.mention}. Commands remain restricted to the other {remaining} configured channel(s)."
