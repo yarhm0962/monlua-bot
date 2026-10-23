@@ -266,7 +266,9 @@ def engines_body() -> str:
         "**QUICK COMMANDS**\n"
         "• `.detect` — identify an obfuscator\n"
         "• `.get <url>` — fetch raw text\n"
-        "• `.help` — show this guide\n"\n        "• `/set channel` — add a command channel (Manage Server)\n"\n        "• `/remove set channel` — remove a command channel (Manage Server)"
+        "• `.help` — show this guide\n"
+        "• `/set channel` — add a command channel (Manage Server)\n"
+        "• `/remove set channel` — remove a command channel (Manage Server)"
     )
 
 
@@ -1469,7 +1471,9 @@ async def help_command(ctx: commands.Context) -> None:
         "• `.moon` with a MoonSec file attached\n\n"
         "**OTHER COMMANDS**\n"
         "• `.engines` — list supported engines\n"
-        "• `.get <url>` — fetch raw text\n"\n        "• `/set channel` — restrict commands to selected channel(s) (Manage Server)\n"\n        "• `/remove set channel` — remove a configured channel (Manage Server)"
+        "• `.get <url>` — fetch raw text\n"
+        "• `/set channel` — restrict commands to selected channel(s) (Manage Server)\n"
+        "• `/remove set channel` — remove a configured channel (Manage Server)"
     )
     await ctx.reply(view=info_view("MonLua · Quick Guide", body), mention_author=False)
 
