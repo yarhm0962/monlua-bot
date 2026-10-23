@@ -38,16 +38,22 @@ class LuraphV15(Obfuscator):
         if HEADER_ANY.search(comments[:4000]):
             # Luraph brand without the official version line (repacked builds): same VM.
             self.last_evidence = ["rebranded Luraph header (brand, no official version line)"]
-            return 0.95
+            return 0.80
         if re.search(r"luraph", comments[:4000], re.I):
             # newer or further-reworded builds may drop both official phrases;
             # the name itself in the header area is still the family's signature
             vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
-            if vm and vm.group(1) == "15" and vm.group(2) != "0":
-                self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
-                return 0.9
-            self.last_evidence = ["Luraph named in the header area (no version line)"]
-            return 0.95
+            if vm:
+                if vm.group(1) == "15" and vm.group(2) != "0":
+                    self.last_evidence = ["Luraph named in a leading comment with version v15.%s" % vm.group(2)]
+                    return 0.9
+                if vm.group(1) == "15":
+                    self.last_evidence = ["Luraph v15 family/version mentioned in a leading comment"]
+                    return 0.78
+                self.last_evidence = ["Luraph mentioned with a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
+                return 0.2
+            self.last_evidence = ["Luraph named in a leading comment without a validated version/banner"]
+            return 0.62
         # header stripped: v15's shape is `return setmetatable({...VM object...}, ...)`
         # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
         # Skip leading comment lines first: a rebranded header comment must not
