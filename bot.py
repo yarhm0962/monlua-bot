@@ -82,7 +82,7 @@ def resolve_node() -> str:
     _node_bin = str(node_exe)
     return _node_bin
 
-CHANNEL_CONFIG_PATH = ROOT / "channel_restrictions.json"
+CHANNEL_CONFIG_PATH = Path(os.getenv("CHANNEL_CONFIG_PATH", str(ROOT / "channel_restrictions.json"))).expanduser()
 CHANNEL_CONFIG_LOAD_FAILED = False
 
 
