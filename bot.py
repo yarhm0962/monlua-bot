@@ -110,7 +110,7 @@ def _persist_channel_restrictions(updated: dict[str, list[int]]) -> None:
     """Atomically persist settings before publishing them to the running bot."""
     temporary = CHANNEL_CONFIG_PATH.with_suffix(".json.tmp")
     try:
-        temporary.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+        temporary.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         temporary.replace(CHANNEL_CONFIG_PATH)
     finally:
         try:
@@ -1506,7 +1506,7 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     await interaction.response.send_message(
         f"Command-channel restriction saved. Bot commands in this server now work only in {channel.mention}"
         + (f" and {configured_count - 1} other configured channel(s)." if configured_count > 1 else ".")
-        + "\\nYou can use the set channel command again to allow another channel.",
+        + "\nYou can use the set channel command again to allow another channel.",
         ephemeral=True,
     )
 
