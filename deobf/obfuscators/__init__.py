@@ -47,21 +47,24 @@ def scores(source):
 
 
 def all_scores(source):
-    """Rows for `--detect-all`: (name, confidence, label, evidence) for every
-    plugin, then detection-only families, then the family-agnostic meter.
-    Each evidence list states exactly which signals matched and their measured
-    counts, so the confidence figure is auditable rather than invented."""
-    rows = []
+    """Rank every supported engine and detection-only family together.
+
+    Evidence includes validated leading-banner comments and code structure;
+    the generic obfuscation meter is kept separate from engine candidates.
+    """
+    candidates = []
     for c, p in scores(source):
-        rows.append((p.name, c, p.label, list(getattr(p, "last_evidence", []) or [])))
-    rows.extend(extra_families.family_scores(source))
+        candidates.append((p.name, c, p.label, list(getattr(p, "last_evidence", []) or [])))
+    candidates.extend(extra_families.family_scores(source))
+    # A detection-only family can be a better match than a supported engine.
+    # Sort them together so the report presents the strongest evidence first.
+    candidates.sort(key=lambda row: row[1], reverse=True)
     obs, ev = extra_families.obfuscation_score(source)
     if obs >= 0.5:
-        rows.append(("obfuscated", obs, "Obfuscated (unknown engine)", ev))
+        candidates.append(("obfuscated", obs, "Obfuscated (unknown engine)", ev))
     else:
-        rows.append(("plain", obs, "No obfuscation detected", ev))
-    return rows
-
+        candidates.append(("plain", obs, "No obfuscation detected", ev))
+    return candidates
 
 def detect(source):
     """(plugin, confidence) for `source`; the generic fallback when no
