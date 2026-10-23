@@ -111,32 +111,32 @@ FAMILIES = [
     # MoonSec V2: the version string is the signature; a bare "moonsec" is NOT
     # evidence (plain code mentioning MoonSec V3 must not match)
     ("moonsec_v2", "MoonSec V2",
-     re.compile(r"moonsec\s*v2\b", re.I),
-     re.compile(r"moonsec\s*v2\b", re.I), 2, 0.9, 0.6),
+     re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:with|by|using)\s+moonsec\s*v2\b", re.I),
+     None, 0, 0.9, 0.6),
     # IronBrew2: version string only, so "IronBrew1" in plain text never matches
     ("ironbrew2", "IronBrew2",
-     re.compile(r"ironbrew\s*2\b", re.I),
-     re.compile(r"ironbrew\s*2\b", re.I), 2, 0.9, 0.6),
+     re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:with|by|using)\s+ironbrew\s*2\b", re.I),
+     None, 0, 0.9, 0.6),
     # PSU (psu.dev): vendor domain is the strong marker; bare "psu" needs volume
     ("psu", "PSU",
      re.compile(r"psu\.dev\b|protected by psu\b|obfuscated (?:by|using) psu\b", re.I),
-     re.compile(r"\bpsu\b", re.I), 6, 0.85, 0.55),
+     None, 0, 0.85, 0.55),
     # Boronide: vendor name is distinctive enough at volume
     ("boronide", "Boronide",
-     re.compile(r"boronide", re.I),
-     re.compile(r"boronide", re.I), 3, 0.85, 0.55),
+     re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+boronide\b", re.I),
+     None, 0, 0.85, 0.55),
     # PromethEus / Prometheus: distinctive token
     ("prometheus", "PromethEus",
-     re.compile(r"obfuscated (?:by|using) prometheus\b|promethe", re.I),
-     re.compile(r"promethe", re.I), 4, 0.85, 0.55),
+     re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+prometh(?:eus|eus)\b", re.I),
+     None, 0, 0.85, 0.55),
     # Hierarchy: common English word, so header-level evidence only
     ("hierarchy", "Hierarchy",
      re.compile(r"obfuscated (?:by|using) hierarchy\b|protected (?:by|with) hierarchy\b|hierarchy\s*obfuscator", re.I),
      None, 0, 0.85, 0.55),
     # LuauGuard
     ("luauguard", "LuauGuard",
-     re.compile(r"luauguard|luau\s*guard", re.I),
-     re.compile(r"luauguard|luau\s*guard", re.I), 3, 0.85, 0.55),
+     re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:by|with|using)\s+luau\s*guard\b", re.I),
+     None, 0, 0.85, 0.55),
 ]
 
 
