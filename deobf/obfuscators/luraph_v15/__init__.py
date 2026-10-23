@@ -20,8 +20,11 @@ class LuraphV15(Obfuscator):
     doc = "LURAPH.md"
 
     def detect(self, source):
-        # headers can be a long multi-line comment block; search the first 4 KB
-        m = HEADER.search(source[:4000])
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        comments = leading_lua_comments(source)
+        code = strip_lua_comments(source)
+        # Only trust a claimed version when it is present in a leading comment.
+        m = HEADER.search(comments[:4000])
         if m:
             minor = m.group(2)
             if minor is not None and minor != "0":
@@ -31,14 +34,14 @@ class LuraphV15(Obfuscator):
                 return 0.9
             self.last_evidence = ["official Luraph header comment (v%s)" % m.group(1)]
             return 1.0 if m.group(1) == "15" else 0.3     # other versions: probably close, not verified
-        if HEADER_ANY.search(source[:4000]):
+        if HEADER_ANY.search(comments[:4000]):
             # Luraph brand without the official version line (repacked builds): same VM.
             self.last_evidence = ["rebranded Luraph header (brand, no official version line)"]
             return 0.95
-        if re.search(r"luraph", source[:4000], re.I):
+        if re.search(r"luraph", comments[:4000], re.I):
             # newer or further-reworded builds may drop both official phrases;
             # the name itself in the header area is still the family's signature
-            vm = re.search(r"v?(1[3-6])\.(\d+)", source[:4000], re.I)
+            vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
             if vm and vm.group(1) == "15" and vm.group(2) != "0":
                 self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
                 return 0.9
@@ -48,10 +51,10 @@ class LuraphV15(Obfuscator):
         # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
         # Skip leading comment lines first: a rebranded header comment must not
         # hide the VM shape behind it.
-        stripped = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
+        stripped = code.lstrip()
         # every structural signal is counted across the WHOLE file, not a window
-        pragmas = len(LPH_RX.findall(source))
-        slots = sum(1 for _ in SLOT_RX.finditer(source))
+        pragmas = len(LPH_RX.findall(code))
+        slots = sum(1 for _ in SLOT_RX.finditer(code))
         head = stripped[:2000]
         # code-shape signals, not comment-based: the VM object opens with
         # `return setmetatable({...})`; its library slots and LPH markers can
@@ -67,7 +70,7 @@ class LuraphV15(Obfuscator):
         # LPH_* markers alone (LPH_NO_VIRTUALIZE, LPH_JIT, LPH_ENCFUNC, ...) are
         # Luraph's own pragmas: real obfuscator output, no header needed.
         if pragmas:
-            first = LPH_RX.search(source).group(0)
+            first = LPH_RX.search(code).group(0)
             self.last_evidence = ["%s and %d LPH pragmas total (Luraph's own directives)" % (first, pragmas)]
             return 0.85
         if slots >= 1:
