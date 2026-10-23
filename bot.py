@@ -155,6 +155,93 @@ def _human_size(n: int) -> str:
     return f"{n / (1024 * 1024):.2f} MB"
 
 
+def _strip_lua_comments(source: str) -> str:
+    """Remove Lua/Luau comments without touching quoted or long-bracket strings."""
+    out = []
+    i, n = 0, len(source)
+    marker = "-- [[ Deobfuscated by MonLua ]]"
+    while i < n:
+        if source.startswith("--", i):
+            line_start = source.rfind("\n", 0, i) + 1
+            line_end = source.find("\n", i)
+            if line_end < 0:
+                line_end = n
+            if source[line_start:i].strip() == "" and source[i:line_end].strip() == marker:
+                i = line_end + (1 if line_end < n else 0)
+                continue
+            long_comment = re.match(r"--\[(=*)\[", source[i:])
+            if long_comment:
+                close = "]" + long_comment.group(1) + "]"
+                end = source.find(close, i + long_comment.end())
+                end = n if end < 0 else end + len(close)
+                out.append("\n" * source[i:end].count("\n"))
+                i = end
+            else:
+                out.append("\n" if line_end < n else "")
+                i = line_end + (1 if line_end < n else 0)
+            continue
+        if source[i] == '"' or source[i] == "'" or source[i] == chr(96):
+            quote = source[i]
+            start = i
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    i += 2
+                    continue
+                if source[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            out.append(source[start:i])
+            continue
+        if source[i] == "[":
+            long_string = re.match(r"\[(=*)\[", source[i:])
+            if long_string:
+                close = "]" + long_string.group(1) + "]"
+                start = i
+                end = source.find(close, i + long_string.end())
+                i = n if end < 0 else end + len(close)
+                out.append(source[start:i])
+                continue
+        out.append(source[i])
+        i += 1
+    return re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", "".join(out)).strip()
+
+
+def _beautify_lua(source: str) -> str:
+    """Use StyLua when installed; otherwise use the bundled Luau token formatter."""
+    body = source.strip()
+    if not body:
+        return ""
+    stylua = shutil.which("stylua")
+    if stylua:
+        try:
+            proc = subprocess.run(
+                [stylua, "--stdin-filepath", "output.luau", "-"],
+                input=body, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=20, check=False,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                return proc.stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    try:
+        from deobf.lexer import pretty, tokenize
+        formatted = pretty(tokenize(body), max_str=len(body) + 1).strip()
+        if formatted:
+            return formatted
+    except Exception as exc:
+        print(f"Lua formatter fallback: {type(exc).__name__}: {exc}", flush=True)
+    return body
+
+
+def _prepare_deobfuscated_output(source: str) -> str:
+    """Enforce one MonLua header, remove all other comments, and beautify code."""
+    body = _strip_lua_comments(source.lstrip("\ufeff"))
+    formatted = _beautify_lua(body)
+    return "-- [[ Deobfuscated by MonLua ]]\n\n" + formatted.rstrip() + "\n"
+
+
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
@@ -1040,10 +1127,9 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                             return
 
-                out_text = output_path.read_text(encoding="utf-8", errors="replace")
-                if engine == "luraph_v151" and not out_text.startswith("-- [[ Deobfuscated by MonLua ]]"):
-                    out_text = "-- [[ Deobfuscated by MonLua ]]\n\n" + out_text.lstrip("\ufeff")
-                    output_path.write_text(out_text, encoding="utf-8")
+                raw_output = output_path.read_text(encoding="utf-8", errors="replace")
+                out_text = _prepare_deobfuscated_output(raw_output)
+                output_path.write_text(out_text, encoding="utf-8", newline="\n")
                 output_size = output_path.stat().st_size
                 if output_size > MAX_OUTPUT_BYTES:
                     await status.edit(content=f"📦 Output too large: {output_size:,} bytes (limit {MAX_OUTPUT_BYTES:,}).")
