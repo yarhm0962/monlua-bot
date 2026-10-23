@@ -24,19 +24,31 @@ class LuraphV151(LuraphV15):
             self.last_evidence = []          # v15.0.x belongs to the v15 engine
             return 0.0
         if HEADER_ANY.search(comments[:4000]):
-            # repacked builds reword the header and drop the version line; the
-            # VM is the same either way. v15.1 is the current release of the
-            # 15 line, so rebranded files report as v15.1 while the v15 engine
-            # stays one point below on the very same signal.
-            self.last_evidence = ["rebranded Luraph header (brand, no version line; reported as v15.1)"]
-            return 0.96
+            vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
+            if vm and vm.group(1) != "15":
+                self.last_evidence = ["Luraph header states a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
+                return 0.2
+            if vm and vm.group(1) == "15" and vm.group(2) == "0":
+                self.last_evidence = ["Rebranded Luraph v15.0 header; not a v15.1 match"]
+                return 0.0
+            if vm:
+                self.last_evidence = ["Rebranded Luraph header with version v15.%s" % vm.group(2)]
+                return 0.92
+            self.last_evidence = ["Rebranded Luraph header without a version line; v15.1 is a tentative family match"]
+            return 0.84
         if re.search(r"luraph", comments[:4000], re.I):
             vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
             if vm and vm.group(1) == "15" and vm.group(2) != "0":
-                self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
+                self.last_evidence = ["Luraph named in a leading comment with version v15.%s" % vm.group(2)]
                 return 1.0
-            self.last_evidence = ["Luraph named in the header area (no version line; reported as v15.1)"]
-            return 0.96
+            if vm and vm.group(1) == "15":
+                self.last_evidence = ["Luraph v15 family/version mentioned in a leading comment"]
+                return 0.0
+            if vm:
+                self.last_evidence = ["Luraph mentioned with a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
+                return 0.2
+            self.last_evidence = ["Luraph named in a leading comment without a validated version/banner"]
+            return 0.62
         # header fully stripped: same shape signals as v15, one point above so
         # the family reports under v15.1
         stripped = structure.lstrip()
