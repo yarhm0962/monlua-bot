@@ -131,18 +131,18 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     return (
-        "**SUPPORTED ENGINES**\\n"
-        "• **Luraph v15.1** · `.lrph15.1`\\n"
-        "• **Luraph v15** · `.lrph15`\\n"
-        "• **IronBrew 1** · `.iron`\\n"
-        "• **MoonSec V3** · `.moon`\\n"
-        "• **Centurion** · `.cent`\\n\\n"
-        "**HOW TO START**\\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\\n"
-        "Run `.detect` first, then use the matching engine command.\\n\\n"
-        "**QUICK COMMANDS**\\n"
-        "• `.detect` — identify an obfuscator\\n"
-        "• `.get <url>` — fetch raw text\\n"
+        "**SUPPORTED ENGINES**\n"
+        "• **Luraph v15.1** · `.lrph15.1`\n"
+        "• **Luraph v15** · `.lrph15`\n"
+        "• **IronBrew 1** · `.iron`\n"
+        "• **MoonSec V3** · `.moon`\n"
+        "• **Centurion** · `.cent`\n\n"
+        "**HOW TO START**\n"
+        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n"
+        "Run `.detect` first, then use the matching engine command.\n\n"
+        "**QUICK COMMANDS**\n"
+        "• `.detect` — identify an obfuscator\n"
+        "• `.get <url>` — fetch raw text\n"
         "• `.help` — show this guide"
     )
 
@@ -210,20 +210,20 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
     container.add_item(discord.ui.TextDisplay("## ✅ Deobfuscation complete"))
-    summary = f"**Engine**  {label}\\n**Output size**  {_human_size(size)}"
+    summary = f"**Engine**  {label}\n**Output size**  {_human_size(size)}"
     if elapsed:
-        summary += f"\\n**Time**  {elapsed}"
+        summary += f"\n**Time**  {elapsed}"
     container.add_item(discord.ui.TextDisplay(summary))
     container.add_item(discord.ui.TextDisplay(f"-# File: `{filename[:180]}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
-        container.add_item(discord.ui.TextDisplay(f"```lua\\n{code_text}\\n```"))
+        container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
-        container.add_item(discord.ui.TextDisplay("📎 **Output file attached**\\n-# Download the attachment to save the full result."))
+        container.add_item(discord.ui.TextDisplay("📎 **Output file attached**\n-# Download the attachment to save the full result."))
     if pastefy_url:
         container.add_item(discord.ui.TextDisplay(
-            f"**Online copy**\\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
+            f"**Online copy**\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("-# Review the output before running it."))
     view.add_item(container)
@@ -238,7 +238,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     container.add_item(discord.ui.Separator())
     safe_detail = str(detail or "No diagnostic details were provided.").strip()[-900:]
     safe_detail = safe_detail.replace("```", "`\u200b``")
-    container.add_item(discord.ui.TextDisplay(f"```text\\n{safe_detail}\\n```"))
+    container.add_item(discord.ui.TextDisplay(f"```text\n{safe_detail}\n```"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("**Next step**  Run `.detect` to identify the engine, or `.help` for usage."))
     view.add_item(container)
