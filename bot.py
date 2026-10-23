@@ -297,11 +297,11 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
     container.add_item(discord.ui.TextDisplay("## ✅ Deobfuscation complete"))
-    summary = f"**Engine**  {label}\n**Output size**  {_human_size(size)}"
+    summary = f"**Engine** · {label}\n**Output size** · {_human_size(size)}"
     if elapsed:
-        summary += f"\n**Time**  {elapsed}"
+        summary += f"\n**Time** · {elapsed}"
     container.add_item(discord.ui.TextDisplay(summary))
-    container.add_item(discord.ui.TextDisplay(f"-# File: `{filename[:180]}`"))
+    container.add_item(discord.ui.TextDisplay(f"-# Source: `{filename[:140]}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
@@ -312,7 +312,7 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
         container.add_item(discord.ui.TextDisplay(
             f"**Online copy**\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay("-# Review the output before running it."))
+    container.add_item(discord.ui.TextDisplay("-# Review recovered code before running it."))
     view.add_item(container)
     return view
 
@@ -321,13 +321,13 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0xED4245)
     container.add_item(discord.ui.TextDisplay(f"## ⚠️ {title}"))
-    container.add_item(discord.ui.TextDisplay("The job could not finish. Review the details below, then try again if appropriate."))
+    container.add_item(discord.ui.TextDisplay("The job did not complete. Check the diagnostic details below."))
     container.add_item(discord.ui.Separator())
     safe_detail = str(detail or "No diagnostic details were provided.").strip()[-900:]
     safe_detail = safe_detail.replace("```", "`\u200b``")
     container.add_item(discord.ui.TextDisplay(f"```text\n{safe_detail}\n```"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay("**Next step**  Run `.detect` to identify the engine, or `.help` for usage."))
+    container.add_item(discord.ui.TextDisplay("**Try next**\nRun `.detect` to identify the engine, or `.help` to review supported commands."))
     view.add_item(container)
     return view
 
@@ -363,7 +363,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         view.timeout = None          # keep the button usable for the process lifetime
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(title))
-    head = f"-# `{filename}`"
+    head = f"-# Source: `{filename[:140]}`"
     if elapsed:
         head += f" \u00b7 \u23f1\ufe0f {elapsed}"
     container.add_item(discord.ui.TextDisplay(head))
@@ -400,10 +400,10 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
     details = [f"Matched by {basis}"]
     if others:
         others_text = " \u00b7 ".join(f"{lab} ({int(round(c * 100))}%)" for lab, c in others[:3])
-        details.append(f"Also considered: {others_text}")
+        details.append(f"Other matches: {others_text}")
     if ev:
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
-        details.append(f"Signals: {shown}")
+        details.append(f"Evidence: {shown}")
     container.add_item(discord.ui.TextDisplay("\n".join(f"-# {d}" for d in details)))
     stats = ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
              else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's command to deobfuscate")
