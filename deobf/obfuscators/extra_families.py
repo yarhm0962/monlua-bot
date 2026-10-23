@@ -13,6 +13,94 @@ def _strip_comments(head):
     return re.sub(r"(?m)^\s*--.*$", "", head)
 
 
+def _long_bracket_open(source, index):
+    if index >= len(source) or source[index] != "[":
+        return None
+    cursor = index + 1
+    while cursor < len(source) and source[cursor] == "=":
+        cursor += 1
+    if cursor < len(source) and source[cursor] == "[":
+        return cursor - index - 1, cursor + 1
+    return None
+
+
+def scan_lua_source(source):
+    """Return (code_without_comments, all_comments), respecting Lua strings."""
+    code = []
+    comments = []
+    i, n = 0, len(source)
+    while i < n:
+        char = source[i]
+        if char == "'" or char == '"' or char == chr(96):
+            start = i
+            quote = char
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    i += 2
+                    continue
+                if source[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            code.append(source[start:i])
+            continue
+        if char == "[":
+            opened = _long_bracket_open(source, i)
+            if opened is not None:
+                level, after_open = opened
+                close = "]" + "=" * level + "]"
+                found = source.find(close, after_open)
+                end = n if found < 0 else found + len(close)
+                code.append(source[i:end])
+                i = end
+                continue
+        if source.startswith("--", i):
+            opened = _long_bracket_open(source, i + 2)
+            if opened is not None:
+                level, after_open = opened
+                close = "]" + "=" * level + "]"
+                found = source.find(close, after_open)
+                end = n if found < 0 else found + len(close)
+            else:
+                found = source.find("\n", i)
+                end = n if found < 0 else found
+            comments.append(source[i:end])
+            code.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[i:end]))
+            i = end
+            continue
+        code.append(char)
+        i += 1
+    return "".join(code), "\n".join(comments)
+
+
+def strip_lua_comments(source):
+    return scan_lua_source(source)[0]
+
+
+def leading_lua_comments(source):
+    """Return only comment blocks before the first real Lua token."""
+    result = []
+    i, n = 0, len(source)
+    while i < n:
+        while i < n and source[i].isspace():
+            i += 1
+        if not source.startswith("--", i):
+            break
+        start = i
+        opened = _long_bracket_open(source, i + 2)
+        if opened is not None:
+            level, after_open = opened
+            close = "]" + "=" * level + "]"
+            found = source.find(close, after_open)
+            i = n if found < 0 else found + len(close)
+        else:
+            found = source.find("\n", i)
+            i = n if found < 0 else found + 1
+        result.append(source[start:i])
+    return "\n".join(result)
+
+
 # (name, label, header regex on the first 800 chars, shape regex, min shape hits
 #  for a confident match, confident score, weak score)
 FAMILIES = [
@@ -63,22 +151,21 @@ def _count(rx, text, cap=200000):
 
 
 def family_scores(source):
-    """[(name, confidence, label, evidence)] for families the bot recognizes
-    but cannot deobfuscate. Header evidence beats shape evidence; shape hits
-    are counted across the whole file."""
-    head = source[:800]
+    """Rank detection-only families using leading comments and executable-code shape."""
+    code, _comments = scan_lua_source(source)
+    header = leading_lua_comments(source)[:800]
     out = []
     for name, label, header_rx, shape_rx, min_hits, conf, weak in FAMILIES:
-        if header_rx.search(head):
-            out.append((name, conf, label, ["official header line"]))
+        if header_rx.search(header):
+            out.append((name, conf, label, ["leading header comment matched"]))
             continue
         if shape_rx is None:
             continue
-        hits = _count(shape_rx, source)
+        hits = _count(shape_rx, code)
         if hits >= min_hits * 3:
-            out.append((name, conf, label, ["%d pattern hits (need %d)" % (hits, min_hits * 3)]))
+            out.append((name, conf, label, ["%d code-pattern hits (need %d)" % (hits, min_hits * 3)]))
         elif min_hits and hits >= min_hits:
-            out.append((name, weak, label, ["%d pattern hits (need %d for a confident match)" % (hits, min_hits * 3)]))
+            out.append((name, weak, label, ["%d code-pattern hits (need %d for a strong match)" % (hits, min_hits * 3)]))
     return out
 
 
@@ -96,26 +183,27 @@ def obfuscation_score(source):
     """(score, evidence) 0..1 structural obfuscation level, family-agnostic.
     Every signal is measured over the whole file, and each fired signal is
     reported with its measured number so the confidence is auditable."""
+    code = strip_lua_comments(source)
     score = 0.0
     evidence = []
-    size = max(1, len(source))
+    size = max(1, len(code))
     per_kb = 1000.0 / size
 
     # 1. minified: a real obfuscator usually collapses everything to few lines
-    newlines = source.count("\n")
+    newlines = code.count("\n")
     if size > 4000 and newlines < size / 2000.0:
         score += 0.2
         evidence.append("minified (%.0f newlines in %.0f KB)" % (newlines, size / 1000.0))
 
     # 2. escaped-string density: \\xNN / \\ddd byte escapes in bulk
-    escapes = _count(_ESC_RX, source)
+    escapes = _count(_ESC_RX, code)
     if escapes * per_kb > 20:
         score += 0.2
         evidence.append("%.0f string escapes per KB" % (escapes * per_kb))
 
     # 3. machine-looking identifiers: dense runs of very short names
     total = short = 0
-    for m in _IDENT_RX.finditer(source):
+    for m in _IDENT_RX.finditer(code):
         total += 1
         if len(m.group(0)) <= 2:
             short += 1
@@ -126,17 +214,17 @@ def obfuscation_score(source):
         evidence.append("%.0f%% 1-2-character identifiers" % (100.0 * short / total))
 
     # 4. big numeric constant tables (VM bytecode as integers)
-    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", source):
+    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", code):
         score += 0.2
         evidence.append("large numeric constant tables (VM bytecode)")
 
     # 5. dispatcher loop + table-index dispatch
-    if re.search(r"\bwhile\s+true\s+do\b", source) and re.search(r"\[\s*\w+\s*\]\s*\(", source):
+    if re.search(r"\bwhile\s+true\s+do\b", code) and re.search(r"\[\s*\w+\s*\]\s*\(", code):
         score += 0.15
         evidence.append("while-true dispatch loop with table-index calls")
 
     # 6. giant opaque string blobs
-    blobs = _count(_BLOB_RX, source, cap=50)
+    blobs = _count(_BLOB_RX, code, cap=50)
     if blobs:
         score += 0.15
         evidence.append("%d opaque 500+ character string blobs" % blobs)
