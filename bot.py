@@ -27,6 +27,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 ROOT = Path(__file__).resolve().parent
@@ -81,9 +82,119 @@ def resolve_node() -> str:
     _node_bin = str(node_exe)
     return _node_bin
 
+CHANNEL_CONFIG_PATH = ROOT / "channel_restrictions.json"
+
+
+def _load_channel_restrictions() -> dict[str, list[int]]:
+    """Load per-guild command-channel allowlists, tolerating a missing/corrupt file."""
+    try:
+        raw = json.loads(CHANNEL_CONFIG_PATH.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {}
+        result: dict[str, list[int]] = {}
+        for guild_id, values in raw.items():
+            if not isinstance(values, list):
+                continue
+            valid = sorted({int(value) for value in values if str(value).isdigit()})
+            if valid:
+                result[str(int(guild_id))] = valid
+        return result
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        print(f"WARNING: couldn't load channel restrictions: {type(exc).__name__}: {exc}", flush=True)
+        return {}
+
+
+def _persist_channel_restrictions(updated: dict[str, list[int]]) -> None:
+    """Atomically persist settings before publishing them to the running bot."""
+    temporary = CHANNEL_CONFIG_PATH.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+        temporary.replace(CHANNEL_CONFIG_PATH)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+CHANNEL_RESTRICTIONS: dict[str, list[int]] = _load_channel_restrictions()
+_channel_settings_lock = asyncio.Lock()
+
+
+def _allowed_channel_ids(guild_id: Optional[int]) -> list[int]:
+    if guild_id is None:
+        # A DM has no guild context, so don't let it become an alternate route
+        # around a server's configured command-channel policy.
+        return []
+    return CHANNEL_RESTRICTIONS.get(str(guild_id), [])
+
+
+def _channel_is_allowed(guild_id: Optional[int], channel_id: Optional[int]) -> bool:
+    configured = _allowed_channel_ids(guild_id)
+    if guild_id is None:
+        return not CHANNEL_RESTRICTIONS
+    return not configured or (channel_id is not None and int(channel_id) in configured)
+
+
+class ChannelRestrictionCheckFailure(commands.CheckFailure):
+    """The command was blocked by this guild's configured channel policy."""
+
+
+async def _prefix_channel_check(ctx: commands.Context) -> bool:
+    guild_id = ctx.guild.id if ctx.guild else None
+    channel_id = ctx.channel.id if ctx.channel else None
+    if _channel_is_allowed(guild_id, channel_id):
+        return True
+    print(
+        f"Blocked prefix command {ctx.command.qualified_name if ctx.command else '?'} "
+        f"outside configured channel(s); guild={guild_id} channel={channel_id}",
+        flush=True,
+    )
+    raise ChannelRestrictionCheckFailure()
+
+
+class ChannelRestrictedCommandTree(app_commands.CommandTree):
+    """Apply the same channel policy to every Discord slash command."""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        qualified_name = interaction.command.qualified_name if interaction.command else ""
+        # Keep the administration controls available from any channel so the
+        # server can always recover from a restrictive or mistaken setting.
+        if qualified_name in {"set channel", "remove set channel"}:
+            return True
+        guild_id = interaction.guild_id
+        channel_id = interaction.channel_id
+        if _channel_is_allowed(guild_id, channel_id):
+            return True
+        configured = _allowed_channel_ids(guild_id)
+        if guild_id is None and CHANNEL_RESTRICTIONS:
+            message = "Bot commands are disabled in DMs while channel restrictions are configured."
+        elif configured:
+            mentions = ", ".join(f"<#{cid}>" for cid in configured)
+            message = f"Commands are restricted to: {mentions}."
+        else:
+            message = "This command can't be used in this context."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return False
+
+
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
+bot = commands.Bot(
+    command_prefix=".",
+    intents=intents,
+    help_command=None,
+    tree_cls=ChannelRestrictedCommandTree,
+)
+bot.add_check(_prefix_channel_check)
 job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 
 # Render's free instance has 512 MiB total for everything. A deobfuscation job
@@ -1346,6 +1457,121 @@ async def help_command(ctx: commands.Context) -> None:
     await ctx.reply(view=info_view("MonLua · Quick Guide", body), mention_author=False)
 
 
+_tree_synced = False
+
+
+set_group = app_commands.Group(
+    name="set",
+    description="Configure MonLua for this server.",
+    guild_only=True,
+)
+
+
+@set_group.command(name="channel", description="Allow bot commands only in this channel (add it to the allowlist).")
+@app_commands.describe(channel="Text channel where bot commands are allowed.")
+async def set_channel_command(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    member = interaction.user
+    permissions = getattr(member, "guild_permissions", None)
+    if interaction.guild_id is None:
+        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        return
+    if not permissions or not (permissions.manage_guild or permissions.administrator):
+        await interaction.response.send_message(
+            "You need Manage Server or Administrator permission to change command channels.",
+            ephemeral=True,
+        )
+        return
+    guild_key = str(interaction.guild_id)
+    async with _channel_settings_lock:
+        updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
+        current = set(updated.get(guild_key, []))
+        current.add(channel.id)
+        updated[guild_key] = sorted(current)
+        try:
+            _persist_channel_restrictions(updated)
+        except OSError as exc:
+            print(f"Couldn't persist channel restriction: {type(exc).__name__}: {exc}", flush=True)
+            await interaction.response.send_message(
+                "Couldn't save this setting. Check the bot's file permissions and try again.",
+                ephemeral=True,
+            )
+            return
+        CHANNEL_RESTRICTIONS.clear()
+        CHANNEL_RESTRICTIONS.update(updated)
+        configured_count = len(updated[guild_key])
+    await interaction.response.send_message(
+        f"Command-channel restriction saved. Bot commands in this server now work only in {channel.mention}"
+        + (f" and {configured_count - 1} other configured channel(s)." if configured_count > 1 else ".")
+        + "\\nYou can use the set channel command again to allow another channel.",
+        ephemeral=True,
+    )
+
+
+remove_group = app_commands.Group(
+    name="remove",
+    description="Remove MonLua configuration.",
+    guild_only=True,
+)
+remove_set_group = app_commands.Group(
+    name="set",
+    description="Remove a setting.",
+    guild_only=True,
+)
+
+
+@remove_set_group.command(name="channel", description="Remove a channel from the bot-command allowlist.")
+@app_commands.describe(channel="Previously configured text channel to remove.")
+async def remove_set_channel_command(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    member = interaction.user
+    permissions = getattr(member, "guild_permissions", None)
+    if interaction.guild_id is None:
+        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        return
+    if not permissions or not (permissions.manage_guild or permissions.administrator):
+        await interaction.response.send_message(
+            "You need Manage Server or Administrator permission to change command channels.",
+            ephemeral=True,
+        )
+        return
+    guild_key = str(interaction.guild_id)
+    async with _channel_settings_lock:
+        current = set(CHANNEL_RESTRICTIONS.get(guild_key, []))
+        if channel.id not in current:
+            await interaction.response.send_message(
+                f"{channel.mention} isn't in this server's configured command-channel list.",
+                ephemeral=True,
+            )
+            return
+        current.remove(channel.id)
+        updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
+        if current:
+            updated[guild_key] = sorted(current)
+        else:
+            updated.pop(guild_key, None)
+        try:
+            _persist_channel_restrictions(updated)
+        except OSError as exc:
+            print(f"Couldn't persist channel restriction removal: {type(exc).__name__}: {exc}", flush=True)
+            await interaction.response.send_message(
+                "Couldn't save this change. The existing restriction is still active.",
+                ephemeral=True,
+            )
+            return
+        CHANNEL_RESTRICTIONS.clear()
+        CHANNEL_RESTRICTIONS.update(updated)
+        remaining = len(current)
+    if remaining:
+        message = f"Removed {channel.mention}. Commands remain restricted to the other {remaining} configured channel(s)."
+    else:
+        message = f"Removed {channel.mention}. This server no longer has a command-channel restriction."
+    await interaction.response.send_message(message, ephemeral=True)
+
+
+remove_group.add_command(remove_set_group)
+bot.tree.add_command(set_group)
+bot.tree.add_command(remove_group)
+
+
 @bot.event
 async def on_ready() -> None:
     ok, detail = runtime_status()
@@ -1356,11 +1582,19 @@ async def on_ready() -> None:
         print(f"WARNING: native runtimes missing or not executable: {detail}", flush=True)
     if not (V151_SCRIPT.is_file() and V151_NODE_ARCHIVE.is_file()):
         print("WARNING: v15.1 runtime incomplete; .lrph15.1 will be unavailable.", flush=True)
+    global _tree_synced
+    if not _tree_synced:
+        try:
+            synced = await bot.tree.sync()
+            _tree_synced = True
+            print(f"Synced {len(synced)} Discord application command(s).", flush=True)
+        except (discord.HTTPException, app_commands.AppCommandError) as exc:
+            print(f"WARNING: slash-command sync failed: {type(exc).__name__}: {exc}", flush=True)
 
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
-    if isinstance(error, commands.CommandNotFound):
+    if isinstance(error, (commands.CommandNotFound, ChannelRestrictionCheckFailure)):
         return
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.reply("Please wait a moment before trying again.", mention_author=False)
