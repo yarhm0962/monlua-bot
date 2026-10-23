@@ -31,31 +31,39 @@ class Centurion(Obfuscator):
 
     def detect(self, source):
         from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
-        # Trust the vendor banner only when it is an actual leading comment.
-        if HEADER.search(leading_lua_comments(source)[:4000]):
+        # A precise vendor banner is strong evidence, but a mere URL/name mention
+        # is corroboration only and must agree with executable-code shape.
+        leading_comments = leading_lua_comments(source)[:4000]
+        if HEADER.search(leading_comments):
             self.last_evidence = ["Centurion vendor header (centurion.best)"]
             return 1.0
         code = strip_lua_comments(source)
         structure = strip_lua_strings(code)
-        ev = []
-        if "centurion.best" in leading_lua_comments(source)[:4000].lower():
-            ev.append("centurion.best URL in the leading banner comment")
-            self.last_evidence = ev
-            return 0.95
+        domain_hint = "centurion.best" in leading_comments.lower()
         c3 = len(re.findall(r"\bc3\[", structure))
         fz = len(re.findall(r"function\(Z\)", structure))
+        evidence = []
         if c3 >= 50 and fz >= 20:
-            ev.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
-            self.last_evidence = ev
-            return 0.85
+            evidence.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
+            if domain_hint:
+                evidence.append("centurion.best vendor-domain corroboration")
+            self.last_evidence = evidence
+            return 0.95 if domain_hint else 0.85
         if c3 >= 20 and fz >= 10:
-            ev.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
-            self.last_evidence = ev
-            return 0.7
+            evidence.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
+            if domain_hint:
+                evidence.append("centurion.best vendor-domain corroboration")
+            self.last_evidence = evidence
+            return 0.85 if domain_hint else 0.7
         if c3 >= 5 or fz >= 5:
-            ev.append("%d c3[N] refs + %d function(Z) factories (weak shape)" % (c3, fz))
-            self.last_evidence = ev
-            return 0.5
+            evidence.append("%d c3[N] refs + %d function(Z) factories (weak shape)" % (c3, fz))
+            if domain_hint:
+                evidence.append("centurion.best vendor-domain corroboration")
+            self.last_evidence = evidence
+            return 0.7 if domain_hint else 0.5
+        if domain_hint:
+            self.last_evidence = ["centurion.best appears in a leading comment, but code structure did not corroborate it"]
+            return 0.6
         self.last_evidence = []
         return 0.0
 
