@@ -482,7 +482,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
     container.add_item(discord.ui.Separator())
     if matched or partial:
         verdict = "Identified" if matched else "Likely"
-        detection_only = best_name not in ("luraph_v15", "luraph_v151", "ironbrew1", "moonsec_v3")
+        detection_only = best_name not in SUPPORTED
         note = " \u00b7 detection only" if detection_only else ""
         container.add_item(discord.ui.TextDisplay(
             f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}"
@@ -827,14 +827,18 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str,
             continue
     if not rows:
         raise ValueError("The detection scan returned no results.")
-    try:
-        head = source_path.read_bytes()[:600].decode("utf-8", errors="replace").lower()
-    except OSError:
-        head = ""
-    if any(h in head for h in DETECT_HEADER_HINTS):
-        basis = "header signature + full-file code structure"
+    has_header_evidence = any(
+        confidence >= 0.75 and any(
+            marker in str(item).lower()
+            for item in evidence
+            for marker in ("header comment", "leading header", "vendor header", "official header", "header line")
+        )
+        for _name, confidence, _label, evidence in rows
+    )
+    if has_header_evidence:
+        basis = "validated leading header comment + full-file code structure"
     else:
-        basis = "full-file code-structure analysis (no header comment)"
+        basis = "comment-independent full-file code-structure analysis"
     return rows, basis
 
 
