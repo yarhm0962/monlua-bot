@@ -56,8 +56,8 @@ class LuraphV15(Obfuscator):
                     return 0.78
                 self.last_evidence = ["Luraph mentioned with a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
                 return 0.2
-            self.last_evidence = ["Luraph named in a leading comment without a validated version/banner"]
-            return 0.62
+            self.last_evidence = ["Unverified Luraph mention in a leading comment (not a validated banner)"]
+            return 0.25
         # header stripped: v15's shape is `return setmetatable({...VM object...}, ...)`
         # with numeric-keyed library slots (`[75]=bit32.rrotate`) and `LPH` markers.
         # Skip leading comment lines first: a rebranded header comment must not
