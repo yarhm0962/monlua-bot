@@ -1098,7 +1098,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15", "--max-old-space-size", "6144"]
                         else:
                             command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
-                                       "--output", str(output_path), "--timeout", str(JOB_TIMEOUT), "--no-pypy"]
+                                       "--output", str(output_path), "--timeout", str(JOB_TIMEOUT)]
                         print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
                         try:
                             returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
