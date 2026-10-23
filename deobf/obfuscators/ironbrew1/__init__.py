@@ -40,13 +40,13 @@ class Ironbrew1(Obfuscator):
     doc = "IRONBREW1.md"
 
     def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
         # Validate banners from actual comments; structural checks use code with
         # comments removed so deleted/replaced headers do not affect detection.
         if HEADER.search(leading_lua_comments(source)[:600]):
             self.last_evidence = ["official IronBrew header comment"]
             return 1.0
-        head = strip_lua_comments(source).lstrip()[:600]
+        head = strip_lua_strings(strip_lua_comments(source)).lstrip()[:600]
         if SHAPE.match(head):
             self.last_evidence = ["IronBrew wrapper shape: 30+ tiny params + integer constant table"]
             return 0.85
