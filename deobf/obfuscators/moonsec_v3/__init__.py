@@ -228,8 +228,8 @@ class MoonsecV3(Obfuscator):
             self.last_evidence = ["MoonSec V3 header comment"]
             return 1.0
         if "moonsec v3" in header.lower():
-            self.last_evidence = ["MoonSec V3 version mention in the leading header comment"]
-            return 0.8
+            self.last_evidence = ["Unverified MoonSec V3 mention in a leading comment (not a validated banner)"]
+            return 0.25
         # Structural signals are counted on comment-stripped code. String
         # literals remain intact because MoonSec's decoder calls use them.
         head = strip_lua_comments(source).lstrip()
