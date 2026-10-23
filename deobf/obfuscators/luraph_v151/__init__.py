@@ -11,9 +11,10 @@ class LuraphV151(LuraphV15):
     doc = "LURAPH.md"
 
     def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
         comments = leading_lua_comments(source)
         code = strip_lua_comments(source)
+        structure = strip_lua_strings(code)
         m = HEADER.search(comments[:4000])
         if m:
             minor = m.group(2)
@@ -38,15 +39,15 @@ class LuraphV151(LuraphV15):
             return 0.96
         # header fully stripped: same shape signals as v15, one point above so
         # the family reports under v15.1
-        stripped = code.lstrip()
-        pragmas = len(LPH_RX.findall(code))
-        slots = sum(1 for _ in SLOT_RX.finditer(code))
+        stripped = structure.lstrip()
+        pragmas = len(LPH_RX.findall(structure))
+        slots = sum(1 for _ in SLOT_RX.finditer(structure))
         head = stripped[:2000]
         if head.startswith("return setmetatable({") and (slots or pragmas):
             self.last_evidence = ["Luraph VM shape: setmetatable VM object (version not stated; reported as v15.1)"]
             return 0.86 if (pragmas >= 3 and slots >= 3) else 0.81
         if pragmas:
-            first = LPH_RX.search(code).group(0)
+            first = LPH_RX.search(structure).group(0)
             self.last_evidence = [
                 "%s and %d LPH pragmas total (version not stated; reported as v15.1)" % (first, pragmas)]
             return 0.86
