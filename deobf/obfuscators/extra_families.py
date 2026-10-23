@@ -162,7 +162,7 @@ FAMILIES = [
      None, 0, 0.85, 0.55),
     # PromethEus / Prometheus: distinctive token
     ("prometheus", "PromethEus",
-     re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+prometh(?:eus|eus)\b", re.I),
+     re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+prometheus\b", re.I),
      None, 0, 0.85, 0.55),
     # Hierarchy: common English word, so header-level evidence only
     ("hierarchy", "Hierarchy",
