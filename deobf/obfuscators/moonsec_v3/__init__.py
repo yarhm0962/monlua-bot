@@ -222,20 +222,19 @@ class MoonsecV3(Obfuscator):
     doc = "MOONSECV3.md"
 
     def detect(self, source):
-        if HEADER.search(source[:4000]):
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        header = leading_lua_comments(source)[:4000]
+        if HEADER.search(header):
             self.last_evidence = ["MoonSec V3 header comment"]
             return 1.0
-        if "moonsec v3" in source[:4000].lower():
-            self.last_evidence = ["MoonSec V3 version mention in the header area"]
+        if "moonsec v3" in header.lower():
+            self.last_evidence = ["MoonSec V3 version mention in the leading header comment"]
             return 0.8
-        # code-structure signals, not comment-based: MoonSec V3 wraps the
-        # script in a string-collector VM. Its decode calls look like
-        # r(N,"...") (a short name taking a number plus a long escaped
-        # string) and its encoded constants open with \4\8-style pairs.
-        # Both signals are counted across the WHOLE file, not a window.
-        head = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
+        # Structural signals are counted on comment-stripped code. String
+        # literals remain intact because MoonSec's decoder calls use them.
+        head = strip_lua_comments(source).lstrip()
         calls = sum(1 for _ in _DEC_CALL.finditer(head))
-        esc8 = sum(1 for _ in _ESC8.finditer(source))
+        esc8 = sum(1 for _ in _ESC8.finditer(head))
         if calls >= 5:
             conf = 0.8 if calls < 25 else 0.85
             ev = ["%d string-decoder call sites (%.1f per KB, need 5)" % (calls, 1000.0 * calls / max(1, len(source)))]
