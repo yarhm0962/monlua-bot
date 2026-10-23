@@ -174,7 +174,8 @@ def _strip_lua_comments(source: str) -> str:
                 close = "]" + long_comment.group(1) + "]"
                 end = source.find(close, i + long_comment.end())
                 end = n if end < 0 else end + len(close)
-                out.append("\n" * source[i:end].count("\n"))
+                removed_lines = source[i:end].count("\n")
+                out.append("\n" * removed_lines if removed_lines else " ")
                 i = end
             else:
                 out.append("\n" if line_end < n else "")
