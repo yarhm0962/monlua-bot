@@ -30,19 +30,20 @@ class Centurion(Obfuscator):
     doc = "CENTURION.md"
 
     def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
         # Trust the vendor banner only when it is an actual leading comment.
         if HEADER.search(leading_lua_comments(source)[:4000]):
             self.last_evidence = ["Centurion vendor header (centurion.best)"]
             return 1.0
         code = strip_lua_comments(source)
+        structure = strip_lua_strings(code)
         ev = []
-        if "centurion.best" in code[:4000]:
-            ev.append("centurion.best URL marker in code")
+        if "centurion.best" in leading_lua_comments(source)[:4000].lower():
+            ev.append("centurion.best URL in the leading banner comment")
             self.last_evidence = ev
             return 0.95
-        c3 = len(re.findall(r"\bc3\[", code))
-        fz = len(re.findall(r"function\(Z\)", code))
+        c3 = len(re.findall(r"\bc3\[", structure))
+        fz = len(re.findall(r"function\(Z\)", structure))
         if c3 >= 50 and fz >= 20:
             ev.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
             self.last_evidence = ev
