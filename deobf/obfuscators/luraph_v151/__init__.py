@@ -11,7 +11,10 @@ class LuraphV151(LuraphV15):
     doc = "LURAPH.md"
 
     def detect(self, source):
-        m = HEADER.search(source[:4000])
+        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
+        comments = leading_lua_comments(source)
+        code = strip_lua_comments(source)
+        m = HEADER.search(comments[:4000])
         if m:
             minor = m.group(2)
             if minor is not None and minor != "0":
@@ -19,15 +22,15 @@ class LuraphV151(LuraphV15):
                 return 1.0
             self.last_evidence = []          # v15.0.x belongs to the v15 engine
             return 0.0
-        if HEADER_ANY.search(source[:4000]):
+        if HEADER_ANY.search(comments[:4000]):
             # repacked builds reword the header and drop the version line; the
             # VM is the same either way. v15.1 is the current release of the
             # 15 line, so rebranded files report as v15.1 while the v15 engine
             # stays one point below on the very same signal.
             self.last_evidence = ["rebranded Luraph header (brand, no version line; reported as v15.1)"]
             return 0.96
-        if re.search(r"luraph", source[:4000], re.I):
-            vm = re.search(r"v?(1[3-6])\.(\d+)", source[:4000], re.I)
+        if re.search(r"luraph", comments[:4000], re.I):
+            vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
             if vm and vm.group(1) == "15" and vm.group(2) != "0":
                 self.last_evidence = ["Luraph named in the header area with version v15.%s" % vm.group(2)]
                 return 1.0
@@ -35,15 +38,15 @@ class LuraphV151(LuraphV15):
             return 0.96
         # header fully stripped: same shape signals as v15, one point above so
         # the family reports under v15.1
-        stripped = re.sub(r"^(\s*--[^\n]*(\n|$))+", "", source.lstrip())
-        pragmas = len(LPH_RX.findall(source))
-        slots = sum(1 for _ in SLOT_RX.finditer(source))
+        stripped = code.lstrip()
+        pragmas = len(LPH_RX.findall(code))
+        slots = sum(1 for _ in SLOT_RX.finditer(code))
         head = stripped[:2000]
         if head.startswith("return setmetatable({") and (slots or pragmas):
             self.last_evidence = ["Luraph VM shape: setmetatable VM object (version not stated; reported as v15.1)"]
             return 0.86 if (pragmas >= 3 and slots >= 3) else 0.81
         if pragmas:
-            first = LPH_RX.search(source).group(0)
+            first = LPH_RX.search(code).group(0)
             self.last_evidence = [
                 "%s and %d LPH pragmas total (version not stated; reported as v15.1)" % (first, pragmas)]
             return 0.86
