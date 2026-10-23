@@ -36,12 +36,16 @@ class LuraphV15(Obfuscator):
             self.last_evidence = ["official Luraph header comment (v%s)" % m.group(1)]
             return 1.0 if m.group(1) == "15" else 0.3     # other versions: probably close, not verified
         if HEADER_ANY.search(comments[:4000]):
-            # Luraph brand without the official version line (repacked builds): same VM.
-            self.last_evidence = ["rebranded Luraph header (brand, no official version line)"]
+            vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
+            if vm and vm.group(1) != "15":
+                self.last_evidence = ["Luraph header states a different version (v%s.%s)" % (vm.group(1), vm.group(2))]
+                return 0.2
+            if vm and vm.group(1) == "15" and vm.group(2) != "0":
+                self.last_evidence = ["Rebranded Luraph header with version v15.%s" % vm.group(2)]
+                return 0.82
+            self.last_evidence = ["Rebranded Luraph header without a validated v15.1 version"]
             return 0.80
         if re.search(r"luraph", comments[:4000], re.I):
-            # newer or further-reworded builds may drop both official phrases;
-            # the name itself in the header area is still the family's signature
             vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
             if vm:
                 if vm.group(1) == "15" and vm.group(2) != "0":
