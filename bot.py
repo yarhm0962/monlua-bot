@@ -457,9 +457,10 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
     best_name, best_conf, best_label, best_ev = engines[0] if engines else ("", 0.0, "", [])
     matched = best_conf >= 0.75
     partial = 0.30 <= best_conf < 0.75
+    unknown_score = general[0] if general else 0.0
     if matched:
         color, title = 0x57F287, "## \U0001f50d Obfuscator identified"
-    elif partial:
+    elif partial and (unknown_score < 0.5 or best_conf >= unknown_score):
         color, title = 0xFAA61A, "## \U0001f50d Possible match"
     elif general and general[0] >= 0.5:
         color, title = 0xFAA61A, "## \U0001f50d Obfuscated, engine not supported"
@@ -1482,6 +1483,12 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     if not permissions or not (permissions.manage_guild or permissions.administrator):
         await interaction.response.send_message(
             "You need Manage Server or Administrator permission to change command channels.",
+            ephemeral=True,
+        )
+        return
+    if channel.guild.id != interaction.guild_id:
+        await interaction.response.send_message(
+            "Choose a text channel from this server.",
             ephemeral=True,
         )
         return
