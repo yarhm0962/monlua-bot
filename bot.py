@@ -124,7 +124,7 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(f"## {title}"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay(body))
+    container.add_item(discord.ui.TextDisplay(body.strip()))
     view.add_item(container)
     return view
 
@@ -212,8 +212,8 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     if elapsed:
         stats += f" \u00b7 \u23f1\ufe0f {elapsed}"
     container.add_item(discord.ui.TextDisplay("## \u2705 Deobfuscation complete"))
-    container.add_item(discord.ui.TextDisplay(stats))
-    container.add_item(discord.ui.TextDisplay(f"-# `{filename}`"))
+    container.add_item(discord.ui.TextDisplay(stats.replace(" · ", "\\n")))
+    container.add_item(discord.ui.TextDisplay(f"-# File: `{filename[:180]}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
@@ -1236,21 +1236,23 @@ async def deobfs(ctx: commands.Context) -> None:
 @bot.command(name="help")
 async def help_command(ctx: commands.Context) -> None:
     body = (
-        "**Luraph v15.1** \u2014 `.lrph15.1`\n"
-        "**Luraph v15** \u2014 `.lrph15`\n"
-        "**IronBrew1** \u2014 `.iron`\n"
-        "**MoonSec V3** \u2014 `.moon`\n"
-        "**Centurion** \u2014 `.cent`\n\n"
-
-        "**Input** one `.lua` / `.luau` / `.txt` file\n"
-        "Attach it or send a direct raw-file URL\n\n"
-        "**Scan first** every file is identified before a job runs.\n"
-        "A command only proceeds when the engine matches.\n\n"
-        "**Example** `.lrph15.1 https://host/raw/script.lua`\n"
-        "Or `.moon` with the file attached\n\n"
-        "-# `.detect` identify an obfuscator \u00b7 `.engines` this list \u00b7 `.help` usage"
+        "**SUPPORTED ENGINES**\n"
+        "• **Luraph v15.1**  ·  `.lrph15.1`\n"
+        "• **Luraph v15**  ·  `.lrph15`\n"
+        "• **IronBrew 1**  ·  `.iron`\n"
+        "• **MoonSec V3**  ·  `.moon`\n"
+        "• **Centurion**  ·  `.cent`\n\n"
+        "**INPUT**\n"
+        "Attach one `.lua`, `.luau`, or `.txt` file, or pass a direct raw-file URL.\n\n"
+        "**EXAMPLES**\n"
+        "• `.detect` with a file attached\n"
+        "• `.lrph15.1 https://example.com/raw/script.lua`\n"
+        "• `.moon` with a MoonSec file attached\n\n"
+        "**OTHER COMMANDS**\n"
+        "• `.engines` — list supported engines\n"
+        "• `.get <url>` — fetch raw text"
     )
-    await ctx.reply(view=info_view("How to use MonLua", body), mention_author=False)
+    await ctx.reply(view=info_view("MonLua · Quick Guide", body), mention_author=False)
 
 
 @bot.event
