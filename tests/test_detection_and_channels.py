@@ -1,6 +1,8 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 DEOB_DIR = ROOT / "deobf"
@@ -63,6 +65,69 @@ class LuaDetectionTests(unittest.TestCase):
     def test_brand_names_inside_strings_are_not_treated_as_header_comments(self):
         source = 'local x = "This file was protected with MoonSec V3"\nreturn x'
         self.assertEqual(MoonsecV3().detect(source), 0.0)
+
+
+class GetCommandLinkTests(unittest.TestCase):
+    def test_detects_static_loadstring_httpget_url_without_running_it(self):
+        source = (
+            '-- loadstring(game:HttpGet("https://ignored.example/old.lua"))()\n'
+            'loadstring(game:HttpGetAsync("https://example.com/payload.lua"))()\n'
+        )
+        self.assertEqual(
+            bot_module._extract_loadstring_url(source),
+            "https://example.com/payload.lua",
+        )
+
+    def test_detects_long_bracket_loader_url(self):
+        source = 'loadstring(game:HttpGet([[https://example.com/payload.lua]]))()'
+        self.assertEqual(
+            bot_module._extract_loadstring_url(source),
+            "https://example.com/payload.lua",
+        )
+
+    def test_normalizes_common_share_links(self):
+        self.assertEqual(
+            bot_module._normalize_get_url("https://github.com/owner/repo/blob/main/test.lua"),
+            "https://raw.githubusercontent.com/owner/repo/main/test.lua",
+        )
+        self.assertEqual(
+            bot_module._normalize_get_url("https://pastebin.com/AbC123"),
+            "https://pastebin.com/raw/AbC123",
+        )
+        self.assertEqual(
+            bot_module._normalize_get_url("https://rentry.co/my-script"),
+            "https://rentry.co/my-script/raw",
+        )
+
+    def test_download_get_source_follows_nested_loadstring_source(self):
+        bodies = {
+            "https://example.com/loader.lua": (
+                b'loadstring(game:HttpGet("https://example.com/final.lua"))()'
+            ),
+            "https://example.com/final.lua": b'print("underlying source")',
+        }
+
+        def fake_validate(url, allow_any_ext=False):
+            return url, Path(url).name
+
+        def fake_download(url, destination, allow_any_ext=False):
+            body = bodies[url]
+            destination.write_bytes(body)
+            return Path(url).name, len(body)
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "result.lua"
+            with patch.object(bot_module, "_validate_public_url", side_effect=fake_validate), patch.object(
+                bot_module, "_download_url", side_effect=fake_download
+            ):
+                filename, size, depth, note = bot_module._download_get_source(
+                    "https://example.com/loader.lua", destination
+                )
+            self.assertEqual(filename, "final.lua")
+            self.assertEqual(destination.read_bytes(), bodies["https://example.com/final.lua"])
+            self.assertEqual(size, len(bodies["https://example.com/final.lua"]))
+            self.assertEqual(depth, 1)
+            self.assertIsNone(note)
 
 
 class ChannelCommandTests(unittest.TestCase):
