@@ -656,6 +656,52 @@ def runtime_status() -> tuple[bool, str]:
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
+def _normalize_get_url(url: str) -> str:
+    """Normalize common share-page URLs to their direct/raw endpoints when known."""
+    value = (url or "").strip().strip("<>").strip()
+    parsed = urllib.parse.urlparse(value)
+    host = (parsed.hostname or "").lower()
+    path = parsed.path
+
+    match = re.match(r"^/([^/]+)/([^/]+)/blob/(.+)$", path)
+    if host == "github.com" and match:
+        owner, repository, rest = match.groups()
+        return urllib.parse.urlunparse((
+            "https", "raw.githubusercontent.com",
+            f"{owner}/{repository}/{rest}", "", parsed.query, ""
+        ))
+
+    match = re.match(r"^/([^/]+)/([^/]+)/raw/(.+)$", path)
+    if host == "github.com" and match:
+        owner, repository, rest = match.groups()
+        return urllib.parse.urlunparse((
+            "https", "raw.githubusercontent.com",
+            f"{owner}/{repository}/{rest}", "", parsed.query, ""
+        ))
+
+    if host in {"pastebin.com", "www.pastebin.com"}:
+        match = re.match(r"^/(?:raw/)?([A-Za-z0-9]+)/?$", path)
+        if match:
+            return "https://pastebin.com/raw/" + match.group(1)
+
+    if host in {"rentry.co", "www.rentry.co"}:
+        slug = path.strip("/").split("/", 1)[0]
+        if slug and slug != "raw":
+            return f"https://rentry.co/{urllib.parse.quote(slug)}/raw"
+
+    if host in {"hastebin.com", "www.hastebin.com"}:
+        slug = path.strip("/").split("/")[-1]
+        if slug and slug != "raw":
+            return f"https://hastebin.com/raw/{urllib.parse.quote(slug)}"
+
+    if host in {"paste.ee", "www.paste.ee"}:
+        match = re.match(r"^/(?:p|r)/([A-Za-z0-9]+)/?$", path)
+        if match:
+            return f"https://paste.ee/r/{match.group(1)}"
+
+    return value
+
+
 def _validate_public_url(url: str, allow_any_ext: bool = False) -> tuple[str, str]:
     parsed = urllib.parse.urlparse(url.strip().strip("<>"))
     if parsed.scheme not in ("https", "http") or not parsed.hostname:
@@ -708,6 +754,93 @@ def _extract_code_from_page(body: bytes) -> Optional[bytes]:
     if not candidates:
         return None
     return max(candidates, key=len).encode("utf-8")
+
+
+_LOADSTRING_URL_RX = re.compile(
+    r"""loadstring\s*\(\s*(?:(?:game\s*:\s*HttpGet(?:Async)?|game\s*\.\s*HttpGet(?:Async)?|(?:syn|fluxus|krnl)\s*\.\s*request|http_request|request)\s*\(\s*)?(['"])(https?://[^'"\r\n]+)\1""",
+    re.IGNORECASE | re.DOTALL,
+)
+_LOADSTRING_LONG_URL_RX = re.compile(
+    r"""loadstring\s*\(\s*(?:(?:game\s*:\s*HttpGet(?:Async)?|game\s*\.\s*HttpGet(?:Async)?)\s*\(\s*)?\[\[(https?://[^\]\r\n]+)\]\]""",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_loadstring_url(source: bytes | str) -> Optional[str]:
+    """Find a static URL inside common loadstring/HttpGet wrappers without executing Lua."""
+    text = source.decode("utf-8-sig", errors="replace") if isinstance(source, bytes) else source
+    code = _strip_lua_comments(text)
+    matches: list[tuple[int, str]] = []
+    for pattern in (_LOADSTRING_URL_RX, _LOADSTRING_LONG_URL_RX):
+        for match in pattern.finditer(code):
+            value = match.group(match.lastindex or 1)
+            value = value.replace(r"\/", "/").replace(r"\u0026", "&").replace("&amp;", "&").strip()
+            if value.lower().startswith(("http://", "https://")):
+                matches.append((match.start(), value))
+    if not matches:
+        return None
+    matches.sort(key=lambda entry: entry[0])
+    return matches[0][1]
+
+
+def _download_get_source(
+    url: str,
+    destination: Path,
+    max_loader_depth: int = 4,
+) -> tuple[str, int, int, Optional[str]]:
+    """Fetch public HTTP(S) content and resolve static loadstring(HttpGet(URL)) chains.
+
+    It never executes remote code. Every nested URL passes through public-host
+    validation, and URL loops plus recursion depth are bounded. If a nested link
+    cannot be fetched, return the last usable loader source with an explanatory note.
+    """
+    current_url = _normalize_get_url(url)
+    seen: set[str] = set()
+    last_body: Optional[bytes] = None
+    last_filename = "raw.lua"
+    note: Optional[str] = None
+    loader_depth = 0
+
+    with tempfile.TemporaryDirectory(prefix="monlua_get_") as workspace:
+        stage = Path(workspace) / "download.bin"
+        for depth in range(max_loader_depth + 1):
+            current_url = _normalize_get_url(current_url)
+            try:
+                validated_url, _filename = _validate_public_url(current_url, allow_any_ext=True)
+            except ValueError as exc:
+                note = f"An embedded URL was blocked by URL safety checks: {exc}"
+                break
+            if validated_url in seen:
+                note = "A repeating loadstring URL was detected; returned the last non-repeating source."
+                break
+            seen.add(validated_url)
+            try:
+                filename, _size = _download_url(validated_url, stage, allow_any_ext=True)
+                body = stage.read_bytes()
+            except (ValueError, OSError) as exc:
+                if last_body is None:
+                    raise
+                note = f"Couldn't follow an embedded loadstring URL ({str(exc)[:150]}). Returned its parent loader."
+                break
+
+            last_body = body
+            last_filename = filename
+            nested_url = _extract_loadstring_url(body)
+            if not nested_url:
+                destination.write_bytes(body)
+                return filename, len(body), loader_depth, note
+
+            if depth >= max_loader_depth:
+                note = f"Loader nesting limit reached ({max_loader_depth}); returned the last fetched loader."
+                break
+
+            loader_depth += 1
+            current_url = nested_url
+
+        if last_body is None:
+            raise ValueError(note or "No source content could be fetched.")
+        destination.write_bytes(last_body)
+        return last_filename, len(last_body), max(0, loader_depth - (1 if note else 0)), note
 
 
 def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> tuple[str, int]:
@@ -1322,40 +1455,42 @@ async def lrph15_1(ctx: commands.Context, *, url: str = "") -> None:
 
 @bot.command(name="get")
 async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
-    """Fetch the raw content of a link and send it back."""
-    url = (url or "").strip().strip("<>")
+    """Fetch links, unwrap common share pages, and resolve static loadstring loaders."""
+    url = (url or "").strip().strip("<>").strip()
     if not url:
-        await ctx.reply("Usage: `.get <url>` \u2014 fetches a link's raw content.", mention_author=False)
+        await ctx.reply("Usage: `.get <url>` — fetches raw content and follows supported loadstring URLs.", mention_author=False)
         return
-    gh = re.match(r"https://github\.com/([^/]+)/([^/]+)/blob/(\S+)", url)
-    if gh:
-        url = f"https://raw.githubusercontent.com/{gh.group(1)}/{gh.group(2)}/{gh.group(3)}"
-    pb = re.match(r"https?://pastebin\.com/(?:raw/)?([A-Za-z0-9]+)/?$", url)
-    if pb:
-        url = f"https://pastebin.com/raw/{pb.group(1)}"
-    status = await ctx.reply("Fetching\u2026", mention_author=False)
+
+    url = _normalize_get_url(url)
+    status = await ctx.reply("Fetching link and checking for embedded loader URLs…", mention_author=False)
     tmp = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
-        filename, size = await asyncio.to_thread(_download_url, url, tmp, True)
+        filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, tmp)
         base = Path(filename).name or "raw.txt"
         if not base.lower().endswith((".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")):
             base = base + ".txt"
         data = tmp.read_bytes()
-        text = data.decode("utf-8", errors="replace")
+        text = data.decode("utf-8-sig", errors="replace")
+        resolution = ""
+        if loader_depth:
+            resolution += f"\nResolved {loader_depth} embedded loadstring loader(s) to the underlying source."
+        if fetch_note:
+            resolution += f"\nNote: {fetch_note}"
+
         pastefy_url = ""
         if size > 1800:
             try:
                 pastefy_url = await asyncio.to_thread(_pastefy_upload, text, Path(filename).stem or "raw")
             except Exception as exc:
                 print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
-        link = f"\n\U0001f517 [Pastefy]({pastefy_url}) \u00b7 [raw]({pastefy_url}/raw)" if pastefy_url else ""
+        link = f"\n🔗 [Pastefy]({pastefy_url}) · [raw]({pastefy_url}/raw)" if pastefy_url else ""
         if size <= 1800:
-            await status.edit(content=f"`{filename}` ({_human_size(size)}):\n```\n{text[:1800]}\n```")
+            await status.edit(content=f"`{filename}` ({_human_size(size)}){resolution}:\n{text[:1800]}")
         elif size <= 7 * 1024 * 1024:
-            await status.edit(content=f"`{filename}` ({_human_size(size)}) \u2014 attached below.{link}")
+            await status.edit(content=f"`{filename}` ({_human_size(size)}){resolution} — attached below.{link}")
             await ctx.send(file=discord.File(fp=str(tmp), filename=base))
         else:
-            await status.edit(content=f"`{filename}` is {_human_size(size)} \u2014 too big to attach, uploaded to Pastefy instead.{link}")
+            await status.edit(content=f"`{filename}` is {_human_size(size)}{resolution} — too big to attach, uploaded to Pastefy instead.{link}")
     except Exception as exc:
         await status.edit(content=f"Couldn't fetch that link: {str(exc)[:200]}")
     finally:
