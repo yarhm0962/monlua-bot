@@ -262,23 +262,23 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     return (
-        "**DEOBFUSCATION ENGINES**\\n"
-        "• **Luraph v15.1** · `.lrph15.1`\\n"
-        "• **Luraph v15** · `.lrph15`\\n"
-        "• **IronBrew 1** · `.iron`\\n"
-        "• **MoonSec V3** · `.moon`\\n"
-        "• **Centurion** · `.cent`\\n"
-        "• **MoonVeil v1.4.5** · `.mv`\\n\\n"
-        "**SOURCE TOOLS**\\n"
-        "• `.detect` — scan a file and identify its likely engine\\n"
-        "• `.get <url>` — fetch raw source and resolve supported static loader links\\n"
-        "• `.deobfs` — display this engine reference\\n"
-        "• `.help` — display the command guide\\n\\n"
-        "**INPUT FORMAT**\\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\\n"
-        "Use one source per command. Large jobs may take longer depending on VM complexity.\\n\\n"
-        "**SERVER SETTINGS**\\n"
-        "• `/set channel` — allow commands in a selected channel (Manage Server)\\n"
+        "**DEOBFUSCATION ENGINES**\n"
+        "• **Luraph v15.1** · `.lrph15.1`\n"
+        "• **Luraph v15** · `.lrph15`\n"
+        "• **IronBrew 1** · `.iron`\n"
+        "• **MoonSec V3** · `.moon`\n"
+        "• **Centurion** · `.cent`\n"
+        "• **MoonVeil v1.4.5** · `.mv`\n\n"
+        "**SOURCE TOOLS**\n"
+        "• `.detect` — scan a file and identify its likely engine\n"
+        "• `.get <url>` — fetch raw source and resolve supported static loader links\n"
+        "• `.deobfs` — display this engine reference\n"
+        "• `.help` — display the command guide\n\n"
+        "**INPUT FORMAT**\n"
+        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n"
+        "Use one source per command. Large jobs may take longer depending on VM complexity.\n\n"
+        "**SERVER SETTINGS**\n"
+        "• `/set channel` — allow commands in a selected channel (Manage Server)\n"
         "• `/remove set channel` — remove a channel restriction (Manage Server)"
     )
 
@@ -1294,8 +1294,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         preset_bytes = None
     if preset is None and attachment is None and not source_url:
         await ctx.reply(
-            f"Use `{spec['command']}` with one `.lua`, `.luau`, or `.txt` attachment, or a direct raw-file URL.\n"
-            f"Example: `{spec['command']} https://example.com/raw/script.lua`",
+            view=info_view(
+                "Source file required",
+                f"Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n\nExample\n`{spec['command']} https://example.com/raw/script.lua`"
+            ),
             mention_author=False,
         )
         return
@@ -1320,13 +1322,16 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
     runtime_ok, runtime_detail = runtime_status(engine)
     if not runtime_ok:
         await ctx.reply(
-            "The bot is online, but the native runtime is not ready. Missing/non-executable: "
-            f"`{runtime_detail}`. Check the Render build logs.", mention_author=False,
+            view=error_view(
+                "Engine runtime unavailable",
+                f"The {label} runtime is not ready.\n\nMissing or unavailable\n{runtime_detail}\n\nCheck the service build logs and retry after the runtime is restored."
+            ),
+            mention_author=False,
         )
         return
 
     status = await ctx.reply(
-        view=info_view("Request queued", f"**Engine** · {label}\\n**Source** · `{filename[:120]}`\\nWaiting for an available processing slot."),
+        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:120]}`\nWaiting for an available processing slot."),
         mention_author=False,
     )
 
@@ -1354,7 +1359,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
-                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\\n**Input** · {_human_size(size)}\\nSource is ready. Starting the selected engine."))
+                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\nSource is ready. Starting the selected engine."))
                 print(f"selected engine={label}; automatic pre-scan skipped for faster large-file processing", flush=True)
 
                 wait_note = ""
