@@ -64,7 +64,7 @@ class LuraphV15(Obfuscator):
         # hide the VM shape behind it.
         stripped = structure.lstrip()
         # every structural signal is counted across the WHOLE file, not a window
-        pragmas = len(LPH_RX.findall(structure))
+        pragmas = sum(1 for _ in LPH_RX.finditer(structure))
         slots = sum(1 for _ in SLOT_RX.finditer(structure))
         head = stripped[:2000]
         # code-shape signals, not comment-based: the VM object opens with
@@ -81,7 +81,7 @@ class LuraphV15(Obfuscator):
         # LPH_* markers alone (LPH_NO_VIRTUALIZE, LPH_JIT, LPH_ENCFUNC, ...) are
         # Luraph's own pragmas: real obfuscator output, no header needed.
         if pragmas:
-            first = LPH_RX.search(structure).group(0)
+            first = next(LPH_RX.finditer(structure)).group(0)
             self.last_evidence = ["%s and %d LPH pragmas total (Luraph's own directives)" % (first, pragmas)]
             return 0.85
         if slots >= 1:
