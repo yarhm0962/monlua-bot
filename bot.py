@@ -1345,7 +1345,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     await attachment.save(input_path)
                     size = input_path.stat().st_size
                     if size == 0:
-                        await ctx.reply("That file is empty.", mention_author=False)
+                        await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
                         return
                     if size > MAX_INPUT_BYTES:
                         await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
