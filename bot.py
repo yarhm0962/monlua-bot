@@ -1453,7 +1453,7 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> t
             with response:
                 final_url = response.geturl()
                 if final_url != current_url:
-                    _validate_public_url(final_url)
+                    _validate_public_url(final_url, allow_any_ext=allow_any_ext)
                 content_type = response.headers.get_content_type().lower()
                 declared = response.headers.get("Content-Length")
                 if declared and int(declared) > MAX_INPUT_BYTES:
