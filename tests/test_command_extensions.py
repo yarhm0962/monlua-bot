@@ -84,11 +84,11 @@ class GetLoaderRegressionTests(unittest.TestCase):
             ):
                 filename, size, depth, note = bot._download_get_source(parent_url, destination)
 
-        self.assertEqual(filename, "loader.lua")
-        self.assertEqual(destination.read_bytes(), parent_body)
-        self.assertEqual(size, len(parent_body))
-        self.assertEqual(depth, 0)
-        self.assertIn("child source is unavailable", note)
+            self.assertEqual(filename, "loader.lua")
+            self.assertEqual(destination.read_bytes(), parent_body)
+            self.assertEqual(size, len(parent_body))
+            self.assertEqual(depth, 0)
+            self.assertIn("child source is unavailable", note)
 
 
 class BeautifyPipelineTests(unittest.TestCase):
