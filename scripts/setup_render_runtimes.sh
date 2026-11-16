@@ -28,21 +28,27 @@ bash "$ROOT/scripts/materialize_engine_assets.sh"
 "$SDK/dotnet" restore "$ROOT/deobf/ironbrew2/restore.csproj" --packages "$NUGET"
 
 if ! command -v java >/dev/null 2>&1 && [[ ! -x "$JAVA/bin/java" ]]; then
-    mkdir -p "$JAVA"
-    tar -xzf "$ROOT/deobf/bin/jre17.tar.gz" -C "$JAVA" --strip-components=1
-    if [[ ! -x "$JAVA/bin/java" ]]; then
-        JAVA_BINARY="$(find "$JAVA" -type f -path '*/bin/java' -print -quit)"
-        if [[ -z "$JAVA_BINARY" ]]; then
-            printf 'Bundled Java runtime does not contain a bin/java executable.\n' >&2
-            exit 1
-        fi
-        JAVA_HOME_FOUND="$(dirname "$(dirname "$JAVA_BINARY")")"
-        ln -s "$JAVA_HOME_FOUND/bin" "$JAVA/bin"
-        if [[ -d "$JAVA_HOME_FOUND/lib" ]]; then
-            ln -s "$JAVA_HOME_FOUND/lib" "$JAVA/lib"
-        fi
+    mkdir -p "$RUNTIME/jre-extract"
+    tar -xzf "$ROOT/deobf/bin/jre17.tar.gz" -C "$RUNTIME/jre-extract"
+    JAVA_BINARY="$(find "$RUNTIME/jre-extract" -type f -path '*/bin/java' -print -quit)"
+    if [[ -z "$JAVA_BINARY" ]]; then
+        printf 'Bundled Java runtime does not contain a bin/java executable.\n' >&2
+        exit 1
     fi
+    JAVA_HOME_FOUND="$(dirname "$(dirname "$JAVA_BINARY")")"
+    mv "$JAVA_HOME_FOUND" "$JAVA"
+    rm -rf "$RUNTIME/jre-extract"
 fi
+
+python3 - "$RUNTIME/vendor/ironbrew2/LuaAnalysis.Ironbrew2.runtimeconfig.dev.json" "$NUGET" <<'PY'
+import json
+import sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(
+    json.dumps({"runtimeOptions": {"additionalProbingPaths": [str(Path(sys.argv[2]).resolve())]}}),
+    encoding="utf-8",
+)
+PY
 
 rm -rf "$SDK" "$RUNTIME/dotnet-install.sh" "$RUNTIME/dotnet-home"
 printf 'MonLua runtime setup completed.\n'
