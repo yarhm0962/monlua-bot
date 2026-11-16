@@ -1,7 +1,7 @@
 import unittest
 
 import bot
-from lexer import tokenize
+from deobf.lexer import tokenize
 from obfuscators.extra_families import LuaAnalysis
 
 
