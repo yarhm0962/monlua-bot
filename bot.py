@@ -4,9 +4,11 @@ import asyncio
 import base64
 import hashlib
 import html
+import io
 import ipaddress
 import json
 import os
+import platform
 import re
 import shutil
 import signal
@@ -20,6 +22,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Optional
 from types import SimpleNamespace
@@ -270,8 +273,9 @@ def engines_body() -> str:
         + "• .deobf — full command name\n"
         + "Both commands open the same engine selector and processing flow.\n\n"
         + "**SOURCE TOOLS**\n"
-        + "• .detect — scan a file and identify its likely engine\n"
+        + "• .detect / .d — scan a file and identify its likely engine\n"
         + "• .get <url> — fetch raw source and resolve supported static loader links\n"
+        + "• .beautify / .b — format Lua or Luau files, raw links, or pasted code\n"
         + "• .deobfs — display this engine reference\n"
         + "• .help — display the command guide\n\n"
         + "**INPUT FORMAT**\n"
@@ -400,6 +404,217 @@ PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
 MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(256 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
+
+STYLUA_VERSION = "2.6.0"
+STYLUA_RELEASES = {
+    ("linux", "x86_64"): (
+        "https://github.com/JohnnyMorganz/StyLua/releases/download/v2.6.0/stylua-linux-x86_64-musl.zip",
+        "48ee7db28346f96f4bd545e190ab080a88a7b5a664e97649cf5d5c60426f402d",
+        "stylua",
+    ),
+    ("linux", "aarch64"): (
+        "https://github.com/JohnnyMorganz/StyLua/releases/download/v2.6.0/stylua-linux-aarch64.zip",
+        "8e67539e5fdf7a81cd03cf592b0df18d3bb96ee17a5ea5d9bf67b86387b903b0",
+        "stylua",
+    ),
+    ("windows", "amd64"): (
+        "https://github.com/JohnnyMorganz/StyLua/releases/download/v2.6.0/stylua-windows-x86_64.zip",
+        "fd13b4014e3b779c244bbc03f2c282e357f15bc526de6a6fa5ecbc447538313c",
+        "stylua.exe",
+    ),
+}
+MAX_BEAUTIFY_INLINE_CHARS = 9000
+
+
+def _resolve_stylua() -> Optional[str]:
+    configured = os.getenv("STYLUA_BIN", "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+    installed = shutil.which("stylua")
+    if installed:
+        return installed
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if machine in {"amd64", "x64"}:
+        machine = "amd64" if system == "windows" else "x86_64"
+    release = STYLUA_RELEASES.get((system, machine))
+    if release is None:
+        return None
+    download_url, expected_sha256, executable_name = release
+    cache_dir = Path(tempfile.gettempdir()) / f"monlua-stylua-{STYLUA_VERSION}"
+    executable_path = cache_dir / executable_name
+    if executable_path.is_file() and (system == "windows" or os.access(executable_path, os.X_OK)):
+        return str(executable_path)
+    try:
+        request = urllib.request.Request(
+            download_url,
+            headers={"User-Agent": "MonLua-Beautifier/1.0", "Accept": "application/octet-stream"},
+        )
+        with urllib.request.urlopen(request, timeout=45) as response:
+            archive_data = response.read(8 * 1024 * 1024 + 1)
+        if len(archive_data) > 8 * 1024 * 1024:
+            raise ValueError("the StyLua release archive exceeded its expected size")
+        if hashlib.sha256(archive_data).hexdigest() != expected_sha256:
+            raise ValueError("the StyLua release archive failed its SHA-256 integrity check")
+        with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
+            matches = [
+                item for item in archive.infolist()
+                if not item.is_dir() and Path(item.filename).name == executable_name
+            ]
+            if len(matches) != 1:
+                raise ValueError("the StyLua release archive did not contain one expected executable")
+            executable_data = archive.read(matches[0])
+        if not executable_data or len(executable_data) > 20 * 1024 * 1024:
+            raise ValueError("the downloaded StyLua executable has an invalid size")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        temporary = executable_path.with_suffix(executable_path.suffix + ".tmp")
+        temporary.write_bytes(executable_data)
+        if system != "windows":
+            temporary.chmod(0o755)
+        temporary.replace(executable_path)
+        return str(executable_path)
+    except (OSError, ValueError, zipfile.BadZipFile, urllib.error.URLError, TimeoutError) as exc:
+        print(f"StyLua {STYLUA_VERSION} could not be installed: {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+
+def _unwrap_lua_code_block(source: str) -> str:
+    value = (source or "").strip()
+    fence = chr(96) * 3
+    pattern = re.escape(fence) + r"(?:lua|luau)?[ \t]*\r?\n(.*?)\r?\n" + re.escape(fence)
+    match = re.fullmatch(pattern, value, re.IGNORECASE | re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return value
+
+
+def _beautify_source(source: str, filename: str) -> str:
+    body = _unwrap_lua_code_block(source).lstrip("\ufeff")
+    if not body.strip():
+        raise ValueError("The supplied source is empty.")
+    if len(body.encode("utf-8")) > MAX_FORMAT_BYTES:
+        raise ValueError(f"Source exceeds the {_human_size(MAX_FORMAT_BYTES)} beautification limit.")
+    stylua = _resolve_stylua()
+    if not stylua:
+        raise RuntimeError(
+            "StyLua 2.6.0 is unavailable for this system. Install StyLua and make it available "
+            "on PATH, or set STYLUA_BIN to its executable."
+        )
+    try:
+        result = subprocess.run(
+            [
+                stylua,
+                "--verify",
+                "--no-editorconfig",
+                "--column-width",
+                "100",
+                "--indent-type",
+                "Spaces",
+                "--indent-width",
+                "4",
+                "--line-endings",
+                "Unix",
+                "--stdin-filepath",
+                filename if Path(filename).suffix.lower() in {".lua", ".luau"} else "input.lua",
+                "-",
+            ],
+            input=body,
+            text=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("StyLua did not finish formatting this source within 30 seconds.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not start the StyLua formatter: {exc}") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "No parser details were returned.").strip()
+        raise ValueError(f"Lua formatting failed because the source could not be parsed or verified: {detail[:650]}")
+    formatted = result.stdout.strip()
+    if not formatted:
+        raise ValueError("The formatter returned an empty result.")
+    if len(formatted.encode("utf-8")) > MAX_OUTPUT_BYTES:
+        raise ValueError(f"Formatted output exceeds the {_human_size(MAX_OUTPUT_BYTES)} output limit.")
+    return formatted + "\n"
+
+
+def _split_beautified_source(source: str, max_chars: int) -> list[str]:
+    if max_chars <= 0:
+        return [source]
+    chunks = []
+    current = ""
+    for line in source.splitlines(keepends=True):
+        while len(line) > max_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(line[:max_chars])
+            line = line[max_chars:]
+        if current and len(current) + len(line) > max_chars:
+            chunks.append(current)
+            current = line
+        else:
+            current += line
+    if current:
+        chunks.append(current)
+    return chunks or [source]
+
+
+def _beautify_filename(filename: str) -> str:
+    raw_name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(filename).name).strip("._")
+    suffix = Path(raw_name).suffix.lower()
+    if suffix not in {".lua", ".luau"}:
+        suffix = ".lua"
+    stem = Path(raw_name).stem[:100] or "beautified"
+    return stem + suffix
+
+
+async def _send_beautified_output(ctx: commands.Context, filename: str, source: str) -> None:
+    safe_name = _beautify_filename(filename)
+    if len(source) <= MAX_BEAUTIFY_INLINE_CHARS:
+        longest_ticks = max(
+            (len(match) for match in re.findall(re.escape(chr(96)) + r"+", source)),
+            default=2,
+        )
+        fence = chr(96) * max(3, longest_ticks + 1)
+        capacity = min(1500, 1850 - 2 * len(fence) - 16)
+        if capacity >= 100:
+            chunks = _split_beautified_source(source, capacity)
+            total = len(chunks)
+            for index, chunk in enumerate(chunks, 1):
+                heading = "**Beautified Lua** · " + safe_name
+                if total > 1:
+                    heading += f"\n-# Part {index} of {total}"
+                content = f"{heading}\n\n{fence}lua\n{chunk}\n{fence}"
+                if index == 1:
+                    await ctx.reply(
+                        content=content,
+                        mention_author=False,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
+                else:
+                    await ctx.send(
+                        content=content,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
+            return
+    encoded = source.encode("utf-8")
+    content = (
+        f"**Lua beautified** · {safe_name}\n"
+        f"**Output size** · {_human_size(len(encoded))}\n"
+        "The complete formatted source is attached."
+    )
+    await ctx.reply(
+        content=content,
+        file=discord.File(fp=io.BytesIO(encoded), filename=safe_name),
+        mention_author=False,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
 
 
 def _pastefy_post(payload: dict):
@@ -716,14 +931,13 @@ class _ConfirmDeobfView(discord.ui.LayoutView):
         return True
 
     async def on_timeout(self) -> None:
-        for item in self.walk_children():
-            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
-                item.disabled = True
         if self.message is not None:
             try:
-                await self.message.edit(view=info_view("Confirmation expired", "Run .do or .deobf to start a new request.", color=0xFAA61A))
-            except discord.HTTPException:
-                pass
+                await self.message.delete()
+            except discord.HTTPException as exc:
+                print(f"Expired confirmation could not be deleted: {type(exc).__name__}: {exc}", flush=True)
+            finally:
+                self.message = None
 
 
 class _ConfirmDeobfButton(discord.ui.Button):
@@ -736,6 +950,7 @@ class _ConfirmDeobfButton(discord.ui.Button):
             await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
             return
         parent.claimed = True
+        parent.stop()
         for item in parent.walk_children():
             if isinstance(item, (discord.ui.Button, discord.ui.Select)):
                 item.disabled = True
@@ -787,6 +1002,7 @@ class _CancelDeobfButton(discord.ui.Button):
                 await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
                 return
             parent.claimed = True
+            parent.stop()
         await interaction.response.edit_message(
             content=None,
             view=info_view("Cancelled", "No deobfuscation job was started."),
@@ -818,9 +1034,11 @@ class _EnginePickerView(discord.ui.LayoutView):
     async def on_timeout(self) -> None:
         if self.message is not None:
             try:
-                await self.message.edit(view=info_view("Engine selection expired", "Run .do or .deobf to start a new request.", color=0xFAA61A))
-            except discord.HTTPException:
-                pass
+                await self.message.delete()
+            except discord.HTTPException as exc:
+                print(f"Expired engine selector could not be deleted: {type(exc).__name__}: {exc}", flush=True)
+            finally:
+                self.message = None
 
 
 class _EngineSelect(discord.ui.Select):
@@ -850,6 +1068,7 @@ class _EngineSelect(discord.ui.Select):
             await interaction.response.send_message("An engine has already been selected for this request.", ephemeral=True)
             return
         parent.claimed = True
+        parent.stop()
         engine = self.values[0]
         if parent.source is None:
             await interaction.response.edit_message(
@@ -953,6 +1172,11 @@ def _normalize_get_url(url: str) -> str:
         if match:
             return f"https://paste.ee/r/{match.group(1)}"
 
+    if host in {"pastefy.app", "www.pastefy.app"}:
+        parts = [part for part in path.split("/") if part]
+        if parts and parts[0] not in {"raw", "api"}:
+            return f"https://pastefy.app/{urllib.parse.quote(parts[0])}/raw"
+
     return value
 
 
@@ -1010,31 +1234,118 @@ def _extract_code_from_page(body: bytes) -> Optional[bytes]:
     return max(candidates, key=len).encode("utf-8")
 
 
-_LOADSTRING_URL_RX = re.compile(
-    r"""loadstring\s*\(\s*(?:(?:game\s*:\s*HttpGet(?:Async)?|game\s*\.\s*HttpGet(?:Async)?|(?:syn|fluxus|krnl)\s*\.\s*request|http_request|request)\s*\(\s*)?(['"])(https?://[^'"\r\n]+)\1""",
-    re.IGNORECASE | re.DOTALL,
-)
-_LOADSTRING_LONG_URL_RX = re.compile(
-    r"""loadstring\s*\(\s*(?:(?:game\s*:\s*HttpGet(?:Async)?|game\s*\.\s*HttpGet(?:Async)?)\s*\(\s*)?\[\[(https?://[^\]\r\n]+)\]\]""",
-    re.IGNORECASE | re.DOTALL,
-)
+def _read_lua_string_literal(source: str, start: int) -> tuple[Optional[str], int]:
+    if start >= len(source):
+        return None, start
+    quote = source[start]
+    if quote in ("'", '"'):
+        output = []
+        index = start + 1
+        while index < len(source):
+            char = source[index]
+            if char == quote:
+                return "".join(output), index + 1
+            if char != "\\":
+                output.append(char)
+                index += 1
+                continue
+            index += 1
+            if index >= len(source):
+                break
+            escaped = source[index]
+            if escaped == "x" and index + 2 < len(source) and re.fullmatch(r"[0-9a-fA-F]{2}", source[index + 1:index + 3]):
+                output.append(chr(int(source[index + 1:index + 3], 16)))
+                index += 3
+                continue
+            if escaped == "u" and index + 1 < len(source) and source[index + 1] == "{":
+                close = source.find("}", index + 2)
+                digits = source[index + 2:close] if close >= 0 else ""
+                if close >= 0 and re.fullmatch(r"[0-9a-fA-F]{1,8}", digits):
+                    try:
+                        output.append(chr(int(digits, 16)))
+                        index = close + 1
+                        continue
+                    except ValueError:
+                        pass
+            if escaped.isdigit():
+                finish = index
+                while finish < min(index + 3, len(source)) and source[finish].isdigit():
+                    finish += 1
+                output.append(chr(int(source[index:finish], 10) % 256))
+                index = finish
+                continue
+            if escaped == "z":
+                index += 1
+                while index < len(source) and source[index].isspace():
+                    index += 1
+                continue
+            output.append({"n": "\n", "r": "\r", "t": "\t"}.get(escaped, escaped))
+            index += 1
+        return None, index
+    if quote == "[":
+        match = LONG_STRING_OPEN_RE.match(source, start)
+        if match:
+            close = "]" + match.group(1) + "]"
+            finish = source.find(close, match.end())
+            if finish < 0:
+                return source[match.end():], len(source)
+            value = source[match.end():finish]
+            if value.startswith("\r\n"):
+                value = value[2:]
+            elif value.startswith("\n"):
+                value = value[1:]
+            return value, finish + len(close)
+    return None, start
 
 
 def _extract_loadstring_url(source: bytes | str) -> Optional[str]:
-    """Find a static URL inside common loadstring/HttpGet wrappers without executing Lua."""
     text = source.decode("utf-8-sig", errors="replace") if isinstance(source, bytes) else source
     code = _strip_lua_comments(text)
-    matches: list[tuple[int, str]] = []
-    for pattern in (_LOADSTRING_URL_RX, _LOADSTRING_LONG_URL_RX):
-        for match in pattern.finditer(code):
-            value = match.group(match.lastindex or 1)
-            value = value.replace(r"\/", "/").replace(r"\u0026", "&").replace("&amp;", "&").strip()
-            if value.lower().startswith(("http://", "https://")):
-                matches.append((match.start(), value))
-    if not matches:
-        return None
-    matches.sort(key=lambda entry: entry[0])
-    return matches[0][1]
+    index = 0
+    while index < len(code):
+        char = code[index]
+        if char in ("'", '"') or (char == "[" and LONG_STRING_OPEN_RE.match(code, index)):
+            _, index = _read_lua_string_literal(code, index)
+            continue
+        if char.isalpha() or char == "_":
+            finish = index + 1
+            while finish < len(code) and (code[finish].isalnum() or code[finish] == "_"):
+                finish += 1
+            if code[index:finish].lower() != "loadstring":
+                index = finish
+                continue
+            opening = finish
+            while opening < len(code) and code[opening].isspace():
+                opening += 1
+            if opening >= len(code) or code[opening] != "(":
+                index = finish
+                continue
+            depth = 1
+            cursor = opening + 1
+            candidates = []
+            while cursor < len(code) and depth:
+                current = code[cursor]
+                if current in ("'", '"') or (current == "[" and LONG_STRING_OPEN_RE.match(code, cursor)):
+                    literal, next_cursor = _read_lua_string_literal(code, cursor)
+                    if literal is not None:
+                        cleaned = literal.replace(r"\/", "/").replace("&amp;", "&").strip()
+                        match = re.search(r"https?://[^\s\"'<>]+", cleaned, re.IGNORECASE)
+                        if match:
+                            candidates.append((cursor, match.group(0).rstrip(".,);]}")))
+                    cursor = max(next_cursor, cursor + 1)
+                    continue
+                if current == "(":
+                    depth += 1
+                elif current == ")":
+                    depth -= 1
+                cursor += 1
+            if candidates:
+                candidates.sort(key=lambda item: item[0])
+                return candidates[0][1]
+            index = max(cursor, finish)
+            continue
+        index += 1
+    return None
 
 
 def _download_get_source(
@@ -1042,22 +1353,17 @@ def _download_get_source(
     destination: Path,
     max_loader_depth: int = 4,
 ) -> tuple[str, int, int, Optional[str]]:
-    """Fetch public HTTP(S) content and resolve static loadstring(HttpGet(URL)) chains.
-
-    It never executes remote code. Every nested URL passes through public-host
-    validation, and URL loops plus recursion depth are bounded. If a nested link
-    cannot be fetched, return the last usable loader source with an explanatory note.
-    """
     current_url = _normalize_get_url(url)
     seen: set[str] = set()
     last_body: Optional[bytes] = None
     last_filename = "raw.lua"
     note: Optional[str] = None
-    loader_depth = 0
+    resolved_depth = 0
+    following_loader = False
 
     with tempfile.TemporaryDirectory(prefix="monlua_get_") as workspace:
         stage = Path(workspace) / "download.bin"
-        for depth in range(max_loader_depth + 1):
+        for _ in range(max_loader_depth + 1):
             current_url = _normalize_get_url(current_url)
             try:
                 validated_url, _filename = _validate_public_url(current_url, allow_any_ext=True)
@@ -1077,24 +1383,25 @@ def _download_get_source(
                 note = f"Couldn't follow an embedded loadstring URL ({str(exc)[:150]}). Returned its parent loader."
                 break
 
+            if following_loader:
+                resolved_depth += 1
+                following_loader = False
             last_body = body
             last_filename = filename
             nested_url = _extract_loadstring_url(body)
             if not nested_url:
                 destination.write_bytes(body)
-                return filename, len(body), loader_depth, note
-
-            if depth >= max_loader_depth:
+                return filename, len(body), resolved_depth, note
+            if resolved_depth >= max_loader_depth:
                 note = f"Loader nesting limit reached ({max_loader_depth}); returned the last fetched loader."
                 break
-
-            loader_depth += 1
             current_url = nested_url
+            following_loader = True
 
         if last_body is None:
             raise ValueError(note or "No source content could be fetched.")
         destination.write_bytes(last_body)
-        return last_filename, len(last_body), max(0, loader_depth - (1 if note else 0)), note
+        return last_filename, len(last_body), resolved_depth, note
 
 
 def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> tuple[str, int]:
@@ -1783,7 +2090,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         except OSError:
             pass
 
-@bot.command(name="detect")
+@bot.command(name="detect", aliases=["d"])
 async def detect(ctx: commands.Context, *, url: str = "") -> None:
     attachments = ctx.message.attachments
     if attachments and url.strip():
@@ -1851,6 +2158,94 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
         except discord.HTTPException:
             print("Discord permission error during .detect: cannot read/send messages.", flush=True)
 
+
+@bot.command(name="beautify", aliases=["b"])
+async def beautify_command(ctx: commands.Context, *, source: str = "") -> None:
+    attachments = ctx.message.attachments
+    source_argument = (source or "").strip()
+    if len(attachments) > 1:
+        await ctx.reply(
+            content="Single-file beautification\nAttach one .lua, .luau, or .txt file per request.",
+            mention_author=False,
+        )
+        return
+    if attachments and source_argument:
+        await ctx.reply(
+            content="Choose one source\nAttach one Lua file, provide a raw URL, or paste code into the command.",
+            mention_author=False,
+        )
+        return
+    if not attachments and not source_argument:
+        await ctx.reply(
+            content=(
+                "Usage\n"
+                ".beautify with a .lua or .luau attachment\n"
+                ".beautify followed by a raw Lua URL\n"
+                ".beautify followed by a Lua code block"
+            ),
+            mention_author=False,
+        )
+        return
+
+    try:
+        async with ctx.typing():
+            if attachments:
+                attachment = attachments[0]
+                filename = Path(attachment.filename).name
+                if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+                    raise ValueError("Supported attachment types are .lua, .luau, and .txt.")
+                if attachment.size > MAX_FORMAT_BYTES:
+                    raise ValueError(f"Source exceeds the {_human_size(MAX_FORMAT_BYTES)} beautification limit.")
+                with tempfile.TemporaryDirectory(prefix="beautify_bot_") as directory:
+                    input_path = Path(directory) / filename
+                    await attachment.save(input_path)
+                    source_bytes = await asyncio.to_thread(input_path.read_bytes)
+                    source_text = source_bytes.decode("utf-8-sig")
+            elif source_argument.startswith(("https://", "http://", "<https://", "<http://")):
+                source_url = _normalize_get_url(source_argument.strip("<>").strip())
+                source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
+                with tempfile.TemporaryDirectory(prefix="beautify_bot_") as directory:
+                    input_path = Path(directory) / "source.bin"
+                    await asyncio.to_thread(_download_url, source_url, input_path, True)
+                    source_bytes = await asyncio.to_thread(input_path.read_bytes)
+                    if len(source_bytes) > MAX_FORMAT_BYTES:
+                        raise ValueError(f"Source exceeds the {_human_size(MAX_FORMAT_BYTES)} beautification limit.")
+                    source_text = source_bytes.decode("utf-8-sig")
+            else:
+                filename = "pasted_code.lua"
+                source_text = _unwrap_lua_code_block(source_argument)
+
+            if len(source_text.encode("utf-8")) > MAX_FORMAT_BYTES:
+                raise ValueError(f"Source exceeds the {_human_size(MAX_FORMAT_BYTES)} beautification limit.")
+            formatted = await asyncio.to_thread(_beautify_source, source_text, filename)
+
+        await _send_beautified_output(ctx, filename, formatted)
+    except UnicodeDecodeError:
+        await ctx.reply(
+            content="Could not beautify this source\nThe file must use UTF-8 text encoding.",
+            mention_author=False,
+        )
+    except ValueError as exc:
+        await ctx.reply(content=f"Could not beautify this source\n{str(exc)[:900]}", mention_author=False)
+    except RuntimeError as exc:
+        await ctx.reply(content=f"Formatter unavailable\n{str(exc)[:900]}", mention_author=False)
+    except discord.Forbidden:
+        print("Discord permission error during .beautify: cannot read or send messages or attachments.", flush=True)
+    except discord.HTTPException as exc:
+        print(f"Discord error during .beautify: {type(exc).__name__}: {exc}", flush=True)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        print(f"Unexpected .beautify error: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
+        try:
+            await ctx.reply(
+                content="Beautification failed\nAn unexpected error occurred. Check the bot service logs for details.",
+                mention_author=False,
+            )
+        except discord.HTTPException:
+            pass
+
+
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
 async def deobfs(ctx: commands.Context) -> None:
     await ctx.reply(view=info_view("Supported deobfuscators", engines_body()), mention_author=False)
@@ -1861,7 +2256,8 @@ async def help_command(ctx: commands.Context) -> None:
     body = (
         engines_body()
         + "\n\n**INPUT EXAMPLES**\n"
-        + "• `.detect` with a file attached\n"
+        + "• `.detect` or `.d` with a file attached\n"
+        + "• `.beautify` or `.b` followed by a raw Lua URL or pasted code\n"
         + "• `.deobf https://example.com/raw/script.lua`\n"
         + "• `.do` with a Lua file attached"
     )
