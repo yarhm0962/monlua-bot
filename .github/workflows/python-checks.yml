@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   tests:
@@ -26,9 +26,11 @@ jobs:
           node-version: "20"
       - name: Install bot dependencies
         run: python -m pip install -r requirements.txt
-      - name: Install and verify pinned Luraph v15.1 runtime
+      - name: Build portable Luraph v15.1 Luau runtime
         run: |
-          python -c "import bot; bot._ensure_v151_binaries()"
+          rm -f deobf/v151/bin/luau deobf/v151/bin/luau-ast
+          python deobf/v151/build_luau.py --portable --jobs 2
+          chmod +x deobf/v151/bin/luau deobf/v151/bin/luau-ast
           chmod +x deobf/bin/luau deobf/bin/luau-ast
       - name: Compile Python modules
         run: python -m compileall -q bot.py deobf/obfuscators deobf/moonveil deobf/v151/core
@@ -42,8 +44,17 @@ jobs:
         run: |
           file deobf/v151/bin/luau deobf/v151/bin/luau-ast
           ldd deobf/v151/bin/luau || true
-          deobf/v151/bin/luau --version || true
           python -u deobf/v151/tests/test_datatypes.py
           deobf/v151/bin/luau deobf/v151/tests/test_for_lowering.luau
       - name: Run Luraph v15.1 sample regression
         run: python deobf/v151/tests/run_samples.py
+      - name: Commit portable Luraph runtime binaries
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deobf/v151/bin/luau deobf/v151/bin/luau-ast
+          if ! git diff --cached --quiet; then
+            git commit -m "Build portable Luraph v15.1 runtime binaries [skip ci]"
+            git push origin HEAD:main
+          fi

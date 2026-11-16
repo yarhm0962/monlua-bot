@@ -24,13 +24,9 @@ class LuraphV151IntegrationTests(unittest.TestCase):
         ready, detail = bot.runtime_status("luraph_v151")
         self.assertTrue(ready, detail)
 
-    def test_pinned_upstream_runtime_metadata_is_configured(self):
-        self.assertEqual(bot.V151_UPSTREAM_COMMIT, "337d9563202559c092a7a9618c4ac284aceae385")
-        self.assertEqual(set(bot.V151_RUNTIME_FILES), {"luau", "luau-ast", "luau.exe", "luau-ast.exe"})
-        for name in ("luau", "luau-ast"):
-            size, blob_sha = bot.V151_RUNTIME_FILES[name]
-            self.assertGreater(size, 0)
-            self.assertEqual(len(blob_sha), 40)
+    def test_portable_runtime_builder_is_included(self):
+        self.assertTrue((bot.V151_DIR / "build_luau.py").is_file())
+        self.assertTrue((bot.V151_DIR / "INTEGRATION.md").is_file())
 
 
 if __name__ == "__main__":

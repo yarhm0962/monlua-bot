@@ -53,14 +53,6 @@ V151_DIR = DEOB_DIR / "v151"
 V151_SCRIPT = V151_DIR / "deob.js"
 V151_NODE_ARCHIVE = V151_DIR / "vendor" / "node-v20.19.5-linux-x64.tar.gz"
 V151_NODE_DIRNAME = "node-v20.19.5-linux-x64"
-V151_UPSTREAM_COMMIT = "337d9563202559c092a7a9618c4ac284aceae385"
-V151_RUNTIME_FILES = {
-    "luau": (3439512, "988282e751cebea649d38692fc28b2131b252112"),
-    "luau-ast": (3249960, "9f38462280f01e97f6299491c5f36c9acc44fe55"),
-    "luau.exe": (2725376, "fd33cbb779fceeaeb06a0acae97b6290d82c3237"),
-    "luau-ast.exe": (5735424, "68d449e69cbe058582488ddfdc33739815f1ccad"),
-}
-V151_RUNTIME_ERROR = ""
 _node_bin: Optional[str] = None
 
 
@@ -90,50 +82,6 @@ def resolve_node() -> str:
     node_exe.chmod(0o755)
     _node_bin = str(node_exe)
     return _node_bin
-
-def _git_blob_sha1(data: bytes) -> str:
-    header = b"blob " + str(len(data)).encode("ascii") + b"\0"
-    return hashlib.sha1(header + data).hexdigest()
-
-
-def _ensure_v151_binaries() -> None:
-    global V151_RUNTIME_ERROR
-    suffix = ".exe" if os.name == "nt" else ""
-    bin_dir = V151_DIR / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    for base_name in ("luau", "luau-ast"):
-        name = base_name + suffix
-        expected_size, expected_sha = V151_RUNTIME_FILES[name]
-        destination = bin_dir / name
-        if destination.is_file() and not destination.is_symlink():
-            existing = destination.read_bytes()
-            if len(existing) == expected_size and _git_blob_sha1(existing) == expected_sha:
-                if os.name != "nt":
-                    destination.chmod(0o755)
-                continue
-        url = (
-            "https://raw.githubusercontent.com/ServerDeadd/Luraph-v15.1-Deobfuscator/"
-            + V151_UPSTREAM_COMMIT + "/bin/" + name
-        )
-        request = urllib.request.Request(url, headers={"User-Agent": "MonLua/1.0"})
-        with urllib.request.urlopen(request, timeout=90) as response:
-            data = response.read(expected_size + 1)
-        if len(data) != expected_size or _git_blob_sha1(data) != expected_sha:
-            raise RuntimeError("Downloaded Luraph runtime failed its pinned Git blob integrity check: " + name)
-        fd, temporary_name = tempfile.mkstemp(prefix=name + ".", suffix=".download", dir=bin_dir)
-        try:
-            with os.fdopen(fd, "wb") as output:
-                output.write(data)
-            if os.name != "nt":
-                os.chmod(temporary_name, 0o755)
-            Path(temporary_name).replace(destination)
-        finally:
-            try:
-                Path(temporary_name).unlink()
-            except FileNotFoundError:
-                pass
-    V151_RUNTIME_ERROR = ""
-
 
 CHANNEL_CONFIG_PATH = Path(os.getenv("CHANNEL_CONFIG_PATH", str(ROOT / "channel_restrictions.json"))).expanduser()
 CHANNEL_CONFIG_LOAD_FAILED = False
@@ -715,8 +663,6 @@ def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
         DEOB_DIR / "bin" / f"luau-ast{suffix}",
     ]
     if engine == "luraph_v151":
-        if V151_RUNTIME_ERROR:
-            return False, "Luraph v15.1 runtime setup failed: " + V151_RUNTIME_ERROR
         required.extend((
             V151_SCRIPT,
             V151_DIR / "bin" / f"luau{suffix}",
@@ -1312,7 +1258,6 @@ def result_embed(filename: str, label: str, size: int, desc: str, file_note: boo
 
 
 async def process_input(ctx: commands.Context, engine: str, url: str = "", preset=None) -> None:
-    global V151_RUNTIME_ERROR
     spec = SUPPORTED[engine]
     label = spec["label"]
     attachments = ctx.message.attachments
@@ -1356,17 +1301,6 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
             await ctx.reply(f"Invalid raw-file URL: {exc}", mention_author=False)
             return
 
-    if engine == "luraph_v151":
-        try:
-            await asyncio.to_thread(_ensure_v151_binaries)
-        except Exception as exc:
-            V151_RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
-            await ctx.reply(
-                "The pinned Luraph v15.1 runtime could not be installed or verified: "
-                f"{V151_RUNTIME_ERROR[:700]}",
-                mention_author=False,
-            )
-            return
     runtime_ok, runtime_detail = runtime_status(engine)
     if not runtime_ok:
         await ctx.reply(
@@ -1879,7 +1813,6 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
 
 
 async def main() -> None:
-    global V151_RUNTIME_ERROR
     token = os.getenv("DISCORD_BOT_TOKEN")
     if not token:
         raise RuntimeError("Missing required environment variable: DISCORD_BOT_TOKEN")
@@ -1890,12 +1823,6 @@ async def main() -> None:
             "until the deobf folder is added.",
             flush=True,
         )
-    try:
-        await asyncio.to_thread(_ensure_v151_binaries)
-        print("Pinned Luraph v15.1 Luau runtime downloaded and verified.", flush=True)
-    except Exception as exc:
-        V151_RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
-        print(f"WARNING: Luraph v15.1 runtime setup failed: {V151_RUNTIME_ERROR}", flush=True)
     await bot.start(token)
 
 
