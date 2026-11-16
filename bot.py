@@ -710,6 +710,10 @@ def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
         DEOB_DIR / "bin" / f"luau-ast{suffix}",
         DEOB_SCRIPT,
     ]
+    executables = [
+        DEOB_DIR / "bin" / f"luau{suffix}",
+        DEOB_DIR / "bin" / f"luau-ast{suffix}",
+    ]
     if engine == "luraph_v151":
         if V151_RUNTIME_ERROR:
             return False, "Luraph v15.1 runtime setup failed: " + V151_RUNTIME_ERROR
@@ -718,9 +722,15 @@ def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
             V151_DIR / "bin" / f"luau{suffix}",
             V151_DIR / "bin" / f"luau-ast{suffix}",
         ))
+        executables.extend((
+            V151_DIR / "bin" / f"luau{suffix}",
+            V151_DIR / "bin" / f"luau-ast{suffix}",
+        ))
         if not shutil.which("node") and not V151_NODE_ARCHIVE.is_file():
             return False, "Node.js 18+ is unavailable and the vendored Node runtime archive is missing."
-    missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
+    missing = [str(p) for p in required if not p.is_file()]
+    if os.name != "nt":
+        missing.extend(str(p) for p in executables if p.is_file() and not os.access(p, os.X_OK))
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
