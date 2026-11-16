@@ -1,8 +1,10 @@
+import sys
 import unittest
 
 import bot
+sys.path.insert(0, str(bot.DEOB_DIR))
 from deobf.lexer import tokenize
-from deobf.obfuscators.extra_families import LuaAnalysis
+from obfuscators.extra_families import LuaAnalysis
 
 
 class BotPerformanceRegressionTests(unittest.TestCase):
