@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Loretta.CodeAnalysis.Common" Version="0.2.14-nightly.24" />
+    <PackageReference Include="Loretta.CodeAnalysis.Lua" Version="0.2.14-nightly.24" />
+    <PackageReference Include="Loretta.CodeAnalysis.Lua.Experimental" Version="0.2.14-nightly.24" />
+    <PackageReference Include="NLua" Version="1.7.5" />
+    <PackageReference Include="KeraLua" Version="1.4.4" />
+    <PackageReference Include="Tsu" Version="2.2.2" />
+  </ItemGroup>
+</Project>
