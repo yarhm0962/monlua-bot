@@ -3,7 +3,7 @@ import unittest
 
 import bot
 sys.path.insert(0, str(bot.DEOB_DIR))
-from deobf.lexer import tokenize
+from deobf.lexer import pretty, tokenize
 from obfuscators.extra_families import LuaAnalysis
 
 
@@ -21,7 +21,8 @@ class BotPerformanceRegressionTests(unittest.TestCase):
         source = "--[=[hidden]=]\nlocal value = [==[kept -- text]==]"
         tokens = tokenize(source)
         self.assertIn(("str", "[==[kept -- text]==]"), tokens)
-        self.assertFalse(any(kind == "comment" and "hidden" in value for kind, value in tokens))
+        self.assertIn(("comment", "--[=[hidden]=]"), tokens)
+        self.assertNotIn("hidden", pretty(tokens))
 
     def test_lua_analysis_reuses_correct_structural_patterns(self):
         analysis = LuaAnalysis("function run()\n for i = 1, 3 do\n if i > 0 then end\n end\nend")
