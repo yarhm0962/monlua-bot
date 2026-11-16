@@ -297,36 +297,44 @@ LONG_STRING_OPEN_RE = re.compile(r"\[(=*)\[")
 def _strip_lua_comments(source: str) -> str:
     out = []
     i, n = 0, len(source)
+    line_start = 0
     marker = "-- [[ Deobfuscated by MonLua ]]"
+    newline = chr(10)
     while i < n:
         if source.startswith("--", i):
-            line_start = source.rfind("\n", 0, i) + 1
-            line_end = source.find("\n", i)
+            line_end = source.find(newline, i)
             if line_end < 0:
                 line_end = n
             if source[line_start:i].strip() == "" and source[i:line_end].strip() == marker:
                 i = line_end + (1 if line_end < n else 0)
+                line_start = i
                 continue
             long_comment = LONG_COMMENT_OPEN_RE.match(source, i)
             if long_comment:
                 close = "]" + long_comment.group(1) + "]"
                 end = source.find(close, long_comment.end())
                 end = n if end < 0 else end + len(close)
-                removed_lines = source[i:end].count("\n")
-                out.append("\n" * removed_lines if removed_lines else " ")
+                removed_lines = source[i:end].count(newline)
+                out.append(newline * removed_lines if removed_lines else " ")
+                last_newline = source.rfind(newline, i, end)
+                if last_newline >= 0:
+                    line_start = last_newline + 1
                 i = end
             else:
-                out.append("\n" if line_end < n else "")
+                out.append(newline if line_end < n else "")
                 i = line_end + (1 if line_end < n else 0)
+                line_start = i
             continue
         if source[i] in ('"', "'", chr(96)):
             quote = source[i]
             start = i
             i += 1
             while i < n:
-                if source[i] == "\\":
+                if source[i] == chr(92):
                     i += 2
                     continue
+                if source[i] == newline:
+                    line_start = i + 1
                 if source[i] == quote:
                     i += 1
                     break
@@ -340,12 +348,16 @@ def _strip_lua_comments(source: str) -> str:
                 start = i
                 end = source.find(close, long_string.end())
                 i = n if end < 0 else end + len(close)
+                last_newline = source.rfind(newline, start, i)
+                if last_newline >= 0:
+                    line_start = last_newline + 1
                 out.append(source[start:i])
                 continue
+        if source[i] == newline:
+            line_start = i + 1
         out.append(source[i])
         i += 1
     return re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", "".join(out)).strip()
-
 
 def _beautify_lua(source: str) -> str:
     """Use StyLua when installed; otherwise use the bundled Luau token formatter."""
@@ -387,7 +399,7 @@ PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
-MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(768 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
+MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(256 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
 
 
 def _pastefy_post(payload: dict):
@@ -414,10 +426,11 @@ def _pastefy_upload(text: str, title: str) -> str:
     numbered parts with an index paste holding every link. Returns the paste URL or ""."""
     if not text:
         return ""
-    chunks = [text[i:i + PASTEFY_CHUNK_CHARS] for i in range(0, len(text), PASTEFY_CHUNK_CHARS)]
+    part_count = (len(text) + PASTEFY_CHUNK_CHARS - 1) // PASTEFY_CHUNK_CHARS
     urls = []
-    for i, chunk in enumerate(chunks, 1):
-        part_title = title[:110] if len(chunks) == 1 else f"{title[:96]} ({i}/{len(chunks)})"
+    for index in range(part_count):
+        chunk = text[index * PASTEFY_CHUNK_CHARS:(index + 1) * PASTEFY_CHUNK_CHARS]
+        part_title = title[:110] if part_count == 1 else f"{title[:96]} ({index + 1}/{part_count})"
         paste = _pastefy_post({"content": chunk, "title": part_title})
         if not paste:
             return ""
@@ -430,7 +443,7 @@ def _pastefy_upload(text: str, title: str) -> str:
         "title": f"{title[:96]} - index"})
     if index:
         return f"https://pastefy.app/{index['id']}"
-    return urls[0]
+    return ""
 
 
 def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", pastefy_url: str = "") -> discord.ui.LayoutView:
