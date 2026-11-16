@@ -3,7 +3,7 @@ import re
 from obfuscators.base import Obfuscator
 
 
-HEADER = re.compile(r"MoonVeil(?:\\s+Obfuscator)?\\s+v?2\\.1\\.1\\b", re.IGNORECASE)
+HEADER = re.compile(r"MoonVeil(?:\s+Obfuscator)?\s+v?2\.1\.1\b", re.IGNORECASE)
 
 
 class MoonVeilV211(Obfuscator):
