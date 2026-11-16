@@ -233,8 +233,8 @@ GH_TOKEN_PLACEHOLDERS = ("placeholder", "replace_me", "your_token", "your-token"
 def cloud_runner_configured() -> bool:
     token = GH_DISPATCH_TOKEN.lower()
     return len(token) >= 20 and not any(marker in token for marker in GH_TOKEN_PLACEHOLDERS)
-CLOUD_V151_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_V151_MIN_BYTES", "150000")))
-CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "512000")))
+CLOUD_V151_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_V151_MIN_BYTES", "100000")))
+CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "256000")))
 CLOUD_WAIT_SECONDS = max(60, min(1800, int(os.getenv("CLOUD_WAIT_SECONDS", "1500"))))
 CLOUD_POLL_SECONDS = max(3, min(20, int(os.getenv("CLOUD_POLL_SECONDS", "5"))))
 cloud_slots = asyncio.Semaphore(1)
@@ -386,7 +386,7 @@ PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
-MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(1024 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
+MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(768 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
 
 
 def _pastefy_post(payload: dict):
@@ -939,14 +939,17 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> t
                 declared = response.headers.get("Content-Length")
                 if declared and int(declared) > MAX_INPUT_BYTES:
                     raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
-                body = b""
+                chunks = []
+                total_bytes = 0
                 while True:
-                    chunk = response.read(64 * 1024)
+                    chunk = response.read(128 * 1024)
                     if not chunk:
                         break
-                    body += chunk
-                    if len(body) > MAX_INPUT_BYTES:
+                    total_bytes += len(chunk)
+                    if total_bytes > MAX_INPUT_BYTES:
                         raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
+                    chunks.append(chunk)
+                body = b"".join(chunks)
                 if content_type in {"text/html", "application/xhtml+xml"}:
                     extracted = _extract_code_from_page(body)
                     if extracted is None:
