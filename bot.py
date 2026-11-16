@@ -1762,13 +1762,10 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
-        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        await interaction.response.send_message(view=error_view("Server only", "This command can only be used in a server."), ephemeral=True)
         return
     if not permissions or not (permissions.manage_guild or permissions.administrator):
-        await interaction.response.send_message(
-            "You need Manage Server or Administrator permission to change command channels.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message(view=error_view("Permission required", "You need Manage Server or Administrator permission to change command channels."), ephemeral=True)
         return
     guild_key = str(interaction.guild_id)
     async with _channel_settings_lock:
