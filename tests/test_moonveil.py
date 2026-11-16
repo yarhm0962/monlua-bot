@@ -24,13 +24,13 @@ class MoonVeilDetectionTests(unittest.TestCase):
         source = 'local value = "MoonVeil Obfuscator v1.4.5"\nreturn value'
         self.assertEqual(MoonVeilV145().detect(source), 0.0)
 
-    def test_mv_command_is_registered(self):
-        command = bot.bot.get_command("mv")
+    def test_moonveil_routes_through_unified_selector(self):
+        command = bot.bot.get_command("do")
         self.assertIsNotNone(command)
-        self.assertEqual(command.name, "mv")
-
-    def test_supported_engine_routes_to_mv(self):
-        self.assertEqual(bot.SUPPORTED["moonveil_v145"]["command"], ".mv")
+        self.assertIs(command, bot.bot.get_command("deobf"))
+        self.assertIn("moonveil_v145", bot.SUPPORTED)
+        self.assertEqual(bot.SUPPORTED["moonveil_v145"]["command"], ".do")
+        self.assertIn("moonveil_v145", [option.value for option in bot._EngineSelect().options])
         self.assertEqual(bot.SUPPORTED["moonveil_v145"]["label"], "MoonVeil v1.4.5")
 
 
