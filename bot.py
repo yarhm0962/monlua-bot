@@ -653,7 +653,14 @@ async def _log_component_clicks(interaction: discord.Interaction) -> None:
 
 def runtime_status() -> tuple[bool, str]:
     suffix = ".exe" if os.name == "nt" else ""
-    required = (\n        DEOB_DIR / "bin" / f"luau{suffix}",\n        DEOB_DIR / "bin" / f"luau-ast{suffix}",\n        V151_DIR / "bin" / f"luau{suffix}",\n        V151_DIR / "bin" / f"luau-ast{suffix}",\n        DEOB_SCRIPT,\n    )\n    missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
+    required = (
+        DEOB_DIR / "bin" / f"luau{suffix}",
+        DEOB_DIR / "bin" / f"luau-ast{suffix}",
+        V151_DIR / "bin" / f"luau{suffix}",
+        V151_DIR / "bin" / f"luau-ast{suffix}",
+        DEOB_SCRIPT,
+    )
+    missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
