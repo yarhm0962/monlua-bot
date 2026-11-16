@@ -2,7 +2,7 @@ import unittest
 
 import bot
 from deobf.lexer import tokenize
-from obfuscators.extra_families import LuaAnalysis
+from deobf.obfuscators.extra_families import LuaAnalysis
 
 
 class BotPerformanceRegressionTests(unittest.TestCase):
