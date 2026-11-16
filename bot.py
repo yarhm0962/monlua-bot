@@ -584,27 +584,31 @@ class _DeobfuscateButton(discord.ui.Button):
         label = SUPPORTED[self._engine]["label"]
         if view is None:
             await interaction.response.send_message(
-                "\u26a0\ufe0f Couldn't open the confirmation card. Use the engine command directly (`.help`).",
+                view=error_view("Confirmation unavailable", "Use the matching engine command from the help guide."),
                 ephemeral=True)
             return
         src_name = self._source[1] if self._source[0] == "attachment" else "the linked file"
         await interaction.response.send_message(f"Deobfuscate `{src_name}` with **{label}**?", view=view)
 
 
-class _ConfirmDeobfView(discord.ui.View):
+class _ConfirmDeobfView(discord.ui.LayoutView):
     def __init__(self, engine: str, source: tuple, detect_message=None, detect_layout=None):
         super().__init__(timeout=None)
         self._engine = engine
         self._source = source
         self._detect_message = detect_message
         self._detect_layout = detect_layout
-        self.add_item(_ConfirmDeobfButton(engine, source))
-        self.add_item(_CancelDeobfButton())
+        label = SUPPORTED[engine]["label"]
+        source_name = source[1] if source[0] == "attachment" else "Linked source file"
+        container = discord.ui.Container(accent_color=0x5865F2)
+        container.add_item(discord.ui.TextDisplay("## Confirm deobfuscation"))
+        container.add_item(discord.ui.TextDisplay(f"**Engine** · {label}\n**Source** · `{str(source_name)[:120]}`"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(engine, source), _CancelDeobfButton()))
+        self.add_item(container)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
         print(f"Confirm view error for {item}: {error!r}\n{traceback.format_exc()}", flush=True)
-
-
 class _ConfirmDeobfButton(discord.ui.Button):
     def __init__(self, engine: str, source: tuple):
         super().__init__(label="Continue", style=discord.ButtonStyle.success, custom_id="deobf_confirm")
@@ -648,8 +652,8 @@ class _CancelDeobfButton(discord.ui.Button):
         super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="deobf_cancel")
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(
-            content="\ud83d\uddf1\ufe0f Cancelled \u2014 no job was started.", view=None)
+            content=None,
+            view=info_view("Cancelled", "No deobfuscation job was started.")
 
 
 @bot.listen("on_interaction")
