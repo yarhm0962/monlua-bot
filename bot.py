@@ -1814,14 +1814,24 @@ async def on_ready() -> None:
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
-    if isinstance(error, (commands.CommandNotFound, ChannelRestrictionCheckFailure)):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, ChannelRestrictionCheckFailure):
+        configured = _allowed_channel_ids(ctx.guild.id if ctx.guild else None)
+        details = "Bot commands are restricted to the configured channel list."
+        if configured:
+            details += "\nAllowed channels: " + ", ".join(f"<#{channel_id}>" for channel_id in configured)
+        try:
+            await ctx.reply(view=info_view("Command unavailable here", details), mention_author=False)
+        except discord.HTTPException:
+            pass
         return
     if isinstance(error, commands.CommandOnCooldown):
-        await ctx.reply("Please wait a moment before trying again.", mention_author=False)
+        await ctx.reply(view=info_view("Command cooldown", "Please wait a moment before trying again."), mention_author=False)
         return
     print(f"Command error: {type(error).__name__}: {error}", flush=True)
     try:
-        await ctx.reply("Something went wrong while handling that command. Check the Render logs.", mention_author=False)
+        await ctx.reply(view=error_view("Command failed", "Something went wrong while handling that command. Check the bot service logs."), mention_author=False)
     except discord.HTTPException:
         pass
 
