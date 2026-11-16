@@ -6,6 +6,9 @@ _BLOB_RX = re.compile(r'"[^"\\]{500,}"|\'[^\'\\]{500,}\'')
 _DECODER_RX = re.compile(r"\b(?:string\.(?:byte|char|sub)|bit32\.(?:bxor|band|bor|rshift|lshift))\b")
 _NUM_TABLE_RX = re.compile(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}")
 _DISPATCH_RX = re.compile(r"\[\s*[A-Za-z_]\w*\s*\]\s*\(")
+_FUNCTION_RX = re.compile(r"\\bfunction\\b")
+_LOOP_RX = re.compile(r"\\b(?:while|repeat|for)\\b")
+_BRANCH_RX = re.compile(r"\\b(?:if|elseif)\\b")
 _KEYWORDS = {
     "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
     "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
@@ -158,9 +161,9 @@ class LuaAnalysis:
         self.identifier_count = identifier_count
         self.short_identifier_count = short_identifier_count
         self.unique_identifier_count = len(identifiers)
-        self.function_count = _count(re.compile(r"\bfunction\b"), self.structure)
-        self.loop_count = _count(re.compile(r"\b(?:while|repeat|for)\b"), self.structure)
-        self.branch_count = _count(re.compile(r"\b(?:if|elseif)\b"), self.structure)
+        self.function_count = _count(_FUNCTION_RX, self.structure)
+        self.loop_count = _count(_LOOP_RX, self.structure)
+        self.branch_count = _count(_BRANCH_RX, self.structure)
         self.escape_count = _count(_ESC_RX, self.code)
         self.numeric_table_count = _count(_NUM_TABLE_RX, self.structure)
         self.dispatch_call_count = _count(_DISPATCH_RX, self.structure)
