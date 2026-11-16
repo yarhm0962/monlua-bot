@@ -20,7 +20,7 @@ function detectLuraph(source) {
   const vm = VM_CHUNK_START.exec(head);
   if (vm) {
     const at = vm.index + vm[0].length - 'return setmetatable({'.length;
-    const chunkHead = source.slice(at, at + 200000);
+    const chunkHead = source.slice(at, at + 2000);
     if (LURAPH_VM_SHAPE.test(chunkHead) || source.slice(at, at + 200000).includes('LPH')) {
       return 0.8;
     }

@@ -1,276 +1,249 @@
-# Luraph v15 Deobfuscator
+# Luraph v15 / v15.1 Deobfuscator
 
-[![CI](https://github.com/Aditya-lua/Deobfuscator-Luraph-V15/actions/workflows/ci.yml/badge.svg)](https://github.com/Aditya-lua/Deobfuscator-Luraph-V15/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
-[![Target](https://img.shields.io/badge/Target-Luraph%20v15-red.svg)](https://lura.ph/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://www.python.org/)
+[![Target](https://img.shields.io/badge/Target-Luraph%20v15%20%2F%20v15.1-red.svg)](#)
+![Visitors](https://api.visitorbadge.io/api/visitors?path=ServerDeadd%2FLuraph-v15.1-Deobfuscator&label=Visitors&countColor=%23263759)
+# STAR THIS PROJECT!
 
-A standalone, high-performance deobfuscator for Roblox Luau scripts protected by **Luraph v15**.
+
+A standalone **defensive analysis tool** that recovers readable Luau source from
+scripts protected by **Luraph v15 / v15.1** (the VM obfuscator most commonly seen
+on Roblox exploit scripts, "hubs", and loaders).
+
+> **Why this exists.** Obfuscated Lua/Luau scripts are run blindly by thousands of
+> people every day. A Luraph-protected script can hide anything: token/cookie
+> stealers, Discord-webhook exfiltration, backdoors, remote-code loaders, or
+> silent account takeovers. This project's only goal is to let you **see what a
+> script actually does before you run it** — i.e. to analyze any malware or virus
+> that may be hidden inside executed Lua code. It is a reverse-engineering /
+> malware-analysis tool, not a tool for stealing or cracking anyone's work.
+> Please read [Purpose & Legal](#purpose--legal) below.
 
 ---
 
-## Overview
+## What it does
 
-Luraph v15 compiles Luau scripts into an interpreted virtual machine (VM) with flattened dispatch loops, encrypted memory buffers (`LPH_ENCSTR`, `LPH_ENCFUNC`), and anti-tamper crash traps (`LPH_CRASH()`).
+Luraph v15 compiles a Luau script into an interpreted virtual machine: a flattened
+dispatch loop, encrypted in-memory constant buffers (`LPH_ENCSTR`, `LPH_ENCFUNC`),
+and anti-tamper traps (`LPH_CRASH()`) that corrupt the bytecode and spin forever
+if the environment looks wrong.
 
-This tool acts as a reverse compiler:
-- Recovers original control flow structures (`if/else`, `while`, `for`, `repeat/until`) from low-level VM dispatchers.
-- Decrypts lazy in-memory constants using a live sandboxed Luau runtime.
-- Isolates and bypasses anti-tamper traps to discover hidden code paths.
+This tool works as a **reverse compiler**:
 
----
+- Runs the script inside an **offline Roblox/Luau sandbox** (`runtime/envlog.luau`) —
+  no Roblox client, no executor, no network needed.
+- **Decrypts** the lazy constants live by querying that sandboxed VM over an IPC pipe.
+- **Lifts the VM bytecode** back to real control flow (`if/elseif/else`, `while`,
+  `for`, `for-in`, `repeat/until`) and closures.
+- **Names** locals from their Roblox-API usage (`Players`, `TweenService`,
+  `ReplicatedStorage`, …) and verifies the output compiles.
 
-## How It Works
-
-The deobfuscator operates across 5 stages:
+The result is clean, readable Luau you can audit.
 
 ```
-┌────────────────────────┐
-│ Protected Luraph Script│
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ 1. AST Hooking         │ ➔ Discovers VM dispatchers & hooks closure makers
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ 2. Sandboxed Simulation│ ➔ Runs in offline Roblox VM; isolates anti-tamper traps
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ 3. Live REPL Decryption│ ➔ Queries in-memory Luau VM to decrypt lazy constants
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ 4. CFG & SSA Lifting   │ ➔ Reconstructs control flow graph & loop structures
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ 5. Polish & Naming     │ ➔ Infers local variable names from Roblox API usage
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ Clean Luau Source Code │
-└────────────────────────┘
+Protected Luraph script
+        │
+        ▼  1. AST hooking            map the VM dispatch + closure makers (luau-ast)
+        ▼  2. Sandboxed simulation   run offline; isolate anti-tamper traps
+        ▼  3. Live constant decrypt  query the in-memory VM to decrypt constants
+        ▼  4. CFG / SSA lifting      rebuild loops and branches, assign registers
+        ▼  5. Polish & naming        infer local names, verify it compiles
+        │
+        ▼
+Readable Luau source
 ```
 
-1. **AST Analysis & Hooking (`vmmap`)**:
-   Parses the input script with `luau-ast` to map out the VM interpreter loop and closure constructors. Injects non-destructive telemetry hooks to track proto execution and register states.
-
-2. **Sandboxed Simulation (`harness`)**:
-   Executes the script inside an isolated, offline Roblox engine emulator (`envlog.luau`). If execution encounters an anti-tamper trap (`LPH_CRASH()`), the engine identifies the responsible function, disables the trap path, and reruns along stable branches.
-
-3. **Live REPL Memory Decryption (`devirt`)**:
-   Luraph's lazy encryption requires dynamic decryption keys. The engine communicates directly with an active Luau REPL process via IPC to decrypt string and numerical constants live in memory.
-
-4. **Control Flow Graph (CFG) Reconstruction (`structure`, `loops`)**:
-   Uses Sparse Conditional Constant Propagation (SCCP) to trace virtual register values. Basic blocks are assembled into a control flow graph, restoring nested loops (`while`, `for`, `for-in`) and branching logic (`if/elseif/else`).
-
-5. **Polish & Variable Naming (`backend`, `names`)**:
-   Virtual registers are analyzed across basic blocks using Static Single Assignment (SSA) web analysis. Variables are assigned context-aware names based on Roblox API usage (e.g. `Players`, `TweenService`, `ReplicatedStorage`), and the output is verified through syntax compilation.
-
-> For compiler theory, opcode mechanics, and detailed analysis passes, see [TECHNICAL.md](TECHNICAL.md).
+For the full methodology (opcode dispatch, SCCP symbolic evaluation, SSA register
+webs) see **[TECHNICAL.md](TECHNICAL.md)**.
 
 ---
 
 ## Features
 
-- **Full Devirtualization**: Recovers high-level control flow, closures, and scoping instead of simple trace logging.
-- **Optimized Symbolic Engine**: Shared mode-dispatch cache, iterative AST traversal, and declaration memoization deliver up to 2.1x faster devirtualization.
-- **Robust Table Lifting**: Handles `table.pack`-style packed lists (`{n = count}`) in VM registers, plus symbolic indexing, comparison, and boolean coercion on packed values.
-- **Fast-Path Engine**: Skips redundant verification passes once all constants are decoded live.
-- **Offline Roblox Sandbox**: Includes offline models for Roblox services, `Path2D`, `UDim2`, `Vector3`, `CFrame`, and executor globals. No Roblox client needed.
-- **Self-Contained**: Luau binaries, runtime emulators, and analysis modules are bundled directly inside this repository.
-- **Fail-Loud Error Handling**: Per-function error isolation during devirtualization — a function that cannot be lifted becomes an explicit `error("...")` stub with a report instead of crashing the whole run or silently emitting wrong code. Unknown control-flow blocks raise a loud `SError` rather than being guessed.
-- **Hardened Instrumentation Sandbox**: The live Luau probe runs behind a `getfenv`/`loadstring` shield with a per-run nonce protocol, so protected scripts cannot spoof or tamper with the telemetry the lifter relies on. Subprocesses are hard-timeout guarded on every platform.
-- **Cross-Platform**: Windows and Linux out of the box, verified by CI on both operating systems.
-- **Tested & CI-Verified**: A fast unit + cross-language protocol suite (`npm test`) plus a byte-for-byte golden regression against committed reference outputs run automatically on every push via GitHub Actions.
+- **Full devirtualization**, not just a behaviour log — recovers high-level control
+  flow, closures and scoping.
+- **Offline Roblox sandbox**: models for Roblox services, executor globals, and
+  datatypes (`Vector3`, `CFrame`, `UDim2`, `Path2D`, `BrickColor`, …). No game needed.
+- **v15.1 game-locked scripts**: many hubs mix `game.GameId` into the decryption
+  key. Pass the target's GameId with `--cfg-json` and the payload decrypts (see
+  [SETUP.md](SETUP.md)).
+- **Best-of-N lifting**: the lifter's output depends on Python's hash seed, so the
+  Python stage runs several candidates in parallel and keeps the best (fewest
+  unlifted blocks). Optional bundled **PyPy** makes it ~2× faster.
+- **Fail-loud**: a block that cannot be lifted becomes an explicit
+  `error("devirt: ...")` marker instead of silently emitting wrong code.
+- **Prebuilt Luau runtime**: the standalone upstream repository ships Windows and Linux binaries. In MonLua-bot, the v15.1 runner uses the shared Linux Luau binaries already bundled under `deobf/bin` through the `deobf/v151/bin` links.
+- **Fast trace mode** (`--no-devirt`): ~2 s dump of URLs fetched, remotes fired,
+  webhooks and UI setup — enough to spot a malicious script immediately.
 
 ---
 
-## Quick Start
+## Quick start
 
 ### Prerequisites
-- **OS**: Windows or Linux (the CI suite runs on both)
-- **Node.js**: v18.0.0 or higher
-- **Python**: 3.10 or higher (powers the backend symbolic execution engine)
+- **Node.js** 18+
+- **Python** 3.10+
+- **OS:** Windows or Linux (both ship with prebuilt `bin/luau` binaries)
 
-### Installation
-Clone the repository and install dependencies:
+### Install
 ```bash
-git clone https://github.com/Aditya-lua/Deobfuscator-Luraph-V15.git
-cd Deobfuscator-Luraph-V15
-npm install
+git clone https://github.com/ServerDeadd/luraph-v15-deobfuscator.git
+cd luraph-v15-deobfuscator
 ```
+There are **no npm dependencies** — the entry point is plain Node, and the Luau
+binaries are already in `bin/`. (Optional: drop a PyPy build in `pypy/` for a ~2×
+speedup; the tool auto-detects it and falls back to CPython when it's absent.)
 
-### Basic Commands
+### Run
 ```bash
-# Deobfuscate a single script (saves to ./output/<filename>)
+# Deobfuscate one script (default output: ./output/<name> next to the input)
 node deob.js input.lua
 
-# Save to a specific output path
-node deob.js input.lua -o output.lua
+# Choose the output path
+node deob.js input.lua -o clean.lua
 
-# Batch mode: process a whole folder of scripts
-node deob.js ./my_scripts_folder/
+# Whole folder, or several files at once
+node deob.js ./scripts_folder/
+node deob.js a.lua b.lua c.lua
 
-# Batch mode: process multiple files at once
-node deob.js file1.lua file2.lua file3.lua
-
-# Fast trace-only mode (~2 seconds, skips bytecode lifting)
+# Fast behaviour trace only (~2 s, no bytecode lifting) — great for a first look
 node deob.js input.lua --no-devirt
 
-# Detect if a script is protected by Luraph without running it
+# Just detect the obfuscator, don't run anything
 node deob.js input.lua --detect
 ```
 
-> **Note:** If your system uses a different Python command (`py`, `python3`, or a virtual environment binary), set the `PYTHON_BIN` environment variable:
+> If your Python is not on `python`/`python3`, set `PYTHON_BIN`:
 > ```bash
-> set PYTHON_BIN=py        # Windows
-> export PYTHON_BIN=python3   # Linux / macOS
+> set PYTHON_BIN=py            # Windows (cmd)
+> $env:PYTHON_BIN = "py"       # Windows (PowerShell)
+> export PYTHON_BIN=python3    # Linux / macOS
 > ```
 
-### Development & Tests
-```bash
-# Fast test suite: unit tests + cross-language protocol consistency (no Luau build needed)
-npm test
-
-# Full regression: rebuild the pipeline for the benchmark samples and compare
-# byte-for-byte with the committed reference outputs (needs python build_luau.py first)
-python test/run_all.py --golden
-```
-Harness-protocol constants shared between the Python core, the Node driver and the Luau runtime live in `protocol.json`; `test/protocol_test.py` fails when any copy drifts. See [TECHNICAL.md](TECHNICAL.md) for the environment-variable reference and CI details.
-
-CI (`.github/workflows/ci.yml`) runs the fast suite on Ubuntu **and** Windows on every push, then builds the patched Luau runtime (with binary caching) and runs the full golden regression on Ubuntu — so the committed reference outputs can never silently rot.
+**Stuck on a v15.1 hub that only dumps a ~40-function anti-tamper shell, or errors
+with `size out of range`?** That script is game-locked. See the step-by-step
+**[SETUP.md](SETUP.md)** — it covers finding the GameId, locating the payload root,
+and the environment variables for a full lift.
 
 ---
 
-## FlowAuth Crack (moved)
+## Command-line options
 
-The FlowAuth loader-chain toolkit (live loader emulator, v3 protocol crack, payload
-capture + devirtualization probes) now lives in its own repo:
-**[Aditya-lua/FlowAuth-Deobfuscator](https://github.com/Aditya-lua/FlowAuth-Deobfuscator)**
-— split out to keep this repo focused on the generic Luraph devirtualizer. The
-sandbox harness (`runtime/envlog.luau`), the patched Luau runtime and the devirt
-core (`src/vmmap`, `core/devirt.py`) used by that pipeline remain here.
+| Option | Default | Description |
+|---|---|---|
+| `-o, --output <file>` | `./output/<name>` | Output path (single input only) |
+| `--no-devirt` | off | Fast execution trace only (skip VM bytecode lifting) |
+| `--no-hooks` | off | Disable VM closure-entry instrumentation |
+| `--no-fold` | off | Disable loop/helper folding in trace mode |
+| `--detect` | off | Print the detected obfuscator + confidence, then exit |
+| `--timeout <sec>` | `90` | Hard timeout per Luau execution pass |
+| `--budget <sec>` | `30` | Soft runtime budget for the sandboxed script |
+| `--max-runs <n>` | `12` | Max reruns while isolating anti-tamper traps |
+| `--devirt-rounds <n>` | `200` | Max live constant-decryption rounds |
+| `--cfg-json <json\|@file>` | — | Extra harness config (e.g. the GameId) as inline JSON or `@file.json` |
+| `--debug` | off | Keep intermediate disassembly/trace files next to the output |
 
-## Performance
+A fuller environment-variable reference (`DEVIRT_*`, `DEOB_*`) is in
+[TECHNICAL.md](TECHNICAL.md) §4 and [SETUP.md](SETUP.md).
 
-The engine has been heavily optimized (symbolic AST caching, iterative tree walks, single-pass state analysis, shared dispatch-loop cache, and a bounded SCCP walk). Measured on the bundled `sample/` scripts, the current build is **1.6x to 1.8x faster** than the previous release, and scripts that previously crashed now lift completely. A subsequent profile-driven pass over the hot paths added another **~25% end-to-end** speedup on top of the numbers below:
+---
 
-| Benchmark | Size | Functions | Before | After | Speedup |
-|---|---|---|---|---|---|
-| `Blox Fruit.lua` | 646 KB | 520 | 2m 04s | **1m 02s** | **2.0x** |
-| `+1 Speed Keyboard Escape.lua` | 543 KB | 316 | 1m 17s | **37s** | **2.1x** |
-| `Grow A Garden 2 (1).lua` | 645 KB | 545 | 3m 51s | **2m 25s** | **1.6x** |
-| `Grow a Garden.lua` | 804 KB | 767 | 1m 54s | **1m 51s** | **1.0x** |
-| `9eccab05cff67267.lua` | 222 KB | 36 | *crashed* | **4m 02s** | fixed |
-| `5ae248d6527b5c01.lua` | 170 KB | 1 | 3.7s | **3.7s** | — |
+## Samples & regression test
 
-Additional stress tests on fresh scripts (run once with the current build, no baseline):
-
-| Stress Test | Size | Functions | Time | Result |
-|---|---|---|---|---|
-| `StealAnEgg.lua` | **1.62 MB** | 1,723 | **12m 21s** | 32,435 lines (1.8 MB) |
-| `Steal-a-Brainrot.lua` | **1.07 MB** | 1,138 | **6m 59s** | 19,407 lines (463 KB) |
-| `JumpForAnimals.lua` | 503 KB | 457 | **1m 38s** | 7,217 lines (160 KB) |
-| `RideAPet.lua` | 397 KB | 328 | **55s** | 5,170 lines (113 KB) |
-
-Every input and its reference deobfuscated output is committed in `sample/` and `sample/output/`. All outputs pass `luau-ast` syntax validation (`COMPILE OK`). `StealAnEgg.lua` lifts 99.97% of its 1,723 functions; the remaining 46 blocks (0.03%) are guarded with an explicit `error("devirt: unexplored successor ...")` marker instead of silently emitting wrong code.
-
-**Reproduce it yourself** — every input in the table above ships in [`sample/`](sample/) and the expected deobfuscated result for each one is committed in [`sample/output/`](sample/output), so you can verify both the timings and the output quality on your own machine:
+The `samples_v15.1_deobfuscated/` folder holds public v15.1 inputs
+(`*_obfuscated.lua`) next to their expected results (`*_Deobfuscated.lua`). The
+regression runner deobfuscates each one and compares byte-for-byte:
 
 ```bash
-node deob.js "sample/Blox Fruit.lua" -o "output/Blox Fruit.lua"
-node deob.js "sample/9eccab05cff67267.lua" -o "output/9eccab05cff67267.lua"
+python tests/run_samples.py      # byte-exact sample regression (needs node + bin/luau)
+python tests/test_datatypes.py   # offline datatype models vs Studio-verified values
+bin/luau tests/test_for_lowering.luau   # for-loop lowering formulas vs real Luau
 ```
 
-Hardware used for the table: consumer Windows machine, Node.js 24, Python 3.12. Exact times vary with CPU and background load; the relative speedup holds.
+> One sample (`99ba879f8b2ec51c`) can differ by a single, *more complete* function
+> depending on Python's hash seed / which parallel candidate wins. That is a known,
+> tolerated non-determinism, not a regression — the runner treats it as a pass.
 
 ---
 
-## Frequently Asked Questions (FAQ)
+## How long does it take?
 
-### Q: How long does deobfuscation take?
+| Script | Functions | Typical time |
+|---|---|---|
+| Micro script | 1–20 | 1–5 s |
+| Medium hub | 50–200 | 15–35 s |
+| Large game / complex | 500–750+ | 1–2 min |
+| **Any** (`--no-devirt`) | any | 1–3 s |
 
-| Script Size | Function Count | Average Time | Mode |
-|---|---|---|---|
-| **Small / Micro Script** | 1 – 20 functions | **1 – 5 seconds** | Full Devirtualize |
-| **Medium Script (Hubs)** | 50 – 200 functions | **15 – 35 seconds** | Full Devirtualize |
-| **Large Script (Full Games / Complex)** | 500 – 750+ functions | **1 – 2 minutes** | Full Devirtualize |
-| **Any Script** (Trace Mode) | Any size | **1 – 3 seconds** | `--no-devirt` |
+Luraph v15 is a *virtual machine*, not simple encryption, so a full lift
+symbolically walks thousands of instruction paths, decrypts 2,000–2,600 constants
+live, rebuilds the control-flow graph, and renames registers across 10,000+ lines.
+If you only need to know *what a script does*, use `--no-devirt`.
 
-### Q: Why do large scripts take 1 to 2 minutes?
-Luraph v15 is a **virtual machine obfuscator**, not simple encryption. The deobfuscator performs full compiler-grade reverse compilation:
-1. It symbolically simulates virtual registers across thousands of instruction paths.
-2. It sends requests to an in-memory Luau VM to decrypt 2,000–2,600 constants on-the-fly.
-3. It performs dominator tree analysis to reconstruct nested control flow loops.
-4. It analyzes register lifetimes to assign clean local variables across 10,000+ lines of code.
+---
 
-The current build cuts this cost with a shared dispatch-loop cache (mode resolution is computed once per VM instead of once per function), iterative AST walkers with declaration caching, a single-pass state-variable analysis, and a converged SCCP walk limit that keeps CFG minimization proportional to real code size.
+## Repository layout
 
-### Q: How can I deobfuscate in just a couple of seconds?
-If you only need to see what a script does (URLs fetched, remotes fired, UI setup, webhooks) without needing the full lifted source code, use the `--no-devirt` flag:
+```
+deob.js                 entry point (node deob.js ...)
+src/                    Node driver: sandbox tracing, VM hooks, parallel candidates
+core/                   Python core: the devirtualizer / lifter / code generator
+  obfuscators/luraph_v15/   devirt.py, driver.py, vmmap.py  (the v15/v15.1 engine)
+runtime/envlog.luau     the offline Roblox sandbox the script runs in
+runtime/datatypes.luau  offline Vector3/CFrame/UDim2/Path2D/BrickColor models
+bin/                    prebuilt Luau 0.739 binaries (Windows + Linux)
+luaclean.py             removes proven-dead Luraph junk from the output
+build_luau.py           rebuilds the patched Luau runtime from source
+tools/seqs.py           show proto creation order (find where the payload starts)
+tools/findproto.py      find which proto holds a given string (e.g. the UI)
+tests/                  regression + unit tests
+samples_v15.1_deobfuscated/   public samples + their reference outputs
+protocol.json           harness protocol constants shared by Node / Python / Luau
+```
+
+---
+
+## Rebuilding the Luau binaries (optional)
+
+`bin/` already contains working binaries. To rebuild them from the official Luau
+0.739 source with the sandbox patches applied:
+
 ```bash
-node deob.js input.lua --no-devirt
+python build_luau.py
 ```
-This runs the script in the sandboxed Luau runtime and extracts the complete execution trace in ~2 seconds.
+This needs a C++ toolchain and `cmake` (or `zig` as the compiler). It is **not**
+required to use the tool — only if you want to verify or modify the runtime.
 
 ---
 
-## Command Line Options
+## Purpose & Legal
 
-| Option | Short | Default | Description |
-|---|---|---|---|
-| `--output <file>` | `-o` | `./output/<name>` | Custom destination path for the deobfuscated file |
-| `--no-devirt` | | `false` | Fast execution trace only (skips VM bytecode lifting) |
-| `--no-hooks` | | `false` | Disable VM closure entry instrumentation |
-| `--no-fold` | | `false` | Disable loop and helper folding in trace mode |
-| `--timeout <sec>` | | `90` | Hard timeout per Luau execution pass |
-| `--budget <sec>` | | `30` | Soft execution budget for script runtime |
-| `--max-runs <n>` | | `12` | Maximum reruns allowed for anti-tamper traps |
-| `--devirt-rounds`| | `200` | Maximum constant decryption rounds |
-| `--detect` | | `false` | Detect and print obfuscator type, then exit |
-| `--debug` | | `false` | Keep intermediate disassembly files in output folder |
+**Intended use — defensive only.** This project is published so that researchers,
+script reviewers and ordinary users can **analyze obfuscated Lua/Luau code for
+hidden malware** (token stealers, data-exfiltration webhooks, backdoors, remote
+loaders) *before* executing it, and for education about VM-based obfuscation. It
+reveals behaviour that is otherwise deliberately hidden.
+
+Use it only on code you own, have permission to analyze, or are reviewing for
+safety. **You** are responsible for how you use it. Do not use it to infringe
+anyone's intellectual property, to violate the terms of service of any platform,
+or for any unlawful purpose.
+
+This is an independent project. It is **not affiliated with, endorsed by, or
+connected to Luraph / lura.ph, Roblox Corporation, or any script author.** All
+product names, trademarks and registered trademarks are the property of their
+respective owners and are used here only to describe the format being analyzed.
+
+**Open source under the [MIT License](LICENSE).** The software is provided
+"AS IS", **without warranty of any kind**, express or implied. In no event shall
+the authors or copyright holders be liable for any claim, damages or other
+liability arising from the use of this software. See [LICENSE](LICENSE) for the
+full text.
 
 ---
-
-## Technical Details
-
-For in-depth explanations of the reverse-engineering methodology, SCCP symbolic evaluation, opcode dispatcher mapping, and SSA register renaming, see [TECHNICAL.md](TECHNICAL.md).
-
----
-
-## License
-
-This project is open-source under the [MIT License](LICENSE).
 
 ## Credits
-Thanks source to **ccjvwsod** on Discord
-This version was rebuilt by me using Node so that multiple Deobf instances can run simultaneously
-## Support / Donate
 
-<div align="center">
-  <img src="assets/donate/donate_header.png" width="520" alt="Buy me a coffee — fund future projects">
-</div>
-
-If these tools are useful to you, you can help fund future projects by sending
-crypto to the addresses below. Thank you for the support. — **@adi.codz** (Discord)
-
-| Network | Address | Scan |
-|---|---|---|
-| **Bitcoin** (BTC) | `bc1q3nprh6e0y4fz88ft4uu5dad7xsx629z498dkay` | <img src="assets/donate/btc.png" width="120" alt="Bitcoin QR"> |
-| **Ethereum** (ERC-20) | `0x11369a1d18eb442581D1e675dAdD94eBA1c4bE52` | <img src="assets/donate/eth.png" width="120" alt="Ethereum QR"> |
-| **BNB Smart Chain** (BEP-20) | `0x11369a1d18eb442581D1e675dAdD94eBA1c4bE52` | <img src="assets/donate/bnb.png" width="120" alt="BNB Smart Chain QR"> |
-| **Solana** (SOL) | `AVKBDNT2PzYDJ7njVrjt7MoVZ1tY4DvNSsADdujiGKTC` | <img src="assets/donate/sol.png" width="120" alt="Solana QR"> |
-| **Litecoin** (LTC) | `ltc1qu4ahsjff622xqjlqwafhlgmacd5ea477sqpx9z` | <img src="assets/donate/ltc.png" width="120" alt="Litecoin QR"> |
-
-> Send each asset only on its own network. ETH and BNB share one EVM address —
-> use it for ERC-20 on Ethereum and BEP-20 on BNB Smart Chain. Assets sent on the
-> wrong network may be lost.
+- Luraph v15.1 Deobfuscator (serversadzzz) on discord!

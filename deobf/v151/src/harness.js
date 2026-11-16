@@ -9,6 +9,21 @@ const http = require('http');
 
 const HERE = __dirname;
 const BIN = path.join(HERE, '..', 'bin');
+
+// On Linux, run luau under a hard virtual-memory limit so a runaway trace
+// (a loop that balloons the capture tables/buffers) dies with a clean ENOMEM
+// instead of being OOM-killed and taking the whole service down with a 502.
+// Default 4 GB stays under a typical 6 GB service cgroup with room for node+python.
+// DEOB_LUAU_MEM_KB=0 disables it. No-op off Linux (Windows/mac have RAM to spare).
+function luauCmd(luau, args) {
+  const memKb = process.env.DEOB_LUAU_MEM_KB || '4194304';
+  if (process.platform === 'linux' && memKb !== '0') {
+    const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+    const line = `ulimit -v ${parseInt(memKb, 10)} 2>/dev/null; exec ${[luau, ...args].map(q).join(' ')}`;
+    return ['/bin/bash', ['-c', line]];
+  }
+  return [luau, args];
+}
 const LUAU_URL = 'https://github.com/luau-lang/luau/releases/latest/download/luau-windows.zip';
 
 // Protocol constants shared with the Python core and the Luau runtime (see
@@ -203,7 +218,7 @@ function buildHarness(source, cfg, chunks = {}) {
     'local __UNICODE = (function()\n' + udata + '\nend)()\n' +
     'local __ROBLOX = (function()\n' + rdata + '\nend)()\n' +
     '__ROBLOX.datatypes = (function()\n' + dtypes + '\nend)()\n' +
-    'local __RAW = { getfenv = getfenv, setfenv = setfenv, loadstring = loadstring }\n' +
+    'local __RAW = { getfenv = getfenv, setfenv = setfenv, loadstring = loadstring, collectgarbage = collectgarbage }\n' +
     'local __RUN = function(__MARK, __SOURCE, __CONFIG, __P2D, __CHUNKS, __UNICODE, __ROBLOX, __RAW)\n' +
     runtime + '\n' +
     'end\n' +
@@ -228,6 +243,8 @@ async function runOnce(luau, source, cfg, hpath, timeoutSec, keepHarness, chunks
 
   let stdout = body.replace(new RegExp(mark('HB') + '\\r?\\n {16384}\\r?\\n', 'g'), '').replace(/\r\n/g, '\n');
   LAST_RAW = stdout + err;
+  // DEOB_RAW=<file>: keep the harness's whole output (debug prints outside the trace)
+  if (process.env.DEOB_RAW) { try { fs.appendFileSync(process.env.DEOB_RAW, LAST_RAW, 'latin1'); } catch {} }
   const m = new RegExp(mark('ENVLOG-BEGIN') + '\\n([\\s\\S]*?)' + mark('ENVLOG-END')).exec(stdout);
   if (!m) {
     return { body: null, err: stdout.slice(-3000) + '\n' + err.slice(-3000) };
@@ -243,7 +260,8 @@ async function runOnce(luau, source, cfg, hpath, timeoutSec, keepHarness, chunks
 
 function _communicate(cmd, timeoutMs, stallMs) {
   return new Promise((resolve) => {
-    const proc = spawn(cmd[0], cmd.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const [c0, cargs] = luauCmd(cmd[0], cmd.slice(1));
+    const proc = spawn(c0, cargs, { stdio: ['ignore', 'pipe', 'pipe'] });
     const outBufs = [], errBufs = [];
     let lastOutput = Date.now();
     let done = false;
@@ -290,7 +308,8 @@ class HarnessServer {
     this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deobf_serve_'));
     const harnessContent = buildHarness(source, Object.assign({}, cfg, { serve: true }), chunks);
     fs.writeFileSync(path.join(this.dir, 'harness.luau'), harnessContent, 'latin1');
-    this.proc = spawn(luau, [], {
+    const [c0, cargs] = luauCmd(luau, []);
+    this.proc = spawn(c0, cargs, {
       cwd: this.dir,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -396,7 +415,9 @@ function traceText(body) {
   body = body.replace(/(?<=[ \t])(?=\S)(?:[A-Za-z]:)?[^:\n]*?\.luau:/g, 'harness:');
   body = body.replace(/harness:\d+: /g, '');
   body = body.replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
-  return body.replace(/\d+(?:\.\d+)?(?:e[-+]?\d+)?/g, '0');
+  // the sign too: random offsets trace as "-3" in one run and "5" in the next
+  // (must match core/harness.py trace_text: the long-lived harness compares both)
+  return body.replace(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/g, '0');
 }
 
 function sameTrace(a, b) {

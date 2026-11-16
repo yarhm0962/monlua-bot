@@ -25,6 +25,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "service": "monlua-bot",
                 "system_node": bool(shutil.which("node")),
                 "v151_tool": os.path.isfile("deobf/v151/deob.js"),
+                "v151_luau": os.path.isfile("deobf/v151/bin/luau") and os.access("deobf/v151/bin/luau", os.X_OK),
+                "v151_luau_ast": os.path.isfile("deobf/v151/bin/luau-ast") and os.access("deobf/v151/bin/luau-ast", os.X_OK),
                 "centurion_tool": os.path.isfile("deobf/centurion/centurion.py"),
                 "v151_node_archive": os.path.isfile("deobf/v151/vendor/node-v20.19.5-linux-x64.tar.gz"),
                 "uptime_seconds": int(time.time() - START_TIME),

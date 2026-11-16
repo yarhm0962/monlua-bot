@@ -999,8 +999,6 @@ class Interp:
         elif t == "AstStatForIn":
             vals = self.eval_list(st["values"], scope, 3)
             f, s, ctl = vals
-            if type(f).__name__ == "OpenUps":
-                f = None
             n = 0
             while f is not None:
                 n += 1

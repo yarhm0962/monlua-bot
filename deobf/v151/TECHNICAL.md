@@ -125,12 +125,22 @@ harness file, the Node driver parses its output, and the Luau runtime
 
 `runtime/envlog.luau` carries the same values baked into its `local PROTO = {...}`
 line (standalone Studio runs depend on them). Both harness builders overwrite
-that line from `protocol.json` on every run, and `test/protocol_test.py` fails
-CI when any copy drifts. If you change a protocol value, change it in
-`protocol.json` only.
+that line from `protocol.json` on every run. If you change a protocol value,
+change it in `protocol.json` only.
 
-## 6. Testing & CI
+## 6. Tests
 
-- `npm test` (or `python test/run_all.py`) runs the fast suite: unit tests for the Python core (chunk-key vectors, Luau pow semantics, config parsing, protocol nonce forging regression) plus the cross-language protocol consistency checks (spawns `node`, no Luau binaries needed).
-- `python test/run_all.py --golden` additionally re-runs the full pipeline on the benchmark samples and compares byte-for-byte with the committed reference outputs in `sample/output/` (needs `bin/luau` + `bin/luau-ast` from `python build_luau.py`). If a run differs, the reference file is restored and the test fails.
-- `.github/workflows/ci.yml` runs the fast suite on Ubuntu and Windows, syntax-checks every Python/JS file, and builds the patched Luau runtime (cached) for the golden regression.
+The `tests/` folder holds the regression and unit tests. The Luau binaries in
+`bin/` are all they need — nothing else to build.
+
+- `python tests/run_samples.py` — runs `deob.js` on each public sample in
+  `samples_v15.1_deobfuscated/` and compares the result byte-for-byte with its
+  committed `*_Deobfuscated.lua` reference. One sample (`99ba879f8b2ec51c`) may
+  differ by a single, more-complete function depending on `PYTHONHASHSEED` /
+  which parallel candidate wins — a known, tolerated non-determinism, treated as
+  a pass.
+- `python tests/test_datatypes.py` — asserts the offline datatype models in
+  `runtime/datatypes.luau` (BrickColor palette, CFrame/Vector2 f32 rounding,
+  Path2D resolve) against values verified in real Roblox Studio.
+- `bin/luau tests/test_for_lowering.luau` — validates the `for`-loop lowering
+  formulas (`structure.py lower_fors`) against real Luau over random cases.

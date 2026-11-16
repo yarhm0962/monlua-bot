@@ -653,8 +653,7 @@ async def _log_component_clicks(interaction: discord.Interaction) -> None:
 
 def runtime_status() -> tuple[bool, str]:
     suffix = ".exe" if os.name == "nt" else ""
-    required = (DEOB_DIR / "bin" / f"luau{suffix}", DEOB_DIR / "bin" / f"luau-ast{suffix}", DEOB_SCRIPT)
-    missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
+    required = (\n        DEOB_DIR / "bin" / f"luau{suffix}",\n        DEOB_DIR / "bin" / f"luau-ast{suffix}",\n        V151_DIR / "bin" / f"luau{suffix}",\n        V151_DIR / "bin" / f"luau-ast{suffix}",\n        DEOB_SCRIPT,\n    )\n    missing = [str(p) for p in required if not p.is_file() or (os.name != "nt" and not os.access(p, os.X_OK))]
     return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
@@ -1032,10 +1031,10 @@ def _tree_rss_kb(pgid: int) -> int:
     return total
 
 
-async def _run_process(args: list[str], timeout: int) -> tuple[int, bytes, bytes]:
+async def _run_process(args: list[str], timeout: int, env: Optional[dict[str, str]] = None) -> tuple[int, bytes, bytes]:
     global _active_jobs
     proc = await asyncio.create_subprocess_exec(
-        *args, cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        *args, cwd=str(DEOB_DIR), env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
     )
     try:
@@ -1351,24 +1350,26 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             await status.edit(content=f"☁️ Cloud runner unavailable ({str(exc)[:120]}). Running locally instead…")
                     if not output_path.is_file():
                         start_time = time.monotonic()
+                        process_env = None
                         if engine == "luraph_v151":
                             try:
                                 node_bin = await asyncio.to_thread(resolve_node)
                             except Exception as exc:
                                 await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
                                 return
-                            # the v15.1 tool only accepts .lua/.luau inputs: hand it a
-                            # .lua-named copy when the upload came in as .txt
                             node_input = workdir / f"{Path(filename).stem}.lua"
                             if input_path != node_input:
                                 await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                            command = [node_bin, str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15", "--max-old-space-size", "6144"]
+                            command = [node_bin, "--max-old-space-size=192", str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15"]
+                            process_env = dict(os.environ)
+                            process_env["DEOB_FAST"] = "1"
+                            process_env["DEOB_PY_CANDIDATES"] = "python:1"
                         else:
                             command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                        "--output", str(output_path), "--timeout", str(JOB_TIMEOUT)]
                         print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
                         try:
-                            returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15)
+                            returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15, env=process_env)
                         except asyncio.TimeoutError:
                             await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
                             return

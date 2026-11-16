@@ -141,6 +141,26 @@ CallInfo* luaD_growCI(lua_State* L)""",
         with open(ldo_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(dc)
 
+    # NOTE (2026-10-18): the LUAI_MAXCALLS 20000->40000 raise was REVERTED. Real
+    # Roblox Luau caps non-tail recursion at exactly 19997 (= stock LUAI_MAXCALLS
+    # 20000), and v15.1's stack-ceiling probe is a FINGERPRINT of that stock limit:
+    # a 40000 ceiling makes the sandbox recurse past 19997 where real Roblox stops,
+    # DIVERGING from the engine. It did not help (h1 self-destructs on an unrelated
+    # check regardless) and it REGRESSED scripts that probe the ceiling (sample
+    # 2153 -> 728KB garbage instead of the correct 372-byte output). Keep stock.
+    _RAISE_MAXCALLS = False
+    import re as _re
+    conf_path = os.path.join(src, "VM", "include", "luaconf.h")
+    if _RAISE_MAXCALLS and os.path.exists(conf_path):
+        with open(conf_path, encoding="utf-8") as f:
+            cf = f.read()
+        m = _re.search(r"#define\s+LUAI_MAXCALLS\s+(\d+)", cf)
+        if m and int(m.group(1)) < 40000:
+            cf = cf[:m.start()] + "#define LUAI_MAXCALLS 40000" + cf[m.end():]
+            with open(conf_path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(cf)
+            print("[+] raised LUAI_MAXCALLS %s -> 40000" % m.group(1), file=sys.stderr)
+
 
 def fetch_binary(build, exe, name):
     for cand in (os.path.join(build, "Release", exe), os.path.join(build, exe)):

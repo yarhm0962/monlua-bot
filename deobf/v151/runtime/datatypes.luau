@@ -188,7 +188,6 @@ function lib.fromMatrix(p, vx, vy, vz)
 	if not isVec(p) or not isVec(vx) or not isVec(vy) or (vz ~= nil and not isVec(vz)) then unsupported() end
 	return make(p, vx, vy, vz or vnorm(vcross(vx, vy)))
 end
-lib.identity = wrap(IDENTITY)
 
 local function components(c)
 	return c.p.x, c.p.y, c.p.z, c.x.x, c.y.x, c.z.x, c.x.y, c.y.y, c.z.y, c.x.z, c.y.z, c.z.z
@@ -345,6 +344,11 @@ CFMT.__tostring = function(self)
 	return table.concat(t, ", ")
 end
 CFMT.__metatable = "The metatable is locked"
+-- Create the identity CFrame only now: make() snapshots CFMT into each proxy's
+-- metatable, so a CFrame built before CFMT was populated (the old position of
+-- this line, up with the constructors) had an empty metatable -> tostring/index/
+-- operators silently failed on CFrame.identity. Build it after CFMT is complete.
+lib.identity = wrap(IDENTITY)
 
 -- UDim / UDim2 / Path2DControlPoint (verified against Studio: tostring,
 -- int32 offsets truncated toward zero, float32 scales, + - unary -, ==,
@@ -786,120 +790,278 @@ local CSLib = sequence("ColorSequence", "ColorSequenceKeypoint", function(a, b)
 	return { CSKLib.new(0, a), CSKLib.new(1, b) }
 end)
 
-local newRegion3
-newRegion3 = valueType("Region3", function(f, k)
-	if k == "CFrame" then return f.cf end
-	if k == "Size" then return f.sz end
-	if k == "ExpandToGrid" then
-		return function(self, res)
-			local r = VAL[self]
-			if not r then unsupported() end
-			res = f32(num(res))
-			if not (res > 0) then unsupported() end
-			local cf, sz = r.cf, r.sz
-			local hx, hy, hz = f32(sz.X * 0.5), f32(sz.Y * 0.5), f32(sz.Z * 0.5)
-			local mnx, mny, mnz = f32(cf.X - hx), f32(cf.Y - hy), f32(cf.Z - hz)
-			local mxx, mxy, mxz = f32(cf.X + hx), f32(cf.Y + hy), f32(cf.Z + hz)
-			local gmn = vec(math.floor(mnx / res) * res, math.floor(mny / res) * res, math.floor(mnz / res) * res)
-			local gmx = vec(math.ceil(mxx / res) * res, math.ceil(mxy / res) * res, math.ceil(mxz / res) * res)
-			return newRegion3({
-				cf = lib.new(f32((gmn.X + gmx.X) * 0.5), f32((gmn.Y + gmx.Y) * 0.5), f32((gmn.Z + gmx.Z) * 0.5)),
-				sz = vec(gmx.X - gmn.X, gmx.Y - gmn.Y, gmx.Z - gmn.Z),
-			})
-		end
-	end
-	return nil
-end, {
-	__eq = function(a, b)
-		return TYPE[a] == "Region3" and TYPE[b] == "Region3" and VAL[a].cf == VAL[b].cf and VAL[a].sz == VAL[b].sz
-	end,
-	__tostring = function(a)
-		local r = VAL[a]
-		return tostring(r.cf) .. "; " .. tostring(r.sz)
-	end,
-})
-local R3Lib = {
-	new = function(mn, mx)
-		mn, mx = vecArg(mn), vecArg(mx)
-		return newRegion3({
-			cf = lib.new(f32((mn.X + mx.X) * 0.5), f32((mn.Y + mx.Y) * 0.5), f32((mn.Z + mx.Z) * 0.5)),
-			sz = vec(mx.X - mn.X, mx.Y - mn.Y, mx.Z - mn.Z),
-		})
-	end,
-}
-
-local newPP = valueType("PhysicalProperties", function(f, k)
-	if k == "Density" then return f.d end
-	if k == "Friction" then return f.fr end
-	if k == "Elasticity" then return f.el end
-	if k == "FrictionWeight" then return f.fw end
-	if k == "ElasticityWeight" then return f.ew end
-	return nil
-end, {
-	__eq = function(a, b)
-		if TYPE[a] ~= "PhysicalProperties" or TYPE[b] ~= "PhysicalProperties" then return false end
-		local x, y = VAL[a], VAL[b]
-		return x.d == y.d and x.fr == y.fr and x.el == y.el and x.fw == y.fw and x.ew == y.ew
-	end,
-	__tostring = function(a)
-		local x = VAL[a]
-		return string.format("%g, %g, %g, %g, %g", x.d, x.fr, x.el, x.fw, x.ew)
-	end,
-})
-local PPLib = {
-	new = function(d, fr, el, fw, ew)
-		if type(d) ~= "number" then unsupported() end
-		return newPP({
-			d = f32(num(d)),
-			fr = f32(num(fr or 0.3)),
-			el = f32(num(el or 0.5)),
-			fw = f32(num(fw == nil and 1 or fw)),
-			ew = f32(num(ew == nil and 1 or ew)),
-		})
-	end,
-}
-
-local newTI = valueType("TweenInfo", function(f, k)
-	if k == "Time" then return f.t end
-	if k == "EasingStyle" then return f.es end
-	if k == "EasingDirection" then return f.ed end
-	if k == "RepeatCount" then return f.rc end
-	if k == "Reverses" then return f.rev end
-	if k == "DelayTime" then return f.dt end
-	return nil
-end, {
-	__eq = function(a, b)
-		if TYPE[a] ~= "TweenInfo" or TYPE[b] ~= "TweenInfo" then return false end
-		local x, y = VAL[a], VAL[b]
-		return x.t == y.t and x.es == y.es and x.ed == y.ed and x.rc == y.rc and x.rev == y.rev and x.dt == y.dt
-	end,
-	__tostring = function(a)
-		local x = VAL[a]
-		return string.format("Time:%g DelayTime:%g RepeatCount:%d Reverses:%s EasingDirection:%s EasingStyle:%s",
-			x.t, x.dt, x.rc, tostring(x.rev), tostring(x.ed), tostring(x.es))
-	end,
-})
-local TILib = {
-	new = function(t, es, ed, rc, rev, dt)
-		return newTI({
-			t = f32(t == nil and 1 or num(t)),
-			es = es,
-			ed = ed,
-			rc = math.floor(rc == nil and 0 or num(rc)),
-			rev = not not rev,
-			dt = f32(dt == nil and 0 or num(dt)),
-		})
-	end,
-}
-
 -- typeof() ignores __type on newproxy userdata: envlog asks here instead
 local function typeOf(v)
 	if CF[v] then return "CFrame" end
 	return TYPE[v]
 end
 
+local BC_PALETTE = {
+	[1]={"White",242,243,243},
+	[2]={"Grey",161,165,162},
+	[3]={"Light yellow",249,233,153},
+	[5]={"Brick yellow",215,197,154},
+	[6]={"Light green (Mint)",194,218,184},
+	[9]={"Light reddish violet",232,186,200},
+	[11]={"Pastel Blue",128,187,219},
+	[12]={"Light orange brown",203,132,66},
+	[18]={"Nougat",204,142,105},
+	[21]={"Bright red",196,40,28},
+	[22]={"Med. reddish violet",196,112,160},
+	[23]={"Bright blue",13,105,172},
+	[24]={"Bright yellow",245,205,48},
+	[25]={"Earth orange",98,71,50},
+	[26]={"Black",27,42,53},
+	[27]={"Dark grey",109,110,108},
+	[28]={"Dark green",40,127,71},
+	[29]={"Medium green",161,196,140},
+	[36]={"Lig. Yellowich orange",243,207,155},
+	[37]={"Bright green",75,151,75},
+	[38]={"Dark orange",160,95,53},
+	[39]={"Light bluish violet",193,202,222},
+	[40]={"Transparent",236,236,236},
+	[41]={"Tr. Red",205,84,75},
+	[42]={"Tr. Lg blue",193,223,240},
+	[43]={"Tr. Blue",123,182,232},
+	[44]={"Tr. Yellow",247,241,141},
+	[45]={"Light blue",180,210,228},
+	[47]={"Tr. Flu. Reddish orange",217,133,108},
+	[48]={"Tr. Green",132,182,141},
+	[49]={"Tr. Flu. Green",248,241,132},
+	[50]={"Phosph. White",236,232,222},
+	[100]={"Light red",238,196,182},
+	[101]={"Medium red",218,134,122},
+	[102]={"Medium blue",110,153,202},
+	[103]={"Light grey",199,193,183},
+	[104]={"Bright violet",107,50,124},
+	[105]={"Br. yellowish orange",226,155,64},
+	[106]={"Bright orange",218,133,65},
+	[107]={"Bright bluish green",0,143,156},
+	[108]={"Earth yellow",104,92,67},
+	[110]={"Bright bluish violet",67,84,147},
+	[111]={"Tr. Brown",191,183,177},
+	[112]={"Medium bluish violet",104,116,172},
+	[113]={"Tr. Medi. reddish violet",229,173,200},
+	[115]={"Med. yellowish green",199,210,60},
+	[116]={"Med. bluish green",85,165,175},
+	[118]={"Light bluish green",183,215,213},
+	[119]={"Br. yellowish green",164,189,71},
+	[120]={"Lig. yellowish green",217,228,167},
+	[121]={"Med. yellowish orange",231,172,88},
+	[123]={"Br. reddish orange",211,111,76},
+	[124]={"Bright reddish violet",146,57,120},
+	[125]={"Light orange",234,184,146},
+	[126]={"Tr. Bright bluish violet",165,165,203},
+	[127]={"Gold",220,188,129},
+	[128]={"Dark nougat",174,122,89},
+	[131]={"Silver",156,163,168},
+	[133]={"Neon orange",213,115,61},
+	[134]={"Neon green",216,221,86},
+	[135]={"Sand blue",116,134,157},
+	[136]={"Sand violet",135,124,144},
+	[137]={"Medium orange",224,152,100},
+	[138]={"Sand yellow",149,138,115},
+	[140]={"Earth blue",32,58,86},
+	[141]={"Earth green",39,70,45},
+	[143]={"Tr. Flu. Blue",207,226,247},
+	[145]={"Sand blue metallic",121,136,161},
+	[146]={"Sand violet metallic",149,142,163},
+	[147]={"Sand yellow metallic",147,135,103},
+	[148]={"Dark grey metallic",87,88,87},
+	[149]={"Black metallic",22,29,50},
+	[150]={"Light grey metallic",171,173,172},
+	[151]={"Sand green",120,144,130},
+	[153]={"Sand red",149,121,119},
+	[154]={"Dark red",123,46,47},
+	[157]={"Tr. Flu. Yellow",255,246,123},
+	[158]={"Tr. Flu. Red",225,164,194},
+	[168]={"Gun metallic",117,108,98},
+	[176]={"Red flip/flop",151,105,91},
+	[178]={"Yellow flip/flop",180,132,85},
+	[179]={"Silver flip/flop",137,135,136},
+	[180]={"Curry",215,169,75},
+	[190]={"Fire Yellow",249,214,46},
+	[191]={"Flame yellowish orange",232,171,45},
+	[192]={"Reddish brown",105,64,40},
+	[193]={"Flame reddish orange",207,96,36},
+	[194]={"Medium stone grey",163,162,165},
+	[195]={"Royal blue",70,103,164},
+	[196]={"Dark Royal blue",35,71,139},
+	[198]={"Bright reddish lilac",142,66,133},
+	[199]={"Dark stone grey",99,95,98},
+	[200]={"Lemon metalic",130,138,93},
+	[208]={"Light stone grey",229,228,223},
+	[209]={"Dark Curry",176,142,68},
+	[210]={"Faded green",112,149,120},
+	[211]={"Turquoise",121,181,181},
+	[212]={"Light Royal blue",159,195,233},
+	[213]={"Medium Royal blue",108,129,183},
+	[216]={"Rust",144,76,42},
+	[217]={"Brown",124,92,70},
+	[218]={"Reddish lilac",150,112,159},
+	[219]={"Lilac",107,98,155},
+	[220]={"Light lilac",167,169,206},
+	[221]={"Bright purple",205,98,152},
+	[222]={"Light purple",228,173,200},
+	[223]={"Light pink",220,144,149},
+	[224]={"Light brick yellow",240,213,160},
+	[225]={"Warm yellowish orange",235,184,127},
+	[226]={"Cool yellow",253,234,141},
+	[232]={"Dove blue",125,187,221},
+	[268]={"Medium lilac",52,43,117},
+	[301]={"Slime green",80,109,84},
+	[302]={"Smoky grey",91,93,105},
+	[303]={"Dark blue",0,16,176},
+	[304]={"Parsley green",44,101,29},
+	[305]={"Steel blue",82,124,174},
+	[306]={"Storm blue",51,88,130},
+	[307]={"Lapis",16,42,220},
+	[308]={"Dark indigo",61,21,133},
+	[309]={"Sea green",52,142,64},
+	[310]={"Shamrock",91,154,76},
+	[311]={"Fossil",159,161,172},
+	[312]={"Mulberry",89,34,89},
+	[313]={"Forest green",31,128,29},
+	[314]={"Cadet blue",159,173,192},
+	[315]={"Electric blue",9,137,207},
+	[316]={"Eggplant",123,0,123},
+	[317]={"Moss",124,156,107},
+	[318]={"Artichoke",138,171,133},
+	[319]={"Sage green",185,196,177},
+	[320]={"Ghost grey",202,203,209},
+	[321]={"Lilac",167,94,155},
+	[322]={"Plum",123,47,123},
+	[323]={"Olivine",148,190,129},
+	[324]={"Laurel green",168,189,153},
+	[325]={"Quill grey",223,223,222},
+	[327]={"Crimson",151,0,0},
+	[328]={"Mint",177,229,166},
+	[329]={"Baby blue",152,194,219},
+	[330]={"Carnation pink",255,152,220},
+	[331]={"Persimmon",255,89,89},
+	[332]={"Maroon",117,0,0},
+	[333]={"Gold",239,184,56},
+	[334]={"Daisy orange",248,217,109},
+	[335]={"Pearl",231,231,236},
+	[336]={"Fog",199,212,228},
+	[337]={"Salmon",255,148,148},
+	[338]={"Terra Cotta",190,104,98},
+	[339]={"Cocoa",86,36,36},
+	[340]={"Wheat",241,231,199},
+	[341]={"Buttermilk",254,243,187},
+	[342]={"Mauve",224,178,208},
+	[343]={"Sunrise",212,144,189},
+	[344]={"Tawny",150,85,85},
+	[345]={"Rust",143,76,42},
+	[346]={"Cashmere",211,190,150},
+	[347]={"Khaki",226,220,188},
+	[348]={"Lily white",237,234,234},
+	[349]={"Seashell",233,218,218},
+	[350]={"Burgundy",136,62,62},
+	[351]={"Cork",188,155,93},
+	[352]={"Burlap",199,172,120},
+	[353]={"Beige",202,191,163},
+	[354]={"Oyster",187,179,178},
+	[355]={"Pine Cone",108,88,75},
+	[356]={"Fawn brown",160,132,79},
+	[357]={"Hurricane grey",149,137,136},
+	[358]={"Cloudy grey",171,168,158},
+	[359]={"Linen",175,148,131},
+	[360]={"Copper",150,103,102},
+	[361]={"Medium brown",86,66,54},
+	[362]={"Bronze",126,104,63},
+	[363]={"Flint",105,102,92},
+	[364]={"Dark taupe",90,76,66},
+	[365]={"Burnt Sienna",106,57,9},
+	[1001]={"Institutional white",248,248,248},
+	[1002]={"Mid gray",205,205,205},
+	[1003]={"Really black",17,17,17},
+	[1004]={"Really red",255,0,0},
+	[1005]={"Deep orange",255,176,0},
+	[1006]={"Alder",180,128,255},
+	[1007]={"Dusty Rose",163,75,75},
+	[1008]={"Olive",193,190,66},
+	[1009]={"New Yeller",255,255,0},
+	[1010]={"Really blue",0,0,255},
+	[1011]={"Navy blue",0,32,96},
+	[1012]={"Deep blue",33,84,185},
+	[1013]={"Cyan",4,175,236},
+	[1014]={"CGA brown",170,85,0},
+	[1015]={"Magenta",170,0,170},
+	[1016]={"Pink",255,102,204},
+	[1017]={"Deep orange",255,175,0},
+	[1018]={"Teal",18,238,212},
+	[1019]={"Toothpaste",0,255,255},
+	[1020]={"Lime green",0,255,0},
+	[1021]={"Camo",58,125,21},
+	[1022]={"Grime",127,142,100},
+	[1023]={"Lavender",140,91,159},
+	[1024]={"Pastel light blue",175,221,255},
+	[1025]={"Pastel orange",255,201,201},
+	[1026]={"Pastel violet",177,167,255},
+	[1027]={"Pastel blue-green",159,243,233},
+	[1028]={"Pastel green",204,255,204},
+	[1029]={"Pastel yellow",255,255,204},
+	[1030]={"Pastel brown",255,204,153},
+	[1031]={"Royal purple",98,37,209},
+	[1032]={"Hot pink",255,0,191},
+}
+local BC_BYNAME = {}
+for __n, __e in BC_PALETTE do if BC_BYNAME[__e[1]] == nil then BC_BYNAME[__e[1]] = __n end end
+local newBC
+newBC = valueType("BrickColor", function(f, k)
+	if k == "Number" then return f.n end
+	if k == "Name" then return f.name end
+	if k == "Color" then return c3(f.r / 255, f.g / 255, f.b / 255) end
+	if k == "r" then return f32(f.r / 255) end
+	if k == "g" then return f32(f.g / 255) end
+	if k == "b" then return f32(f.b / 255) end
+	return nil
+end, {
+	__eq = function(a, b) return TYPE[a] == TYPE[b] and VAL[a].n == VAL[b].n end,
+	__tostring = function(a) return VAL[a].name end,
+})
+local function bcNum(n)
+	local e = BC_PALETTE[n]
+	if not e then n = 194; e = BC_PALETTE[194] end
+	return newBC({ n = n, name = e[1], r = e[2], g = e[3], b = e[4] })
+end
+local function bcName(nm)
+	local n = BC_BYNAME[nm]
+	if not n then return bcNum(194) end
+	return bcNum(n)
+end
+local function bcRGB(r, g_, b)
+	r, g_, b = num(r) * 255, num(g_) * 255, num(b) * 255
+	local best, bestd
+	for n, e in BC_PALETTE do
+		local dr, dg, db = e[2] - r, e[3] - g_, e[4] - b
+		local d = dr * dr + dg * dg + db * db
+		if not bestd or d < bestd or (d == bestd and n < best) then bestd, best = d, n end
+	end
+	return bcNum(best)
+end
+local BCLib = {
+	new = function(a, b, c)
+		if type(a) == "string" then return bcName(a) end
+		if b ~= nil then return bcRGB(a, b, c) end
+		return bcNum(num(a))
+	end,
+	White = function() return bcNum(1) end,
+	Gray = function() return bcNum(194) end,
+	DarkGray = function() return bcNum(199) end,
+	Black = function() return bcNum(26) end,
+	Red = function() return bcNum(21) end,
+	Yellow = function() return bcNum(24) end,
+	Green = function() return bcNum(28) end,
+	Blue = function() return bcNum(23) end,
+	palette = function(i) i = num(i); local keys = {}; for n in BC_PALETTE do keys[#keys+1]=n end; table.sort(keys); local e = keys[(i % #keys) + 1]; return bcNum(e) end,
+	random = function() return bcNum(1) end,
+}
+
 return {
 	UNSUPPORTED = UNSUPPORTED,
+	BrickColor = BCLib,
 	typeOf = typeOf,
 	CFrame = lib,
 	UDim = UDimLib,
@@ -916,7 +1078,4 @@ return {
 	ColorSequenceKeypoint = CSKLib,
 	NumberSequence = NSLib,
 	ColorSequence = CSLib,
-	Region3 = R3Lib,
-	PhysicalProperties = PPLib,
-	TweenInfo = TILib,
 }

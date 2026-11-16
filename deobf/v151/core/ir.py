@@ -115,7 +115,7 @@ def _fmt_expr(e):
     if isinstance(e, ClosureExpr):
         return "closure(%r, ups=%s)" % (e.proto, [fmt_any(u) for u in e.upvals])
     if isinstance(e, GenIter):
-        return "geniter(%s)" % (fmt_multi(e.args) if e.args is not None else "")
+        return "geniter(%s)" % fmt_multi(e.args)
     if isinstance(e, S.NewTable):
         return "{}"
     if isinstance(e, Missing):

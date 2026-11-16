@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import threading
 
@@ -67,12 +68,53 @@ def lower(entry_key, order, D, link, prefix, upnames, closure):
     rend = CG.Renderer(names)
     return rend.block(body, ""), params, nerr, sr.fallbacks
 
+def paren_nil_prefix(text):
+    """An unresolved upvalue is printed as `nil`; used as a prefix expression
+    (`nil.X = v`, `nil[k]`, `nil:M()`) that is not valid Luau and makes the
+    later AST passes give up. Write `(nil)` there -- code only, never inside
+    strings or comments."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "-" and text.startswith("--", i):
+            m = re.match(r"--\[(=*)\[", text[i:])
+            if m:
+                end = text.find("]" + m.group(1) + "]", i)
+                end = n if end < 0 else end + len(m.group(1)) + 2
+            else:
+                end = text.find("\n", i)
+                end = n if end < 0 else end
+            out.append(text[i:end]); i = end; continue
+        if c in "\"'":
+            j = i + 1
+            while j < n and text[j] != c and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1]); i = j + 1; continue
+        if c == "[":
+            m = re.match(r"\[(=*)\[", text[i:])
+            if m:
+                end = text.find("]" + m.group(1) + "]", i)
+                end = n if end < 0 else end + len(m.group(1)) + 2
+                out.append(text[i:end]); i = end; continue
+        if c == "n" and text.startswith("nil", i) and \
+                (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_.:)]}")) and \
+                re.match(r"nil\s*[.\[:](?![.])", text[i:]) and \
+                not (i + 3 < n and (text[i + 3].isalnum() or text[i + 3] == "_")):
+            # `(nil)` at a statement start is ambiguous after a call and `;` is not
+            # allowed right after then/else/do: name it instead. Reads as what it is
+            # and fails the same way at runtime (indexing a nil global).
+            out.append("__unresolved_upvalue")
+            i += 3; continue
+        out.append(c); i += 1
+    return "".join(out)
+
 def polish(text):
     """Whole-program text passes: local names from use (names.py, unless
     DEVIRT_NO_NAMES), `local function` (localfuncs.py). Each is skipped
     with a warning if it fails."""
     import codegen
-    text = text.replace(codegen.LONG_NL, "\n")     
+    text = text.replace(codegen.LONG_NL, "\n")
+    text = paren_nil_prefix(text)
     if not os.environ.get("DEVIRT_NO_NAMES"):
         import names
         try:

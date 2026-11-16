@@ -12,7 +12,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -20,9 +20,29 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: Install bot dependencies
         run: python -m pip install -r requirements.txt
-      - name: Compile changed Python modules
-        run: python -m compileall -q bot.py deobf/obfuscators deobf/moonveil
-      - name: Run regression tests
+      - name: Prepare shared Luraph runtime links
+        run: |
+          mkdir -p deobf/v151/bin
+          ln -sf ../../bin/luau deobf/v151/bin/luau
+          ln -sf ../../bin/luau-ast deobf/v151/bin/luau-ast
+          chmod +x deobf/bin/luau deobf/bin/luau-ast
+      - name: Compile Python modules
+        run: python -m compileall -q bot.py deobf/obfuscators deobf/moonveil deobf/v151/core
+      - name: Check Luraph Node.js modules
+        run: |
+          node --check deobf/v151/deob.js
+          for file in deobf/v151/src/*.js; do node --check "$file"; done
+      - name: Run bot regression tests
         run: python -m unittest discover -s tests -v
+      - name: Validate Luraph runtime models
+        run: |
+          python deobf/v151/tests/test_datatypes.py
+          deobf/v151/bin/luau deobf/v151/tests/test_for_lowering.luau
+      - name: Run Luraph v15.1 sample regression
+        run: python deobf/v151/tests/run_samples.py

@@ -80,8 +80,7 @@ def _fix_int(v):
 def find_dispatchers(root):
     """while true do local op = ARR[PC]; if-tree ... end -- and the
     repeat...until false form. The fetch head may be parenthesized
-    (`local y=(V[W])`), use a multi-variable local (`local TJ,H=q,w[s]`),
-    or follow a PC-save statement (`d[2349588]=s; local o=w[s]`).
+    (`local y=(V[W])`): an AstExprGroup the AST keeps around the index.
     Also supports the Luraph v15.1 bool-local dispatch tree:
     `local op = ARR[PC]; local b = op <cmp> K; if b then ...`"""
     found = []
@@ -91,44 +90,33 @@ def find_dispatchers(root):
         if loop is None:
             return
         body, form = loop
-        if len(body) < 2:
+        if len(body) < 2 or body[0]["type"] not in ("AstStatLocal", "AstStatAssign"):
             return
-        for idx in (0, 1):
-            if idx >= len(body) - 1:
-                break
-            st = body[idx]
-            if st["type"] not in ("AstStatLocal", "AstStatAssign"):
-                continue
-            vars_ = st.get("vars") or []
-            vals = st.get("values") or []
-            matched = False
-            for vr, vl in zip(vars_, vals):
-                v = _unwrap(vl)
-                if v.get("type") != "AstExprIndexExpr":
-                    continue
-                arr, pc = local_name(_unwrap(v["expr"])), local_name(_unwrap(v["index"]))
-                if not arr or not pc:
-                    continue
-                opname = vr["name"] if st["type"] == "AstStatLocal" else local_name(vr)
-                if not opname:
-                    continue
-                nxt_i = idx + 1
-                if nxt_i < len(body) and body[nxt_i]["type"] == "AstStatIf":
-                    found.append({"node": n, "op": opname, "arr": arr, "pc": pc, "tree": body[nxt_i],
-                                  "rest": body[nxt_i + 1:], "form": form})
-                    matched = True
-                    break
-                elif nxt_i + 1 < len(body) and body[nxt_i]["type"] in ("AstStatLocal", "AstStatAssign") and body[nxt_i + 1]["type"] == "AstStatIf":
-                    st1 = body[nxt_i]
-                    if len(st1.get("values") or []) == 1:
-                        v1 = _unwrap(st1["values"][0])
-                        if v1.get("type") == "AstExprBinary" and v1.get("op") in OPS:
-                            found.append({"node": n, "op": opname, "arr": arr, "pc": pc, "tree": n["body"],
-                                          "rest": body[nxt_i + 2:], "form": form})
-                            matched = True
-                            break
-            if matched:
-                break
+        st = body[0]
+        if len(st["values"]) != 1:
+            return
+        if st["type"] == "AstStatLocal":
+            opname = st["vars"][0]["name"]
+        else:
+            opname = local_name(st["vars"][0])
+            if not opname:
+                return
+        v = _unwrap(st["values"][0])
+        if v["type"] != "AstExprIndexExpr":
+            return
+        arr, pc = local_name(_unwrap(v["expr"])), local_name(_unwrap(v["index"]))
+        if not arr or not pc:
+            return
+        if body[1]["type"] == "AstStatIf":
+            found.append({"node": n, "op": opname, "arr": arr, "pc": pc, "tree": body[1],
+                          "rest": body[2:], "form": form})
+        elif len(body) >= 3 and body[1]["type"] in ("AstStatLocal", "AstStatAssign") and body[2]["type"] == "AstStatIf":
+            st1 = body[1]
+            if len(st1.get("values") or []) == 1:
+                v1 = _unwrap(st1["values"][0])
+                if v1.get("type") == "AstExprBinary" and v1.get("op") in OPS:
+                    found.append({"node": n, "op": opname, "arr": arr, "pc": pc, "tree": n["body"],
+                                  "rest": body[3:], "form": form})
 
     walk(root, visit)
     return found
@@ -505,9 +493,6 @@ def _maker_params(maker):
                     and n["index"].get("type") == "AstExprConstantNumber":
                 k = n["expr"]["local"]["location"]
                 kcounts[k] = kcounts.get(k, 0) + 1
-                ak = resolve(k)
-                if ak is not k:
-                    kcounts[ak] = kcounts.get(ak, 0) + 1
             for v in n.values():
                 visit(v)
         elif isinstance(n, list):
@@ -530,7 +515,7 @@ def _maker_params(maker):
             if kc:
                 pi = max(kc, key=lambda i: kcounts[args[i]["location"]])
     others = sorted(i for i in visible.values() if i not in (0, pi) and args[i]["location"] in used)
-    ui = others[0] if others else (pi - 1 if pi + 1 >= len(args) and pi > 1 else pi + 1)
+    ui = others[0] if others else pi + 1
     return pi, ui
 
 def ctor_assignments(root):

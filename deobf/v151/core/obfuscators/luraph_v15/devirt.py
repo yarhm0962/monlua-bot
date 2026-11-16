@@ -1,7 +1,5 @@
 from collections import deque
 import gzip
-import hashlib
-import hmac
 import json
 import os
 import re
@@ -71,7 +69,6 @@ class Dump:
 
         self.overrides = {path: self.val(v) for path, v in d.get("overrides", [])}
         self.pid_of_table = {int(k): v for k, v in d["pid_of_table"].items()}
-        self.proto_arg1 = {int(k): v for k, v in (d.get("proto_arg1") or {}).items()}
         self.protos = {}
         for key, cap in d["protos"].items():
             self.protos[key] = {k: self.val(v) for k, v in cap.items()}
@@ -202,14 +199,6 @@ class Dump:
         harness session does not have yet: (bytes, table entries)."""
         paths = self.paths()
         bw, tw = {}, {}
-        fbw = getattr(self, "_fast_bw_delta", None)
-        if fbw:
-            bw.update(fbw)
-            fbw.clear()
-        ftw = getattr(self, "_fast_tw_delta", None)
-        if ftw:
-            tw.update(ftw)
-            ftw.clear()
         for d in (self.extra_patches[0], self.extra_patches[1]):
             for k in d.take():
                 if k in d:
@@ -227,8 +216,7 @@ class Dump:
         for d in (bw, tw):
             for k in [k for k, v in d.items() if self._sent.get(k, d) == v]:
                 del d[k]
-            if len(self._sent) < 50000:
-                self._sent.update(d)
+            self._sent.update(d)
         return bw, tw
 
     def _extend_paths(self, root, path):
@@ -277,12 +265,6 @@ class Dump:
         for lt in self.lazy:
             t = self.tables[lt]
             k0 = t.h.get(0)
-            if not isinstance(k0, LTable):
-                for nk in (-1, -2, -3, -4):
-                    cand = t.h.get(nk)
-                    if isinstance(cand, LTable) and any(isinstance(ck, int) and ck >= 1 for ck in cand.h):
-                        k0 = cand
-                        break
             if not isinstance(k0, LTable):
                 continue
             for k, v in t.h.items():
@@ -437,6 +419,7 @@ def iter_nodes(n):
         curr = pop()
         if type(curr) is dict:
             yield curr
+            # list(): PyPy cannot reverse some dict-values views (RPython NotImplementedError)
             for v in reversed(list(curr.values())):
                 t = type(v)
                 if t is dict or t is list:
@@ -458,30 +441,20 @@ class VMModel:
         body = self.vm["body"]["body"]
 
         self.tcall_idx = None
-        self.tstat_nested = False
-        self.inner = self.vm
         for i, st in enumerate(body):
             if st["type"] == "AstStatLocal" and len(st["values"]) == 1 \
                     and st["values"][0]["type"] == "AstExprCall":
-                call = st["values"][0]
-                depth = 0
-                while call and call.get("type") == "AstExprCall" and call.get("args"):
-                    a0 = call["args"][0]
-                    if a0.get("type") == "AstExprFunction" and \
-                            any(id(n) in self.dispatch for n in iter_nodes(a0)):
-                        self.tcall_idx = i
-                        self.inner = a0
-                        self.tstat_nested = (depth > 0)
-                        break
-                    call = a0 if a0.get("type") == "AstExprCall" else None
-                    depth += 1
-                if self.tcall_idx is not None:
+                args = st["values"][0]["args"]
+                if args and args[0]["type"] == "AstExprFunction" and \
+                        any(id(n) in self.dispatch for n in iter_nodes(args[0])):
+                    self.tcall_idx = i
                     break
         if self.tcall_idx is not None:
 
             self.prologue = body[:self.tcall_idx]
             self.tstat = body[self.tcall_idx]
             self.post = body[self.tcall_idx + 1:]
+            self.inner = self.tstat["values"][0]["args"][0]
         else:
 
             self.prologue = []
@@ -494,19 +467,7 @@ class VMModel:
     def _find_state_vars(self):
         """Loop-state stack K (K={...,[x]=K}), the values saved in it
         (pseudo for-loop variables) and the open-upvalue list (sink)."""
-        vm_decls = {**vmmap._decls_in(self.vm), **vmmap._decls_in(self.inner)}
-        top_decls = set()
-        for fn_node in (self.vm, self.inner):
-            for a in fn_node.get("args", ()):
-                if a.get("location"):
-                    top_decls.add(a["location"])
-            for st in fn_node.get("body", {}).get("body", ()):
-                if self.is_dispatch(st):
-                    continue
-                if st.get("type") == "AstStatLocal":
-                    for vr in st.get("vars", ()):
-                        if vr.get("location"):
-                            top_decls.add(vr["location"])
+        vm_decls = vmmap._decls_in(self.vm)
         self.special = {}
         self.kstack_key = None
         self.kstack_link = None
@@ -517,7 +478,7 @@ class VMModel:
         table_assigns = []
         local_copies = []
 
-        for n in iter_nodes(self.vm):
+        for n in iter_nodes(self.inner):
             t = n.get("type")
             if t == "AstStatAssign":
                 vars_, vals_ = n["vars"], n["values"]
@@ -544,8 +505,6 @@ class VMModel:
                 vals_ = n["values"]
                 if len(vals_) >= 2 and vals_[1]["type"] == "AstExprLocal":
                     iterated.add(vals_[1]["local"]["location"])
-                elif len(vals_) == 1 and vals_[0]["type"] == "AstExprLocal":
-                    iterated.add(vals_[0]["local"]["location"])
 
         for me, items in table_assigns:
             link = None
@@ -569,13 +528,12 @@ class VMModel:
                 for loc in saved:
                     self.special[loc["location"]] = ("pseudo", loc["name"])
 
-        sink_cands = iterated & cleared
         for var_loc, val_loc in local_copies:
-            if val_loc in top_decls and val_loc not in self.special and var_loc in sink_cands:
+            if val_loc not in self.special and var_loc in iterated:
                 self.special[val_loc] = "sink"
 
-        for loc in sink_cands:
-            if loc in top_decls and loc not in self.special:
+        for loc in iterated & cleared:
+            if loc in vm_decls and loc not in self.special:
                 self.special[loc] = "sink"
 
     def is_dispatch(self, node):
@@ -617,6 +575,8 @@ class VMModel:
                 v = cap.get(c0["args"][0]["name"])
                 if v is not None:
                     return v
+        if not self.maker.get("args"):   # dispatch-local VMs: maker takes no args
+            return None
         return cap.get(self.maker["args"][0]["name"])
 
 def find_ctor_funcs(root):
@@ -708,8 +668,7 @@ def _hv(v):
     return id(v)
 
 def _pack_sig(l):
-    sig = re.sub(r"\d+_\d+_", "_", fmt_expr(l))
-    return "%s@%d" % (sig, l.nkey) if isinstance(getattr(l, "nkey", None), int) else sig
+    return re.sub(r"\d+_\d+_", "_", fmt_expr(l))
 
 class State:
     """(mode, pc, loop-stack, known jump-register values, array overlay) at an
@@ -898,8 +857,7 @@ class ProtoLifter:
 
     def state_packs(self):
         """The unread packs carried into the next state."""
-        return tuple(sorted(((r, l) for r, l in self.packs.items()
-                             if (r not in self.pack_read or isinstance(l.tail, VarargTail))
+        return tuple(sorted(((r, l) for r, l in self.packs.items() if r not in self.pack_read
                              and (r, _pack_sig(l)) not in self.pack_unstable), key=lambda kv: kv[0]))
 
     def is_dispatch(self, node):
@@ -938,32 +896,16 @@ class ProtoLifter:
             return IfExp(self._fix_war_expr(e.c), self._fix_war_expr(e.a), self._fix_war_expr(e.b))
         return e
 
-    def _resolve_jval(self, v, _max_idx=None):
+    def _resolve_jval(self, v):
         if isinstance(v, Const) and isinstance(v.v, int) and not isinstance(v.v, bool):
             return v.v
-        if isinstance(v, (Upval, Vararg)):
-            k = ("up", v.idx) if isinstance(v, Upval) else ("vararg", v.i)
-            for d in (getattr(self, "cur_facts", None), getattr(self, "init_facts", None)):
-                if isinstance(d, dict):
-                    f = d.get(k)
-                    if f and f[0] == "c" and isinstance(f[1], int) and not isinstance(f[1], bool):
-                        return f[1]
-            return None
         if isinstance(v, Reg):
-            end = len(self.out) if _max_idx is None else _max_idx
-            for i in range(end - 1, -1, -1):
-                prev = self.out[i]
+            for prev in reversed(self.out):
                 if isinstance(prev, Assign) and isinstance(prev.target, Reg) and prev.target.n == v.n:
-                    return self._resolve_jval(prev.value, i)
-            ijv = getattr(self, "init_jvals", self.jvals)
-            if v.n in ijv and isinstance(ijv[v.n], int) and not isinstance(ijv[v.n], bool):
-                return ijv[v.n]
-            if v.n not in self.jump_regs:
-                cf = getattr(self, "cur_facts", None)
-                if isinstance(cf, dict):
-                    f = cf.get(v.n)
-                    if f and f[0] == "c" and isinstance(f[1], int) and not isinstance(f[1], bool):
-                        return f[1]
+                    return self._resolve_jval(prev.value)
+            f = getattr(self, "cur_facts", {}).get(v.n)
+            if isinstance(f, tuple) and f[0] == "c" and isinstance(f[1], int) and not isinstance(f[1], bool):
+                return f[1]
         return None
 
     def emit(self, st):
@@ -979,18 +921,10 @@ class ProtoLifter:
             if old is not None and st.target.n not in self.pack_read:
                 self.pack_killed.add((st.target.n, _pack_sig(old)))
             self.pack_copies.pop(st.target.n, None)
-            self.pack_read.discard(st.target.n)
-            pt = getattr(self, "pending_tail", None)
-            if pt is not None and isinstance(st.value, Bin):
-                self.pending_tail = None
-                self.packs[st.target.n] = SymList([], pt[1], nkey=pt[0])
-                return
             if isinstance(st.value, SymList):
                 self.packs[st.target.n] = st.value
-                if isinstance(st.value.nkey, int):
-                    return
         if isinstance(st, Assign) and isinstance(st.target, Reg) and (
-                self.jvals.get(st.target.n) is FRAME or isinstance(self.jvals.get(st.target.n), (OpaqueFn, LTable))):
+                self.jvals.get(st.target.n) is FRAME or isinstance(self.jvals.get(st.target.n), OpaqueFn)):
             del self.jvals[st.target.n]
         if isinstance(st, Assign) and isinstance(st.target, Reg):
             jv0 = self._resolve_jval(st.value)
@@ -1274,9 +1208,24 @@ class ProtoLifter:
             n = self.dump.shared.setdefault(v.lfid, len(self.dump.shared) + 1)
             return SharedFn(v, n)
         if isinstance(v, Buf):
-
+            data = bytes(v.data)
+            # A huge inlined buffer is the obfuscator's still-ENCRYPTED payload: it
+            # only appears when the real code never decrypted (a game-locked script
+            # run without the right game.GameId, so the loader is lifted instead of
+            # the payload). Emitting its megabytes of \xNN escapes doubles the file
+            # and is useless; leave a short placeholder that says what it is.
+            # 512 KB: an encrypted payload is the whole script's bytecode (MBs);
+            # a genuine inlined data buffer in real code is far smaller, so this
+            # never clips legitimate data.
+            cap = int(os.environ.get("DEOB_MAX_BUF", "524288"))
+            if len(data) > cap:
+                return Opaque("buffer",
+                    "buffer.create(%d) --[[ %d bytes of encrypted Luraph payload, NOT decrypted. "
+                    "This script is game-locked: its payload key mixes game.GameId, so re-run passing "
+                    "the real id (--cfg-json '{\"__superz_game_id\":N,\"__superz_place_id\":M}'). ]]"
+                    % (len(data), len(data)))
             t = self.new_temp()
-            self.emit(CallStmt(t, Global("buffer.fromstring"), Multi([Const(bytes(v.data))])))
+            self.emit(CallStmt(t, Global("buffer.fromstring"), Multi([Const(data)])))
             return TempVal(t, 1)
         if isinstance(v, Builtin) and v.fn is None:
 
@@ -1504,14 +1453,6 @@ class ProtoLifter:
                     and key.key.obj == key.obj and isinstance(key.key.key, Const):
 
                 return RuntimeMaker()
-            if is_sym(key) and id(obj) in self.proto_arrays:
-                rk = self._resolve_jval(key)
-                if rk is not None:
-                    key = rk
-                else:
-                    for r in expr_regs(key):
-                        if isinstance(r.n, int) and r.n not in self.jump_regs:
-                            self.need_jump_regs.add(r.n)
             if is_sym(key):
                 if self.walk_only and any(isinstance(x, Missing) for x in walk_expr(key)):
 
@@ -1528,18 +1469,10 @@ class ProtoLifter:
             if obj.tid in self.dump.lazy and isinstance(key, int) and self.ov_base is not None:
 
                 k0 = obj.get(0)
-                if not isinstance(k0, LTable):
-                    for nk in (-1, -2, -3, -4):
-                        cand = obj.get(nk)
-                        if isinstance(cand, LTable) and id(cand) in self.proto_arrays:
-                            k0 = cand
-                            break
                 if isinstance(k0, LTable):
                     base = k0.get(key)
                     cur = self.cur_ov().get((id(k0), key), base)
                     if _differs(cur, base):
-                        if not self._can_decode_const(obj, cur):
-                            return Missing(key)
                         path = self.dump.paths().get(obj.tid)
                         if path is None:
                             self.dump.miss("override without path")
@@ -1557,7 +1490,7 @@ class ProtoLifter:
 
                         self.dump.miss("override failed" if rq in self.dump.overrides else "override requested")
                         return Missing(key)
-            if v is None and obj.tid in self.dump.lazy and obj is not self.vmobj and isinstance(key, (int, bytes)):
+            if v is None and obj.tid in self.dump.lazy and isinstance(key, (int, bytes)):
                 path = self.dump.paths().get(obj.tid)
                 k = key.decode("latin-1") if isinstance(key, bytes) else key
                 if path is not None and not (isinstance(k, str) and (k.isdigit() or "," in k or ";" in k)):
@@ -1566,15 +1499,7 @@ class ProtoLifter:
 
                         return self.dump.overrides[rq]
                     k0 = obj.get(0)
-                    if not isinstance(k0, LTable):
-                        for nk in (-1, -2, -3, -4):
-                            cand = obj.get(nk)
-                            if isinstance(cand, LTable) and id(cand) in self.proto_arrays:
-                                k0 = cand
-                                break
-                    op = (self.cur_ov().get((id(k0), key), k0.get(key)) if self.ov_base is not None else k0.get(key)) if isinstance(k0, LTable) and isinstance(key, int) else None
-                    if isinstance(key, int) and not self._can_decode_const(obj, op):
-                        return Missing(key)
+                    op = k0.get(key) if isinstance(k0, LTable) and isinstance(key, int) else None
                     if type(op) in (int, float):
                         same = self.dump.same_operand("%d@%s" % (key, S.fmt_num(op)), obj.tid)
                         if same is not None:
@@ -1594,27 +1519,6 @@ class ProtoLifter:
         if obj is None:
             raise Unsupported("index nil")
         raise Unsupported("index %r" % (obj,))
-
-    def _can_decode_const(self, obj, op):
-        if not isinstance(op, (int, float)):
-            return True
-        if op < 0 or op > 1000000:
-            return False
-        for nk in (0, -1, -2, -3, -4):
-            cand = obj.get(nk)
-            if isinstance(cand, LTable):
-                b5, t6 = cand.get(5), cand.get(6)
-                b6, t7 = cand.get(6), cand.get(7)
-                b_obj, k_tab = None, None
-                if isinstance(b5, Buf) and isinstance(t6, LTable):
-                    b_obj, k_tab = b5, t6
-                elif isinstance(b6, Buf) and isinstance(t7, LTable):
-                    b_obj, k_tab = b6, t7
-                if b_obj is not None and k_tab is not None:
-                    off = self.cur_ov().get((id(k_tab), op), k_tab.get(op)) if self.ov_base is not None else k_tab.get(op)
-                    if isinstance(off, (int, float)) and (off < 0 or off >= len(b_obj.data)):
-                        return False
-        return True
 
     def symlist_get(self, lst, key):
         if key == lst.nkey or (lst.nkey is None and key == b"n"):
@@ -1647,10 +1551,6 @@ class ProtoLifter:
                 self.jread.discard(S.norm_key(key))
                 return
             if isinstance(v, OpaqueFn) and v.pf_tid is not None:
-                self.jvals[S.norm_key(key)] = v
-                self.jread.discard(S.norm_key(key))
-                return
-            if isinstance(v, LTable) and (id(v) in self.proto_arrays or (-1 in v.h and isinstance(v.h.get(9), LTable))):
                 self.jvals[S.norm_key(key)] = v
                 self.jread.discard(S.norm_key(key))
                 return
@@ -1697,27 +1597,12 @@ class ProtoLifter:
             obj.h[k] = pv
             return
         if isinstance(obj, LTable):
-            if id(obj) in self.proto_arrays:
-                if is_sym(key):
-                    rk = self._resolve_jval(key)
-                    if rk is not None:
-                        key = rk
-                    else:
-                        for r in expr_regs(key):
-                            if isinstance(r.n, int) and r.n not in self.jump_regs:
-                                self.need_jump_regs.add(r.n)
-                if is_sym(v):
-                    rv = self._resolve_jval(v)
-                    if rv is not None:
-                        v = rv
-                    else:
-                        for r in expr_regs(v):
-                            if isinstance(r.n, int) and r.n not in self.jump_regs:
-                                self.need_jump_regs.add(r.n)
             if is_sym(key):
                 raise Unsupported("symbolic key store into a concrete VM table")
             if id(obj) in self.proto_arrays:
                 if is_sym(v):
+                    if os.environ.get("DEVIRT_SYMSTORE"):
+                        print("[symstore] tid=%s key=%r v=%s" % (obj.tid, key, fmt_expr(v)[:300]), file=sys.stderr)
                     self.out.clear()
                     raise Unsupported("symbolic value store into proto array")
                 self.mutated = True
@@ -1845,19 +1730,9 @@ class ProtoLifter:
                 return Multi([], rest.tail.drop(k - len(rest.items)) if rest.tail else None)
             raise Unsupported("select with %r" % (n,))
         if name == "coroutine.wrap":
-            if a.items and isinstance(a.items[0], (ClosureExpr, Expr)):
-                t = self.new_temp()
-                self.emit(CallStmt(t, Global(name), Multi([self.value_of(x) for x in a.items], a.tail)))
-                return Multi([], TempTail(t))
             return GenIterMaker()
         if name == "next" and a.items and isinstance(a.items[0], OpenUps):
             return None
-        if name == "type" and len(a.items) == 1 and a.tail is None:
-            x0 = a.items[0]
-            if isinstance(x0, LTable):
-                return b"table"
-            if isinstance(x0, int) and not isinstance(x0, bool) and x0 >= 16384:
-                return b"number"
         if name.startswith("buffer.") and a.items and isinstance(a.items[0], Buf) and self.ov_base is not None:
             r = self.buffer_op(name, a.items)
             if r is not NotImplemented:
@@ -1865,21 +1740,10 @@ class ProtoLifter:
         if name in S.CONCRETE:
             vset = getattr(self, "vreg_set", ())
             cfacts = getattr(self, "cur_facts", {})
-            vals = []
-            for x in a.items:
-                if isinstance(x, Reg):
-                    if x.n in vset and cfacts.get(x.n, (None,))[0] == "c":
-                        vals.append(cfacts[x.n][1])
-                        continue
-                    if name == "bit32.bxor":
-                        rv = self._resolve_jval(x)
-                        if rv is not None:
-                            vals.append(rv)
-                            continue
-                vals.append(x)
+            vals = [cfacts[x.n][1] if isinstance(x, Reg) and x.n in vset
+                    and cfacts.get(x.n, (None,))[0] == "c" else x for x in a.items]
             if a.tail is not None or any(is_sym(x) or isinstance(x, (SymList, Multi)) for x in vals):
-                if (name.startswith(("bit32.", "math.", "string.", "utf8.")) or name in ("tonumber",)) \
-                        and a.tail is None and not any(isinstance(x, (SymList, Multi)) for x in vals):
+                if name.startswith("bit32.") and a.tail is None and all(is_sym(x) or isinstance(x, int) for x in vals):
 
                     t = self.new_temp()
                     self.emit(CallStmt(t, Global(name), Multi([self.value_of(x) for x in vals])))
@@ -1959,35 +1823,19 @@ class ProtoLifter:
         t = a.items[0] if a.items else None
         i = a.items[1] if len(a.items) > 1 else 1
         j = a.items[2] if len(a.items) > 2 else None
-        if self.stack_base is None:
-            if is_sym(i):
-                rv = self._resolve_jval(i)
-                if rv is not None:
-                    i = rv
-            if is_sym(j):
-                rv = self._resolve_jval(j)
-                if rv is not None:
-                    j = rv
         if isinstance(t, RegFile):
-            if isinstance(i, int) and isinstance(j, SymList) and isinstance(j.nkey, int):
-                t_tail = j.nkey
-                if i <= t_tail:
-                    return Multi([FrameArg(n) if self.jvals.get(n) is FRAME else Reg(n) for n in range(i, t_tail)], j.tail)
-                return Multi([], j.tail.drop(i - t_tail) if j.tail else None)
             if not isinstance(i, int) or not isinstance(j, int):
                 self._need_jreg(i, j)
                 raise Unsupported("unpack registers with symbolic range")
             return Multi([FrameArg(n) if self.jvals.get(n) is FRAME else Reg(n) for n in range(i, j + 1)])
         if isinstance(t, SymList):
-            if not isinstance(i, int) or i < 1 or i - 1 > len(t.items):
+            if i != 1:
                 raise Unsupported("unpack packed list from %r" % (i,))
-            items = t.items[i - 1:]
-            j_adj = (j - (i - 1)) if isinstance(j, int) else j
-            if j_adj is None or is_sym(j_adj) or (isinstance(j_adj, int) and t.tail is not None and j_adj >= len(items)):
-                if isinstance(j_adj, int) and t.tail is None:
-                    return Multi(pad(items, j_adj))
-                return Multi(items, t.tail)
-            return Multi(pad(items, j_adj))
+            if j is None or is_sym(j) or (isinstance(j, int) and t.tail is not None and j >= len(t.items)):
+                if isinstance(j, int) and t.tail is None:
+                    return Multi(pad(t.items, j))
+                return Multi(t.items, t.tail)
+            return Multi(pad(t.items, j))
         if isinstance(t, LTable):
             if j is None:
                 j = t.length()
@@ -2004,19 +1852,6 @@ class ProtoLifter:
         src, f, e, t, dst = (a.items + [None] * 5)[:5]
         if dst is None:
             dst = src
-        if self.stack_base is None:
-            if is_sym(f):
-                rv = self._resolve_jval(f)
-                if rv is not None:
-                    f = rv
-            if is_sym(e):
-                rv = self._resolve_jval(e)
-                if rv is not None:
-                    e = rv
-            if is_sym(t):
-                rv = self._resolve_jval(t)
-                if rv is not None:
-                    t = rv
         if isinstance(src, SymList) and src is dst:
 
             if f == 1 and isinstance(t, int) and 0 <= t - 1 <= 4096:
@@ -2026,12 +1861,6 @@ class ProtoLifter:
         if is_sym(f) or is_sym(t):
             self._need_jreg(f, t)
             raise Unsupported("table.move with symbolic positions")
-        if isinstance(e, TailCount) and isinstance(src, SymList) and f == 1 and isinstance(dst, RegFile) and isinstance(t, int):
-            for k, v in enumerate(src.items):
-                self.put(dst, t + k, v)
-            if src.tail is not None:
-                self.pending_tail = (t + len(src.items), src.tail)
-            return dst
         if is_sym(e) and isinstance(src, SymList) and f == 1 and isinstance(dst, Expr) and isinstance(t, int):
 
             self.emit(SetList(dst, t, Multi([self.value_of(x) if x is not None else Const(None) for x in src.items],
@@ -2090,37 +1919,6 @@ class ProtoLifter:
             return Multi([vals[pi] if len(vals) > pi else None])
         if isinstance(fn, OpaqueFn):
             if fn.pf_tid is not None and fn.pf_tid in self.dump.tables:
-                if (len(args.items) == 4
-                        and isinstance(args.items[0], LTable) and id(args.items[0]) in self.proto_arrays
-                        and isinstance(args.items[1], LTable) and id(args.items[1]) in self.proto_arrays
-                        and isinstance(args.items[2], int) and isinstance(args.items[3], int)):
-                    t_arr, m_arr, s_idx, f_cnt = args.items
-                    out = LTable()
-                    out.h["_super_op"] = True
-                    for idx in range(f_cnt):
-                        v1 = self.index(t_arr, s_idx + idx, it)
-                        v2 = self.index(m_arr, s_idx + idx, it)
-                        if not isinstance(v1, int) or not isinstance(v2, int):
-                            raise Unsupported("encrypted superinstruction operand")
-                        base = idx * 4
-                        out.set(base + 1, v1 // 16384)
-                        out.set(base + 2, v1 % 16384)
-                        out.set(base + 3, v2 // 32)
-                        out.set(base + 4, v2 % 32)
-                    return Multi([out])
-                q_cand = args.items[0] if len(args.items) >= 1 and isinstance(args.items[0], LTable) else (
-                    self.proto.get(12) if isinstance(self.proto, LTable) else None
-                )
-                if (len(args.items) == 3
-                        and isinstance(q_cand, LTable)
-                        and isinstance(q_cand.get(6), Buf)
-                        and isinstance(q_cand.get(7), LTable)
-                        and isinstance(args.items[1], int)
-                        and isinstance(args.items[2], int)):
-                    self._aead_decrypt_const(q_cand, args.items[1], args.items[2])
-                    return Multi([True])
-                if len(args.items) == 1 and isinstance(args.items[0], int) and not getattr(self.vm, "info", {}).get("curried3"):
-                    return Multi([None])
                 return self.make_curried_closure(fn, args)
             node = self.vm_fn_node(fn)
             if node is not None and node is self.vm.maker:
@@ -2148,100 +1946,6 @@ class ProtoLifter:
         self.emit(CallStmt(t, fe, Multi([self.value_of(x) if not isinstance(x, SymList) else x
                                          for x in args.items], args.tail)))
         return Multi([], TempTail(t))
-
-    def _aead_decrypt_const(self, q_tab, n_idx, m_key):
-        buf_obj = q_tab.get(6)
-        q7 = q_tab.get(7)
-        if not isinstance(buf_obj, Buf) or not isinstance(q7, LTable):
-            return
-        done = getattr(self.dump, "_aead_done", None)
-        if done is None:
-            done = self.dump._aead_done = set()
-            self.dump._fast_bw_delta = {}
-            self.dump._fast_tw_delta = {}
-        if (q_tab.tid, n_idx) in done:
-            return
-        ov = self.cur_ov()
-        raw_off = ov.get((id(q7), n_idx), q7.get(n_idx)) if ov is not None else q7.get(n_idx)
-        if not isinstance(raw_off, int):
-            return
-        arg3 = raw_off if raw_off < 134217728 else (raw_off ^ 529901011)
-        data = buf_obj.data
-        if arg3 < 0 or arg3 + 50 > len(data):
-            return
-        n92 = arg3 + 1
-        v97 = data[n92]
-        if v97 < 128:
-            arg5, arg4 = v97, n92 + 1
-        else:
-            v98 = data[n92 + 1]
-            if v98 < 128:
-                arg5, arg4 = v97 * 128 + v98 - 16384, n92 + 2
-            else:
-                v99 = data[n92 + 2]
-                if v99 < 128:
-                    arg5, arg4 = v97 * 16384 + v98 + v99 * 128 - 2097280, n92 + 3
-                else:
-                    v100 = data[n92 + 3]
-                    arg5 = v97 + v98 * 2097152 + v99 * 128 + v100 * 16384 - 268451968 + (266338304 if v100 >= 128 else 0)
-                    arg4 = n92 + 4
-        n2 = arg4 + arg5
-        if arg5 < 1 or n2 + 48 > len(data):
-            return
-        s1 = bytes.fromhex("e9f3e2dbb9d8afca1cdfbd40c1b4e9ef")
-        s2 = bytes.fromhex("dacea79868cfeb2821f63ab34ce8463e")
-        s3 = bytes.fromhex("3434f49ddbbd6643e274e612eb48ff65")
-        v16 = struct.pack("<3I", n_idx & 0xFFFFFFFF, m_key & 0xFFFFFFFF, 3)
-        hdr_ct_nonce = bytes(data[arg3:n2 + 16])
-        tag32 = bytes(data[n2 + 16:n2 + 48])
-        cands = getattr(self.dump, "_aead_keys", None)
-        if cands is None:
-            cands = []
-            for t in self.dump.tables.values():
-                for val in t.h.values():
-                    if isinstance(val, bytes) and len(val) == 32 and val not in cands:
-                        cands.append(val)
-            self.dump._aead_keys = cands
-        matched_key = None
-        for k32 in cands:
-            kmac = hmac.new(k32, s1 + v16, hashlib.sha256).digest()
-            if hmac.new(kmac, s2 + v16 + hdr_ct_nonce, hashlib.sha256).digest() == tag32:
-                matched_key = k32
-                break
-        if matched_key is None:
-            return
-        done.add((q_tab.tid, n_idx))
-        v18 = hmac.new(matched_key, s3 + v16 + hdr_ct_nonce[arg5 + (arg4 - arg3):], hashlib.sha256).digest()
-        kw = struct.unpack("<8I", v18)
-        paths = self.dump.paths()
-        b_info = self.dump.buf_loc.get(id(buf_obj))
-        b_path = ",".join(str(x) for x in paths[b_info[1]]) if b_info and b_info[1] in paths else None
-        b_key = b_info[2] if b_info else 6
-        fbw = self.dump._fast_bw_delta
-        for off in range(0, arg5, 64):
-            ctr = (off // 64 + 1) & 0xFFFFFFFF
-            st = [0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-                  kw[0], kw[1], kw[2], kw[3], kw[4], kw[5], kw[6], kw[7],
-                  ctr, 0, 0, 0]
-            w = list(st)
-            for _ in range(10):
-                for a, b, c, d in ((0,4,8,12),(1,5,9,13),(2,6,10,14),(3,7,11,15),
-                                   (0,5,10,15),(1,6,11,12),(2,7,8,13),(3,4,9,14)):
-                    w[a] = (w[a] + w[b]) & 0xFFFFFFFF; x = w[d] ^ w[a]; w[d] = ((x << 16) & 0xFFFFFFFF) | (x >> 16)
-                    w[c] = (w[c] + w[d]) & 0xFFFFFFFF; x = w[b] ^ w[c]; w[b] = ((x << 12) & 0xFFFFFFFF) | (x >> 20)
-                    w[a] = (w[a] + w[b]) & 0xFFFFFFFF; x = w[d] ^ w[a]; w[d] = ((x << 8) & 0xFFFFFFFF) | (x >> 24)
-                    w[c] = (w[c] + w[d]) & 0xFFFFFFFF; x = w[b] ^ w[c]; w[b] = ((x << 7) & 0xFFFFFFFF) | (x >> 25)
-            ks = struct.pack("<16I", *(((w[i] + st[i]) & 0xFFFFFFFF) for i in range(16)))
-            lim = min(64, arg5 - off)
-            for i in range(lim):
-                pos = arg4 + off + i
-                data[pos] ^= ks[i]
-        if b_path is not None:
-            fbw[(b_path, b_key, arg4)] = bytes(data[arg4:arg4 + arg5])
-        q7.h[n_idx] = arg3
-        if q7.tid in paths:
-            self.dump._fast_tw_delta[(",".join(str(x) for x in paths[q7.tid]), n_idx)] = arg3
-        self.mutated = True
 
     def vm_fn_node(self, fn):
         return fn.node
@@ -2297,7 +2001,7 @@ class ProtoLifter:
         pi, ui = vm.proto_index(), vm.upvals_index()
         proto = vals[pi] if len(vals) > pi else None
         ups = vals[ui] if len(vals) > ui else None
-        if not isinstance(proto, LTable) and vals and isinstance(vals[0], LTable) and vals[0] is not self.vmobj:
+        if not isinstance(proto, LTable) and vals and isinstance(vals[0], LTable):
             # v14.9's closure op calls the maker positionally as
             # (proto, upvals): `S[60](v, y)` -- the model's proto index points
             # at the wrong slot for that convention. The proto table doubles
@@ -2463,13 +2167,6 @@ def meet(a, b):
             if rk and rk[0] == "c" and g[1].get(rk[1]) == f[1]:
                 out[r] = g
                 continue
-        if f[0] == "tbl" and g[0] == "tbl":
-            common = {tk: tv for tk, tv in f[1].items() if tk in g[1] and g[1][tk] == tv}
-            out[r] = ("tbl", common)
-            continue
-        if f[0] == "rng" and g[0] == "rng":
-            out[r] = ("rng", min(f[1], g[1]), max(f[2], g[2]))
-            continue
         ta, tb = truth_of(f), truth_of(g)
         if ta is not None and ta == tb:
             out[r] = ("t",) if ta else ("f",)
@@ -2485,7 +2182,7 @@ def fact_of(value):
         v = value.v
         if isinstance(v, (int, float, bytes, bool)) or v is None:
             return ("c", v)
-    if isinstance(value, (Global, Builtin)):
+    if isinstance(value, Global):
         return ("g", value.name)
     if isinstance(value, S.NewTable) and not value.items:
         return ("tbl", {})
@@ -2502,7 +2199,7 @@ def eval_fact(e, facts):
     ("t"/"f"), or None when unknown."""
     if isinstance(e, Const):
         return ("c", e.v)
-    if isinstance(e, (Global, Builtin)):
+    if isinstance(e, Global):
         return ("g", e.name)
     if isinstance(e, SymList) and e.tail is None:
         return ("tbl", {i + 1: item.v for i, item in enumerate(e.items) if isinstance(item, Const)})
@@ -2518,10 +2215,7 @@ def eval_fact(e, facts):
     if isinstance(e, TempVal):
         tf = facts.get(("tmp", e.t))
         if tf and tf[0] == "m" and 1 <= e.i <= len(tf[1]):
-            v = tf[1][e.i - 1]
-            if isinstance(v, tuple) and v and v[0] == "rng":
-                return v
-            return ("c", v)
+            return ("c", tf[1][e.i - 1])
         return None
     if isinstance(e, Index):
         of, kf = eval_fact(e.obj, facts), eval_fact(e.key, facts)
@@ -2541,10 +2235,7 @@ def eval_fact(e, facts):
                     if k in ("NextNumber", "NextInteger", "Clone"):
                         return ("g", "Random." + k)
             if of[0] == "tbl" and kf[1] in of[1]:
-                v = of[1][kf[1]]
-                if isinstance(v, tuple) and v and v[0] == "rng":
-                    return v
-                return ("c", v)
+                return ("c", of[1][kf[1]])
         if of and of[0] == "tbl" and isinstance(e.key, Reg):
             return ("idx_reg", of[1], e.key.n)
         return None
@@ -2554,12 +2245,6 @@ def eval_fact(e, facts):
         return None if t is None else ("c", not t)
     if isinstance(e, Bin) and e.op in ("Add", "Sub", "Mul", "Div", "Mod", "FloorDiv"):
         a, b = eval_fact(e.a, facts), eval_fact(e.b, facts)
-        if a and b and e.op in ("Add", "Sub"):
-            if a[0] == "rng" and b[0] == "c" and isinstance(b[1], (int, float)) and not isinstance(b[1], bool):
-                d = b[1] if e.op == "Add" else -b[1]
-                return ("rng", S.fix_int(a[1] + d), S.fix_int(a[2] + d))
-            if b[0] == "rng" and a[0] == "c" and isinstance(a[1], (int, float)) and not isinstance(a[1], bool) and e.op == "Add":
-                return ("rng", S.fix_int(b[1] + a[1]), S.fix_int(b[2] + a[1]))
         if a and b and a[0] == "c" and b[0] == "c":
             x, y = a[1], b[1]
             if isinstance(x, (int, float)) and not isinstance(x, bool) and isinstance(y, (int, float)) and not isinstance(y, bool):
@@ -2575,36 +2260,6 @@ def eval_fact(e, facts):
                     return None
     if isinstance(e, Bin) and e.op.startswith("Compare"):
         a, b = eval_fact(e.a, facts), eval_fact(e.b, facts)
-        if a and b and a[0] == "c" and b[0] == "rng" and isinstance(a[1], (int, float)) and not isinstance(a[1], bool):
-            x, lo, hi = a[1], b[1], b[2]
-            if e.op == "CompareLe":
-                if x <= lo: return ("c", True)
-                if x > hi: return ("c", False)
-            elif e.op == "CompareLt":
-                if x < lo: return ("c", True)
-                if x >= hi: return ("c", False)
-            elif e.op == "CompareGe":
-                if x >= hi: return ("c", True)
-                if x < lo: return ("c", False)
-            elif e.op == "CompareGt":
-                if x > hi: return ("c", True)
-                if x <= lo: return ("c", False)
-            return None
-        if a and b and a[0] == "rng" and b[0] == "c" and isinstance(b[1], (int, float)) and not isinstance(b[1], bool):
-            lo, hi, y = a[1], a[2], b[1]
-            if e.op == "CompareLe":
-                if hi <= y: return ("c", True)
-                if lo > y: return ("c", False)
-            elif e.op == "CompareLt":
-                if hi < y: return ("c", True)
-                if lo >= y: return ("c", False)
-            elif e.op == "CompareGe":
-                if lo >= y: return ("c", True)
-                if hi < y: return ("c", False)
-            elif e.op == "CompareGt":
-                if lo > y: return ("c", True)
-                if hi <= y: return ("c", False)
-            return None
         if a and b and a[0] == "c" and b[0] == "c":
             try:
                 x, y = a[1], b[1]
@@ -2634,7 +2289,7 @@ def eval_fact(e, facts):
     return None
 
 def truth_of(f):
-    if f is None or f[0] in ("r", "m", "cmp", "idx_reg", "rng"):
+    if f is None or f[0] in ("r", "m", "cmp", "idx_reg"):
         return None
     if f[0] == "c":
         return S.truthy(f[1])
@@ -2677,12 +2332,9 @@ def edge_facts(cond, taken, facts):
                 f[rk] = ("c", rv[1][lv])
     return f
 
-def _replace_dict_fact(facts, old_d, key, val, remove=False):
+def _replace_dict_fact(facts, old_d, key, val):
     new_d = dict(old_d)
-    if remove:
-        new_d.pop(key, None)
-    else:
-        new_d[key] = val
+    new_d[key] = val
     for rk, rv in list(facts.items()):
         if rv and rv[0] in ("c", "tbl") and rv[1] is old_d:
             facts[rk] = (rv[0], new_d)
@@ -2695,11 +2347,6 @@ def _replace_dict_fact(facts, old_d, key, val, remove=False):
                     facts[rk] = (rv[0], nd2)
 
 def _capture_closure_up_facts(c, facts, lf=None):
-    if lf is not None and isinstance(c.proto, LTable) and not hasattr(c, "arg_facts"):
-        for ch in getattr(lf, "children", ()):
-            if ch is not c and isinstance(ch.proto, LTable) and ch.proto.tid == c.proto.tid and hasattr(ch, "arg_facts"):
-                c.arg_facts = dict(ch.arg_facts)
-                break
     up_facts = getattr(c, "up_facts", None) or {}
     rcf = getattr(lf, "reg_const_fact", None) or {}
     for i, u in enumerate(c.upvals, 1):
@@ -2739,19 +2386,8 @@ def _capture_closure_up_facts(c, facts, lf=None):
         if uf and uf[0] == "c" and isinstance(uf[1], (int, float)) and not isinstance(uf[1], bool):
             up_facts[("up", i)] = uf
     c.up_facts = up_facts
-    if not hasattr(c, "_open_up_regs"):
-        c._open_up_regs = {i: u.reg for i, u in enumerate(c.upvals, 1) if isinstance(u, MaybeBox)}
 
 def apply_stmt_facts(st, facts, lf):
-    if isinstance(st, Close):
-        if lf is not None:
-            for ch in getattr(lf, "children", ()):
-                open_ups = getattr(ch, "_open_up_regs", None)
-                if open_ups:
-                    for ui, ureg in list(open_ups.items()):
-                        if ureg == st.reg:
-                            open_ups.pop(ui, None)
-        return
     if isinstance(st, Assign) and isinstance(st.target, Reg):
         if isinstance(st.value, ClosureExpr):
             _capture_closure_up_facts(st.value, facts, lf)
@@ -2772,13 +2408,6 @@ def apply_stmt_facts(st, facts, lf):
             facts.pop(st.target.n, None)
             if rcf is not None:
                 rcf.pop(st.target.n, None)
-            if lf is not None and not (isinstance(st.value, Const) and st.value.v is None):
-                for ch in getattr(lf, "children", ()):
-                    open_ups = getattr(ch, "_open_up_regs", None)
-                    if open_ups:
-                        for ui, ureg in list(open_ups.items()):
-                            if ureg == st.target.n:
-                                open_ups.pop(ui, None)
         else:
             facts[st.target.n] = fv
             if fv[0] == "c" and isinstance(fv[1], (int, float)) and not isinstance(fv[1], bool):
@@ -2786,40 +2415,20 @@ def apply_stmt_facts(st, facts, lf):
                     rcf[st.target.n] = fv
                 if lf is not None:
                     for ch in getattr(lf, "children", ()):
-                        open_ups = getattr(ch, "_open_up_regs", None) or {}
                         for ui, u in enumerate(ch.upvals, 1):
                             if isinstance(u, MaybeBox) and u.reg == st.target.n:
                                 uf_map = getattr(ch, "up_facts", None)
-                                if uf_map is not None and (ui in open_ups or ("up", ui) not in uf_map):
+                                if uf_map is not None and ("up", ui) not in uf_map:
                                     uf_map[("up", ui)] = fv
-            else:
-                if rcf is not None:
-                    rcf.pop(st.target.n, None)
-                if lf is not None and not (isinstance(st.value, Const) and st.value.v is None):
-                    for ch in getattr(lf, "children", ()):
-                        open_ups = getattr(ch, "_open_up_regs", None)
-                        if open_ups:
-                            for ui, ureg in list(open_ups.items()):
-                                if ureg == st.target.n:
-                                    open_ups.pop(ui, None)
+            elif rcf is not None:
+                rcf.pop(st.target.n, None)
     elif isinstance(st, Assign) and isinstance(st.target, Index) and isinstance(st.target.obj, Reg):
         tf = facts.get(st.target.obj.n)
         kf = eval_fact(st.target.key, facts)
         vf = eval_fact(st.value, facts)
-        if tf and kf and kf[0] == "c":
+        if tf and kf and kf[0] == "c" and vf and vf[0] in ("c", "tbl"):
             if tf[0] == "tbl" or (tf[0] == "c" and isinstance(tf[1], dict)):
-                if vf and vf[0] in ("c", "tbl"):
-                    if (tf[0] == "tbl" and kf[1] in tf[1]
-                            and isinstance(tf[1][kf[1]], (int, float))
-                            and isinstance(vf[1], (int, float))
-                            and tf[1][kf[1]] != vf[1]):
-                        _replace_dict_fact(facts, tf[1], kf[1], None, remove=True)
-                    else:
-                        _replace_dict_fact(facts, tf[1], kf[1], vf[1])
-                elif vf and vf[0] == "rng":
-                    _replace_dict_fact(facts, tf[1], kf[1], vf)
-                elif kf[1] in tf[1]:
-                    _replace_dict_fact(facts, tf[1], kf[1], None, remove=True)
+                _replace_dict_fact(facts, tf[1], kf[1], vf[1])
     elif isinstance(st, SetList) and isinstance(st.tbl, Reg):
         tf = facts.get(st.tbl.n)
         if tf and tf[0] == "tbl":
@@ -2831,8 +2440,6 @@ def apply_stmt_facts(st, facts, lf):
                 xf = eval_fact(x, facts)
                 if xf and xf[0] == "c":
                     vals.append(xf[1])
-                elif xf and xf[0] == "rng":
-                    vals.append(xf)
                 else:
                     ok = False
                     break
@@ -2861,22 +2468,12 @@ def apply_stmt_facts(st, facts, lf):
                     af = eval_fact(ax, facts)
                     if af and af[0] == "c" and isinstance(af[1], (int, float)) and not isinstance(af[1], bool):
                         af_map[("vararg", j)] = af
-                if len(st.args.items) == 3 and all(("vararg", j) in af_map and isinstance(af_map[("vararg", j)][1], int) for j in (1, 2, 3)):
-                    lo_v, hi_v = af_map[("vararg", 2)][1], af_map[("vararg", 3)][1]
-                    if 1 <= lo_v <= hi_v <= 10000:
-                        facts[("tmp", st.t)] = ("m", [("rng", lo_v, hi_v)])
-                targets = [c]
-                if lf is not None and isinstance(c.proto, LTable):
-                    for ch in getattr(lf, "children", ()):
-                        if ch is not c and isinstance(ch.proto, LTable) and ch.proto.tid == c.proto.tid:
-                            targets.append(ch)
-                for tc in targets:
-                    if not hasattr(tc, "arg_facts"):
-                        tc.arg_facts = dict(af_map)
-                    else:
-                        tc.arg_facts = {k: v for k, v in tc.arg_facts.items() if tc.arg_facts.get(k) == af_map.get(k)}
+                if not hasattr(c, "arg_facts"):
+                    c.arg_facts = af_map
+                else:
+                    c.arg_facts = {k: v for k, v in c.arg_facts.items() if c.arg_facts.get(k) == af_map.get(k)}
         fn_f = eval_fact(st.fn, facts)
-        is_pure_g = ("tmp", st.t) in facts
+        is_pure_g = False
         if fn_f and fn_f[0] == "g" and (fn_f[1] in S.FACT_CONCRETE or fn_f[1] in ("Path2D.SetControlPoints", "Random.NextNumber", "Random.NextInteger")):
             is_pure_g = True
             arg_vals = []
@@ -2935,25 +2532,8 @@ def apply_stmt_facts(st, facts, lf):
                 facts[r] = ("c", v)
 
         if lf.captured_regs and not is_pure_g:
-            kill_regs = lf.captured_regs
-            ff0 = facts.get(st.fn.n) if isinstance(st.fn, Reg) else None
-            is_known_cl = bool(ff0 and ff0[0] == "t" and len(ff0) > 1 and isinstance(ff0[1], ClosureExpr))
-            is_global_fn = bool(fn_f and fn_f[0] == "g")
-            if is_known_cl or is_global_fn:
-                involved = [ff0[1]] if is_known_cl else []
-                if not (is_global_fn and fn_f[1] in ("coroutine.wrap", "coroutine.create")):
-                    for ax in st.args.items:
-                        if isinstance(ax, ClosureExpr):
-                            involved.append(ax)
-                        elif isinstance(ax, Reg):
-                            af0 = facts.get(ax.n)
-                            if af0 and af0[0] == "t" and len(af0) > 1 and isinstance(af0[1], ClosureExpr):
-                                involved.append(af0[1])
-                if not any(isinstance(u, (RegFile, FrameProxy)) for cl in involved for u in cl.upvals):
-                    kill_regs = {u.reg for cl in involved for u in cl.upvals if isinstance(u, MaybeBox)} | \
-                                {u.n for cl in involved for u in cl.upvals if isinstance(u, Reg)}
             for r in list(facts):
-                if r in kill_regs and (not isinstance(facts[r], tuple) or facts[r][0] != "g"):
+                if r in lf.captured_regs and (not isinstance(facts[r], tuple) or facts[r][0] != "g"):
                     del facts[r]
 
 def frame_call(st, facts, lf):
@@ -3126,28 +2706,6 @@ class _AccessLog(dict):
         self.written.add(k)
         dict.__setitem__(self, k, v)
 
-def _disp_fetch_expr(w):
-    body = w.get("body", {}).get("body") or ()
-    for st in body[:2]:
-        if st.get("type") not in ("AstStatLocal", "AstStatAssign"):
-            continue
-        for vl in st.get("values") or ():
-            v = vl
-            while v.get("type") == "AstExprGroup":
-                v = v["expr"]
-            if v.get("type") == "AstExprIndexExpr":
-                e, idx = v["expr"], v["index"]
-                while e.get("type") == "AstExprGroup":
-                    e = e["expr"]
-                while idx.get("type") == "AstExprGroup":
-                    idx = idx["expr"]
-                if e.get("type") == "AstExprLocal" and idx.get("type") == "AstExprLocal":
-                    return v
-    head = body[0]["values"][0]
-    while head.get("type") == "AstExprGroup":
-        head = head["expr"]
-    return head
-
 class Stepper:
     def __init__(self, vm, lifter):
         self.vm = vm
@@ -3177,11 +2735,10 @@ class Stepper:
         if not self.loops:
             raise Unsupported("no dispatch loops in the VM function")
         w = self.loops[0][2]
-        head = _disp_fetch_expr(w)
-        idx_expr = head["index"]
-        while idx_expr.get("type") == "AstExprGroup":
-            idx_expr = idx_expr["expr"]
-        pcname = idx_expr["local"]
+        head = w["body"]["body"][0]["values"][0]
+        while head.get("type") == "AstExprGroup":
+            head = head["expr"]
+        pcname = head["index"]["local"]
         self.pc_decl = pcname["location"]
 
         self.conds = {}
@@ -3216,12 +2773,11 @@ class Stepper:
         self.fixed_decls = {d for d in (self.pc_decl, self.mode_decl, vm.kstack_key) if d}
         for _, _, lw in self.loops:
             lbody = lw.get("body", {}).get("body") or ()
-            for st0 in lbody[:2]:
-                if st0.get("type") in ("AstStatAssign", "AstStatLocal"):
-                    for vr in st0.get("vars", ()):
-                        loc = vr.get("local", vr).get("location")
-                        if loc:
-                            self.fixed_decls.add(loc)
+            if lbody and lbody[0].get("type") in ("AstStatAssign", "AstStatLocal"):
+                for vr in lbody[0].get("vars", ()):
+                    loc = vr.get("local", vr).get("location")
+                    if loc:
+                        self.fixed_decls.add(loc)
             for n in iter_nodes(lw):
                 if n.get("type") == "AstStatLocal":
                     for vr in n.get("vars", ()):
@@ -3229,77 +2785,16 @@ class Stepper:
                         if loc:
                             self.fixed_decls.add(loc)
         self.sp_cands = self._stack_pointer_candidates()
-        self._strip_save_restore()
         self._init_vregs()
         if not hasattr(vm, "_mode_loop_cache"):
             vm._mode_loop_cache = {}
         self._mode_loop_cache = vm._mode_loop_cache
 
-    def _strip_save_restore(self):
-        """Neutralize Luraph's fake save/restore wrappers (`local l = I; ... I = l`)
-        where `l` is never read except to restore `I`, preventing scratch locals
-        from being misclassified as cross-instruction carried state."""
-        if getattr(self.vm, "_sr_stripped", False):
-            return
-        self.vm._sr_stripped = True
-        valueless_locs = set()
-        for st0 in self.vm.inner_body[:self.first_inner]:
-            if st0.get("type") == "AstStatLocal" and not st0.get("values"):
-                for vr in st0.get("vars", ()):
-                    if vr.get("location"):
-                        valueless_locs.add(vr["location"])
-        for _, _, w in self.loops:
-            save_temps = {}
-            for n in iter_nodes(w):
-                if n.get("type") == "AstStatLocal":
-                    for vr, vl in zip(n.get("vars", ()), n.get("values", ())):
-                        if (vl.get("type") == "AstExprLocal"
-                                and vr.get("location") != vl["local"]["location"]
-                                and vl["local"]["location"] in valueless_locs):
-                            save_temps[vr["location"]] = vl["local"]["location"]
-            if not save_temps:
-                continue
-            total_reads = {}
-            restore_reads = {}
-            for n in iter_nodes(w):
-                t = n.get("type")
-                if t == "AstExprLocal":
-                    loc = n["local"]["location"]
-                    if loc in save_temps:
-                        total_reads[loc] = total_reads.get(loc, 0) + 1
-                elif t == "AstStatAssign":
-                    for vr, vl in zip(n.get("vars", ()), n.get("values", ())):
-                        if vr.get("type") == "AstExprLocal" and vl.get("type") == "AstExprLocal":
-                            vloc = vl["local"]["location"]
-                            if vloc in save_temps and vr["local"]["location"] == save_temps[vloc]:
-                                restore_reads[vloc] = restore_reads.get(vloc, 0) + 1
-            pure_sr = {
-                vloc: kloc for vloc, kloc in save_temps.items()
-                if total_reads.get(vloc, 0) > 0 and total_reads.get(vloc, 0) == restore_reads.get(vloc, 0)
-                and kloc not in self.sp_cands and kloc not in self.fixed_decls
-            }
-            if not pure_sr:
-                continue
-            for n in iter_nodes(w):
-                t = n.get("type")
-                if t == "AstStatLocal":
-                    vals = n.get("values")
-                    if vals:
-                        for idx, (vr, vl) in enumerate(zip(n.get("vars", ()), vals)):
-                            if vr.get("location") in pure_sr and vl.get("type") == "AstExprLocal":
-                                vals[idx] = {"type": "AstExprConstantNil"}
-                elif t == "AstStatAssign":
-                    vrs = n.get("vars")
-                    vls = n.get("values")
-                    if vrs and vls:
-                        for idx, (vr, vl) in enumerate(zip(vrs, vls)):
-                            if vr.get("type") == "AstExprLocal" and vl.get("type") == "AstExprLocal":
-                                vloc = vl["local"]["location"]
-                                if vloc in pure_sr and vr["local"]["location"] == pure_sr[vloc]:
-                                    vrs[idx] = vl
-
     def _init_vregs(self):
-        return
+        """Pre-populate virtual registers for prologue/dispatcher locals whose
+        handler assignments only cache register file reads (`Z = J[o[F]]`)."""
+        if self.lf.stack_base is not None:
+            return
         cache = self.vm.__dict__.setdefault("_static_vregs", {})
         if None not in cache:
             _, inner = self._fresh_scopes(None, S.Interp(self.lf))
@@ -3502,18 +2997,7 @@ class Stepper:
             sb = self._sp_value(locs)
             if sb is not None:
                 self.lf.stack_base = sb
-                for k, vreg in list(self.vreg_of.items()):
-                    if self.vreg_init.get(vreg) is None:
-                        del self.vreg_of[k]
-                        self.lf.vreg_set.discard(vreg)
-                    else:
-                        self.lf.jump_regs.add(vreg)
-                        self.lf.cff_regs.add(vreg)
-        init_jr = tuple(sorted(
-            (vr, iv) for vr, iv in self.vreg_init.items()
-            if vr in self.lf.vreg_set and vr in self.lf.jump_regs and iv is not None
-        ))
-        return State(mode, pc, ks.vars[self.vm.kstack_key] if ks else None, jregs=init_jr, locs=locs)
+        return State(mode, pc, ks.vars[self.vm.kstack_key] if ks else None, locs=locs)
 
     def _carried(self, inner):
         """State.locs: the carried locals' current values. Values the state
@@ -3585,7 +3069,6 @@ class Stepper:
         lf.temp_prefix = tprefix
         lf.mutated = False
         lf.jvals = dict(state.jregs) if state is not None else {}
-        lf.init_jvals = dict(lf.jvals)
         lf.jread = set()
         lf.reg_gen = {}
         lf.reg_def_idx = {}
@@ -3613,7 +3096,7 @@ class Stepper:
             raise Unsupported("mode %r selects no dispatch loop" % (state.mode,))
         i, st, w = loop_i
         try:
-            lf.last_op = (state.mode, it.eval(_disp_fetch_expr(w), inner))
+            lf.last_op = (state.mode, it.eval(w["body"]["body"][0]["values"][0], inner))
         except Unsupported:
             lf.last_op = (state.mode, None)
         outcome = None
@@ -3654,10 +3137,6 @@ class Stepper:
                     v = dict.get(acc, k)
                     if not (isinstance(v, Reg) and v.n == vreg):
                         lf.emit(Assign(Reg(vreg), lf.value_of(v)))
-                        if vreg in lf.jump_regs and vreg not in lf.jvals and isinstance(v, Reg):
-                            cfv = lf.cur_facts.get(v.n)
-                            if cfv and cfv[0] == "c" and isinstance(cfv[1], int) and not isinstance(cfv[1], bool):
-                                lf.jvals[vreg] = cfv[1]
             def get(k):
                 return inner.lookup(k).vars[k]
             locs = self._carried(inner)
@@ -3665,11 +3144,10 @@ class Stepper:
             if sb is not None and locs:
                 ints = [v for k, v in locs if k in self.sp_cands and isinstance(v, int) and not isinstance(v, bool)]
                 top = max(ints) if ints else -1
-                jr = tuple(sorted((k, v) for k, v in lf.jvals.items()
-                                  if (k not in lf.jread or k in lf.cff_regs or isinstance(v, LTable) or (isinstance(k, int) and sb < k <= top))
-                                  and (k in lf.cff_regs or isinstance(v, LTable) or not (isinstance(k, int) and k > top))))
+                jr = tuple(sorted((k, v) for k, v in lf.jvals.items() if (k not in lf.jread or k in lf.cff_regs)
+                                  and (k in lf.cff_regs or not (isinstance(k, int) and k > top))))
             else:
-                jr = tuple(sorted((k, v) for k, v in lf.jvals.items() if k not in lf.jread or k in lf.cff_regs or isinstance(v, LTable)))
+                jr = tuple(sorted((k, v) for k, v in lf.jvals.items() if k not in lf.jread or k in lf.cff_regs))
             nxt = State(get(self.mode_decl) if self.mode_decl else 0, get(self.pc_decl), get(self.vm.kstack_key) if self.vm.kstack_key else None,
                         jr, None, lf.state_packs(), locs)
             return it, Next(nxt)
@@ -3685,7 +3163,9 @@ class Stepper:
                 self.last_written_val[k] = dict.get(acc, k)
         self.read_first |= acc.read_first
         self.written |= acc.written
-        for k in (self.read_first & self.written & self.sp_cands) - self.carry - self.not_carried - self.fixed_decls:
+        # sorted(): these are sets of decl-location strings -- iterating them in hash
+        # order made the result depend on PYTHONHASHSEED (27 vs 242 unlifted blocks)
+        for k in sorted((self.read_first & self.written & self.sp_cands) - self.carry - self.not_carried - self.fixed_decls, key=str):
             v = dict.get(acc, k)
             if k in self.lf.special or not (isinstance(v, int) and not isinstance(v, bool)):
                 self.not_carried.add(k)
@@ -3697,10 +3177,10 @@ class Stepper:
         # concrete VM objects, register reads, constants. Growing chains
         # (Bin/Index built from the temp's own previous value) would explode
         # the state space over loops, so they stay out.
-        for k in (self.read_first & self.written) - self.sp_cands - self.carry - set(self.vreg_of) - self.not_carried - self.fixed_decls:
+        for k in sorted((self.read_first & self.written) - self.sp_cands - self.carry - set(self.vreg_of) - self.not_carried - self.fixed_decls, key=str):
             v = dict.get(acc, k)
             lw = self.last_written_val.get(k, v)
-            if self.lf.stack_base is None and not (self.carry & self.sp_cands) and isinstance(lw, Reg):
+            if self.lf.stack_base is None and isinstance(lw, Reg):
                 vreg = 800000 + len(self.vreg_of) + 1
                 self.vreg_of[k] = vreg
                 self.lf.vreg_set.add(vreg)
@@ -3711,8 +3191,8 @@ class Stepper:
                     (isinstance(v, Const) and (v.v is None or isinstance(v.v, (bool, int, float, bytes, str)))):
                 self.carry.add(k)
                 self.new_carry = True
-        if self.lf.stack_base is None and not (self.carry & self.sp_cands):
-            for k in list(self.carry):
+        if self.lf.stack_base is None:
+            for k in sorted(self.carry, key=str):
                 lw = self.last_written_val.get(k)
                 if isinstance(lw, Reg) and lw.n not in self.lf.vreg_set:
                     self.carry.discard(k)
@@ -3723,15 +3203,12 @@ class Stepper:
 
     def post_return(self, it, cs, values):
         """The handler returned from the protected function: run the code after it."""
+        vals = it.adjust(values, 4)
         ps = Scope(cs)
         names = self.vm.tstat["vars"]
-        if len(names) == 1 and getattr(self.vm, "tstat_nested", False):
-            ps.vars[names[0]["location"]] = SymList([True] + list(values.items), values.tail)
-        else:
-            vals = it.adjust(values, 4)
-            ps.vars[names[0]["location"]] = True
-            for v, x in zip(names[1:], vals):
-                ps.vars[v["location"]] = x
+        ps.vars[names[0]["location"]] = True
+        for v, x in zip(names[1:], vals):
+            ps.vars[v["location"]] = x
         try:
             it.exec_block(self.vm.post, ps)
         except ReturnSig as r:
@@ -4271,13 +3748,10 @@ class Program:
                 self.vms[tag] = vm
                 self.ctors[id(vm)] = ctor
                 vm.src_lines = lines
-        def _maker_name(vm):
-            # a repacked VM's maker can have zero declared args; don't IndexError on it
-            a = vm.maker.get("args") if hasattr(vm.maker, "get") else vm.maker["args"]
-            return a[0]["name"] if a else None
-        self.dump.vm_names = {n for n in (_maker_name(vm) for vm in self.vms.values()) if n} | {
+        self.dump.vm_names = {vm.maker["args"][0]["name"] for vm in self.vms.values()
+                              if vm.maker.get("args")} | {
             vm.info["chain"][0]["args"][0]["name"] for vm in self.vms.values()
-            if vm.info.get("chain") and vm.info["chain"][0].get("args") and vm.info["chain"][0]["args"]
+            if vm.info.get("chain") and vm.info["chain"][0].get("args")
         }
 
         # dump protos captured under a different chunk name (the harness may
@@ -4311,7 +3785,8 @@ class Program:
             if mk is not None:
                 t = mk.decode("latin-1") if isinstance(mk, bytes) else str(mk)
                 vmk = self.vms.get(t)
-            st = cap.get(vmk.maker["args"][0]["name"]) if vmk is not None and isinstance(vmk.maker, dict) else None
+            st = cap.get(vmk.maker["args"][0]["name"]) if vmk is not None and isinstance(vmk.maker, dict) \
+                and vmk.maker.get("args") else None
             if isinstance(st, LTable):
                 self.dump.cap_by_state[st.tid] = cap
 
@@ -4409,7 +3884,6 @@ class Program:
             if hasattr(st, "vreg_of"):
                 st.vreg_of.update(hvr)
                 lf.vreg_set |= hvrs
-        lf.children.clear()
         s0 = st.initial()
         link = vm.kstack_link
         nodes = {}          
@@ -4551,27 +4025,6 @@ class Program:
                             sorted(seen_locs, key=repr))
                         continue
                     seen_locs.add(spv)
-                if lf.vreg_set & lf.jump_regs:
-                    jmap = dict(ns.jregs)
-                    jchanged = False
-                    for vr in lf.vreg_set & lf.jump_regs:
-                        vf = nf.get(vr)
-                        if vf and vf[0] == "c" and isinstance(vf[1], int) and not isinstance(vf[1], bool):
-                            if jmap.get(vr) != vf[1]:
-                                jmap[vr] = vf[1]
-                                jchanged = True
-                    if jchanged:
-                        old_ns = ns
-                        ns = State(ns.mode, ns.pc, ns.kstack, tuple(sorted(jmap.items())), ns.ov, ns.packs, ns.locs)
-                        nstack = [node]
-                        while nstack:
-                            cn = nstack.pop()
-                            if cn is None:
-                                continue
-                            if isinstance(cn.outcome, Next) and cn.outcome.state is old_ns:
-                                cn.outcome = Next(ns)
-                            nstack.append(cn.then)
-                            nstack.append(cn.els)
                 nk = ns.key(link)
 
                 core = nk[:5]
@@ -4642,7 +4095,8 @@ def show_op(prog, key, mode, pc, force_op=None):
         cs = st.cs
         it = S.Interp(lf)
         _, inner = st._fresh_scopes(None, it)
-        opv = it.eval(_disp_fetch_expr(w)["expr"], inner)
+        stmt = w["body"]["body"][0]
+        opv = it.eval(stmt["values"][0]["expr"], inner)
         op = opv.get(pc) if force_op is None else force_op
         print("mode %d pc %d: op %s (array %s)" % (mode, pc, op, opname))
         for nm, v in sorted(arrs.items()):
@@ -4707,10 +4161,21 @@ class FunctionLifter:
         self.prog = prog
         self.stats = {"functions": 0, "errors": 0, "fallbacks": 0}
         self.lifted = set()
+        self.lifted_tids = set()
+        self.active = set()     # protos being lifted right now (the real recursion guard)
 
     def lift(self, vm, vmobj, proto, upvals, upnames, depth=0, shared=None, init_facts=None):
+        self.active.add(id(proto))
+        try:
+            return self._lift(vm, vmobj, proto, upvals, upnames, depth, shared, init_facts)
+        finally:
+            self.active.discard(id(proto))
+
+    def _lift(self, vm, vmobj, proto, upvals, upnames, depth=0, shared=None, init_facts=None):
         self.stats["functions"] += 1
         self.lifted.add(id(proto))
+        if getattr(proto, "tid", None) is not None:
+            self.lifted_tids.add(proto.tid)
         prefix = REG_PREFIX[depth % len(REG_PREFIX)]
         cap = self.prog.dump.cap_by_self.get(proto.tid)
         if cap is None and proto.tid is not None:
@@ -4718,7 +4183,7 @@ class FunctionLifter:
             # so the child's capture holds it under that name (keyed by its
             # fresh upvalue table) -- adopt it when it really is this proto
             st = self.prog.dump.cap_by_state.get(proto.tid)
-            if st is not None:
+            if st is not None and vm.maker.get("args"):
                 k0 = st.get(vm.maker["args"][0]["name"])
                 if isinstance(k0, LTable) and k0.tid == proto.tid:
                     cap = st
@@ -4818,7 +4283,9 @@ class FunctionLifter:
             f = CG.FuncE(text.splitlines())
             f.captures = set(upnames.values())
             return f
-        if id(proto) in self.lifted:
+        # only a proto that is being lifted right now is recursion; one lifted earlier
+        # elsewhere (a callback created at several sites) is lifted again here, in place
+        if id(proto) in self.active:
             return CG.FuncE(["function(...) --[[ recursive proto ]] end"])
         capnames = getattr(c, "capnames", {})
         upnames = {}
@@ -4924,27 +4391,31 @@ def stmt_exprs(st):
 def _vm_roots(prog):
     """[(maker tag, [(seq, pid, cap), ...] sorted)] with the payload VM last, and its tag."""
     by_vm = {}
-    group_tag = {}
     for key, cap in prog.dump.protos.items():
-        mtag = cap.get("__maker")
-        if mtag is None:
+        if cap.get("__maker") is None:
             continue
-        mtag_s = mtag.decode("latin-1") if isinstance(mtag, bytes) else str(mtag)
-        vm = prog.vms.get(mtag_s)
-        info = getattr(vm, "info", {}) if vm is not None else {}
-        vmobj = vm.vmobj_of(cap) if vm is not None else cap.get("self")
-        if not info.get("curried3") and vmobj is not None and "@" in mtag_s:
-            gk = (mtag_s.split("@", 1)[0], id(vmobj))
-            tag = group_tag.setdefault(gk, mtag)
-        else:
-            tag = mtag
-        by_vm.setdefault(tag, []).append((cap.get("__seq") or 0, key, cap))
+
+        by_vm.setdefault(cap["__maker"], []).append((cap.get("__seq") or 0, key, cap))
 
     vms = sorted(by_vm.items(), key=lambda kv: min(x[0] for x in kv[1]))
     payload = vms[-1][0] if vms else None
     vms.sort(key=lambda kv: kv[0] == payload)
     for _, lst in vms:
         lst.sort(key=lambda x: (x[0], x[1]))
+
+    # DEVIRT_ROOT_SEQ=<n>: lift the proto created n-th as the script root. A
+    # decrypted payload (game-locked v15.1) runs on the SAME VM maker as the
+    # anti-tamper loader, so the default "first proto of the last VM" misses it.
+    want = os.environ.get("DEVIRT_ROOT_SEQ")
+    if want:
+        for tag, lst in vms:
+            hit = [x for x in lst if str(x[0]) == want]
+            if hit:
+                lst.remove(hit[0])
+                lst.insert(0, hit[0])
+                payload = tag
+                vms.sort(key=lambda kv: kv[0] == payload)
+                return vms, payload
 
     rc = prog.dump.raw.get("root_callee")
     for tag, lst in vms:
@@ -4959,9 +4430,164 @@ def _vm_roots(prog):
 
 def program_roots(prog):
     """[(tag, pid, cap)] of the root protos lift_program lifts, in order."""
+    roots = auto_roots(prog) if auto_active() else []
+    if roots:
+        return [(None, r["key"], r["cap"]) for r in roots]
     vms, payload = _vm_roots(prog)
     loaders = bool(os.environ.get("DEVIRT_LOADERS"))
     return [(tag, lst[0][1], lst[0][2]) for tag, lst in vms if tag == payload or loaders]
+
+def payload_extra_roots(vms, payload):
+    """[(seq, pid, cap)] lifted after the root under DEVIRT_ALL_FROM, in order.
+    DEVIRT_ALL_VMS: also sibling VM instances the payload spins up.
+    DEVIRT_EXTRA_SEQS=47,52: specific closures created before <seq> to lift too
+    (e.g. the UI builder of a sibling VM created just before the payload root)."""
+    all_from = os.environ.get("DEVIRT_ALL_FROM")
+    if not all_from or payload is None:
+        return []
+    lo = int(all_from)
+    all_vms = bool(os.environ.get("DEVIRT_ALL_VMS"))
+    extra_seqs = {s.strip() for s in os.environ.get("DEVIRT_EXTRA_SEQS", "").split(",") if s.strip()}
+    out = []
+    for tag, lst in vms:
+        if tag != payload and not all_vms and not extra_seqs:
+            continue
+        for seq, pid, cap in sorted(lst, key=lambda x: (x[0], str(x[1]))):
+            if str(seq) in extra_seqs:
+                pass
+            elif seq < lo or (tag != payload and not all_vms):
+                continue
+            out.append((seq, pid, cap))
+    return out
+
+def auto_active():
+    """Automatic payload roots (the default): off when a root is given by hand."""
+    return os.environ.get("DEVIRT_AUTO", "1") != "0" and not os.environ.get("DEVIRT_ROOT_SEQ") \
+        and not os.environ.get("DEVIRT_ALL_FROM") and not os.environ.get("DEVIRT_LOADERS")
+
+_BOOT_SEQS = []     # creation numbers of Luraph's bootstrap functions (walked once per file)
+
+def auto_roots(prog):
+    """The script's root candidates, found from the dump alone (any v15.1 file):
+
+    * the function created FIRST is Luraph's own bootstrap (the run starts in
+      it: anti-tamper, environment checks, decryption); it and everything its
+      closure instructions create are not part of the script (one walk, cached
+      for the later constant rounds);
+    * every other captured function that ran (entered functions get a numeric
+      id in the dump, the others a "t" one) is a candidate, in creation order:
+      the lift/walk takes them in that order and skips the ones an earlier
+      root already reached, so the roots are the functions no other function
+      creates -- the main function Luraph's bootstrap deserializes, a payload
+      a loader decrypts and runs (game-locked scripts, Coquette-style
+      loaders), a separate VM, a loose closure.
+    -> [{"seq", "key", "cap"}] in creation order."""
+    dump = prog.dump
+    caps = []
+    for key, cap in dump.protos.items():
+        if cap.get("__maker") is None:
+            continue
+        try:
+            vm = prog.vm_of(cap)
+            proto = vm.proto_of(cap)
+        except Unsupported:
+            continue
+        if proto is None or getattr(proto, "tid", None) is None:
+            continue
+        caps.append((cap.get("__seq") or 0, str(key), cap, vm, proto))
+    caps.sort(key=lambda x: (x[0], x[1]))
+    if len(caps) < 2:
+        return []
+    boot = set(_BOOT_SEQS)
+    if not boot or caps[0][0] not in boot:
+        t0 = time.time()
+        pkey = {tid: ",".join(str(x) for x in p) for tid, p in dump.paths().items()}
+        res = PathResolver(dump)
+        seq_of = {c[4].tid: c[0] for c in caps}
+        owned = set()
+        _, _, cap0, vm0, proto0 = caps[0]
+        vmobj = vm0.vmobj_of(cap0)
+        # the walk must leave no trace: the bootstrap's constants are not wanted
+        # and the runtime functions it meets are not the script's
+        saved = (dump.fetcher, dict(dump.shared), dict(dump.misses))
+        dump.fetcher = None
+        todo = [(vm0, proto0)]
+        while todo:
+            v, p = todo.pop()
+            if p.tid in owned:
+                continue
+            owned.add(p.tid)
+            try:
+                ent = _walk_one(prog, v, vmobj, p, pkey)
+            except Exception:
+                continue
+            kids = [res.get(c) if isinstance(c, str) else c for c in ent["children"]]
+            kvms = [prog.vms.get(t) or _JIT_TAGGED.get(t) or v for t in ent.get("child_vms") or [None] * len(kids)]
+            todo += [(kv, c) for c, kv in zip(kids, kvms)
+                     if isinstance(c, LTable) and getattr(c, "tid", None) is not None]
+        dump.fetcher = saved[0]
+        dump.shared.clear()
+        dump.shared.update(saved[1])
+        dump.misses.clear()
+        dump.misses.update(saved[2])
+        boot = {seq_of[t] for t in owned if t in seq_of}
+        _BOOT_SEQS[:] = sorted(boot)
+        if os.environ.get("DEVIRT_DEBUG") or os.environ.get("DEVIRT_TIMING"):
+            sys.stderr.write("[*] Luraph bootstrap: %d functions from #%s (%.1fs)\n"
+                             % (len(boot), caps[0][0], time.time() - t0))
+    # functions that never ran: Luraph's if created before the script started
+    # (the first non-bootstrap function that ran), the script's after it -- a
+    # callback nobody fired that no lifted code creates (code3: 18 of them)
+    first = next((s for s, k, _, _, _ in caps if s not in boot and not k.startswith("t")), None)
+    if first is None:
+        return []
+    return [{"seq": s, "key": k, "cap": c} for s, k, c, _, _ in caps
+            if s not in boot and (s > first or not k.startswith("t"))]
+
+def _lift_auto(prog, fl, roots):
+    """auto_roots -> lines: each candidate no earlier root reached is lifted
+    as a root; the biggest is the script body, the others (a second payload,
+    functions the script made at run time that no lifted code creates) are
+    local functions declared before it."""
+    blocks = []
+    for r in roots:
+        cap = r["cap"]
+        try:
+            vm = prog.vm_of(cap)
+            proto = vm.proto_of(cap)
+        except Unsupported:
+            continue
+        if proto is None or id(proto) in fl.lifted or proto.tid in fl.lifted_tids:
+            continue
+        n0 = fl.stats["functions"]
+        try:
+            lines = fl.lift(vm, vm.vmobj_of(cap), proto, UpList(), {}, 0)
+        except Exception as ex:          # keep going: one bad function must not lose the rest
+            blocks.append((r["seq"], 0, ["-- function created %s-th: not lifted: %s" % (r["seq"], ex)], ""))
+            continue
+        blocks.append((r["seq"], fl.stats["functions"] - n0, lines, ", ".join(fl.params)))
+    if not blocks:
+        return None
+    if os.environ.get("DEVIRT_DEBUG") or os.environ.get("DEVIRT_TIMING"):
+        sys.stderr.write("[*] script roots: %s\n" % ", ".join("#%s (%d functions)" % (b[0], b[1]) for b in blocks))
+    main = max(blocks, key=lambda b: (b[1], -b[0]))
+    out = []
+    for b in blocks:
+        if b is main:
+            continue
+        if not b[1]:
+            out += [""] + b[2]
+            continue
+        out.append("")
+        out.append("-- function created %s-th by the script at run time" % b[0])
+        out.append("local function payload_fn_%s(%s)" % (b[0], b[3]))
+        out += ["\t" + l for l in b[2]]
+        out.append("end")
+    out.append("")
+    params = [p.strip() for p in main[3].split(",") if p.strip() and p.strip() != "..."]
+    if params:
+        out.append("local %s = ..." % ", ".join(params))
+    return out + main[2]
 
 def lift_program(source, protos_path, chunk_paths=(), fetch=None):
     """The root proto of every VM -> Luau text (plus stats and constant requests)."""
@@ -4974,6 +4600,12 @@ def lift_program(source, protos_path, chunk_paths=(), fetch=None):
     vms, payload = _vm_roots(prog)
     payload_pid = None
 
+    roots = auto_roots(prog) if auto_active() else []
+    if roots:
+        auto_out = _lift_auto(prog, fl, roots)
+        if auto_out is not None:
+            out = auto_out
+            vms = []
     loaders = bool(os.environ.get("DEVIRT_LOADERS"))
     for tag, lst in vms:
         _, pid, cap = lst[0]          
@@ -4996,9 +4628,7 @@ def lift_program(source, protos_path, chunk_paths=(), fetch=None):
             out.append("-- VM %s: root proto #%s (%d protos captured; %s)" % (where, pid, len(lst), role))
         if tag == payload:
             payload_pid = pid
-        arg1 = prog.dump.proto_arg1.get(int(pid)) if str(pid).isdigit() else None
-        init_facts = {("vararg", 1): ("c", arg1)} if isinstance(arg1, (int, float)) else None
-        lines = fl.lift(vm, vmobj, proto, UpList(), {}, 0, init_facts=init_facts)
+        lines = fl.lift(vm, vmobj, proto, UpList(), {}, 0)
         if tag == payload and not loaders:
             out.append("")
             params = [p for p in fl.params if p != "..."]
@@ -5013,6 +4643,37 @@ def lift_program(source, protos_path, chunk_paths=(), fetch=None):
         out.append("")
     if payload_pid is not None:
         out.append("return vm_root_%s(...)" % payload_pid)
+
+    # DEVIRT_ALL_FROM=<seq>: a decrypted payload starts several independent
+    # top-level closures (pcall'd modules, task.spawn bodies) that the root
+    # never references as constants. Lift every captured proto of the payload
+    # VM created at/after <seq> that no earlier lift reached, as its own block.
+    all_from = os.environ.get("DEVIRT_ALL_FROM")
+    if all_from and payload is not None:
+        extra = 0
+        for seq, pid, cap in payload_extra_roots(vms, payload):
+                try:
+                    vm = prog.vm_of(cap)
+                    proto = vm.proto_of(cap)
+                except Unsupported:
+                    continue
+                if proto is None or id(proto) in fl.lifted or \
+                        (getattr(proto, "tid", None) is not None and proto.tid in fl.lifted_tids):
+                    continue
+                vmobj = vm.vmobj_of(cap)
+                try:
+                    lines = fl.lift(vm, vmobj, proto, UpList(), {}, 0)
+                except Exception as ex:          # keep going: one bad proto must not lose the rest
+                    out.append("-- payload proto #%s (created %s-th): not lifted: %s" % (pid, seq, ex))
+                    out.append("")
+                    continue
+                extra += 1
+                out.append("")
+                out.append("-- payload closure created %s-th (proto #%s)" % (seq, pid))
+                out.append("local function payload_fn_%s(%s)" % (seq, ", ".join(fl.params)))
+                out += ["\t" + l for l in lines]
+                out.append("end")
+        sys.stderr.write("[*] DEVIRT_ALL_FROM=%s: %d extra top-level payload closures lifted\n" % (all_from, extra))
 
     shared = []
     for n in sorted(prog.dump.shared.values()):
@@ -5056,26 +4717,17 @@ def stable_patches(dump):
 
 def format_patches(bw, tw):
     per = {}
-    slice_runs = {}
     for (path, key, off), v in bw.items():
-        h = "%s,%s" % (path, key)
-        if isinstance(v, (bytes, bytearray)):
-            slice_runs.setdefault(h, []).append((off, v))
-        else:
-            per.setdefault(h, {})[off] = v
+        per.setdefault("%s,%s" % (path, key), {})[off] = v
     out = []
-    for holder in sorted(set(per) | set(slice_runs)):
-        runs = list(slice_runs.get(holder, ()))
-        bs = per.get(holder, {})
-        byte_runs = []
+    for holder, bs in per.items():
+        runs = []
         for off in sorted(bs):
-            if byte_runs and byte_runs[-1][0] + len(byte_runs[-1][1]) == off:
-                byte_runs[-1][1].append(bs[off])
+            if runs and runs[-1][0] + len(runs[-1][1]) == off:
+                runs[-1][1].append(bs[off])
             else:
-                byte_runs.append((off, [bs[off]]))
-        runs.extend((off, bytes(b)) for off, b in byte_runs)
-        runs.sort(key=lambda x: x[0])
-        out.append(holder + "".join("/%d:%s" % (off, b.hex()) for off, b in runs))
+                runs.append((off, [bs[off]]))
+        out.append(holder + "".join("/%d:%s" % (off, bytes(b).hex()) for off, b in runs))
     out.sort()      
 
     tabs = {}
@@ -5170,10 +4822,10 @@ def collect_requests(source, protos_path, chunk_paths=(), cache=None, fetch=None
     pkey = {tid: ",".join(str(x) for x in p) for tid, p in paths.items()}
     res = PathResolver(dump)
     live = {}
-    for (path, vmid, fkey), ent in cache.entries.items():
+    for (path, vmid), ent in cache.entries.items():
         t = res.get(path)
         if t is not None:
-            live[(t.tid, vmid, fkey)] = (path, ent)
+            live[(t.tid, vmid)] = (path, ent)
     kept = {}
     stats = {"functions": 0, "errors": 0, "fallbacks": 0, "walked": 0}
     requests = set()
@@ -5181,33 +4833,41 @@ def collect_requests(source, protos_path, chunk_paths=(), cache=None, fetch=None
     dump.fetcher = fetch
     dump.extra_patches = (bw, tw)
     todo = []
+    # the DEVIRT_ALL_FROM closures lift_program adds after the root: walked
+    # last (bottom of the stack), so the root and its closures go first as there
+    vms, payload = _vm_roots(prog)
+    for seq, pid, cap in reversed(payload_extra_roots(vms, payload)):
+        try:
+            vm = prog.vm_of(cap)
+            proto = vm.proto_of(cap)
+        except Unsupported:
+            continue
+        if proto is not None:
+            todo.append((vm, vm.vmobj_of(cap), proto))
     for tag, pid, cap in reversed(program_roots(prog)):
         try:
             vm = prog.vm_of(cap)
         except Unsupported:
             continue
-        arg1 = dump.proto_arg1.get(int(pid)) if str(pid).isdigit() else None
-        init_facts = {("vararg", 1): ("c", arg1)} if isinstance(arg1, (int, float)) else {}
-        todo.append((vm, vm.vmobj_of(cap), vm.proto_of(cap), init_facts))
+        todo.append((vm, vm.vmobj_of(cap), vm.proto_of(cap)))
     seen = set()
     while todo:
-        vm, vmobj, proto, init_facts = todo.pop()
+        vm, vmobj, proto = todo.pop()
         if id(proto) in seen:
             continue
         seen.add(id(proto))
-        fkey = repr(sorted((init_facts or {}).items()))
-        found = live.get((proto.tid, id(vm), fkey))
+        found = live.get((proto.tid, id(vm)))
         use = found and _translate(found[1], res, pkey)
         if use:
-            kept[(found[0], id(vm), fkey)] = found[1]
+            kept[(found[0], id(vm))] = found[1]
             ent = found[1]
             kids, ebw, etw = use
         else:
-            ent = _walk_one(prog, vm, vmobj, proto, pkey, init_facts=init_facts)
+            ent = _walk_one(prog, vm, vmobj, proto, pkey)
             stats["walked"] += 1
             key = pkey.get(proto.tid)
             if key is not None and ent["clean"]:
-                kept[(key, id(vm), fkey)] = ent
+                kept[(key, id(vm))] = ent
             kids = [res.get(c) if isinstance(c, str) else c for c in ent["children"]]
             ebw, etw = ent["bw"], ent["tw"]
         stats["functions"] += 1
@@ -5216,8 +4876,7 @@ def collect_requests(source, protos_path, chunk_paths=(), cache=None, fetch=None
         bw.update(ebw)
         tw.update(etw)
         kvms = [prog.vms.get(t) or _JIT_TAGGED.get(t) or vm for t in ent.get("child_vms") or [None] * len(kids)]
-        kfacts = ent.get("child_facts") or [{} for _ in kids]
-        todo += [(kvm, vmobj, c, cf) for c, kvm, cf in reversed(list(zip(kids, kvms, kfacts))) if c is not None]
+        todo += [(kvm, vmobj, c) for c, kvm in reversed(list(zip(kids, kvms))) if c is not None]
     cache.entries = kept
     stats["fetched"] = len(dump.fetched)
     if os.environ.get("DEVIRT_TIMING") and dump.fetched:
@@ -5227,17 +4886,15 @@ def collect_requests(source, protos_path, chunk_paths=(), cache=None, fetch=None
     prog.requests = requests
     return stats, requests, format_patches(bw, tw)
 
-def _walk_one(prog, vm, vmobj, proto, pkey, init_facts=None):
+def _walk_one(prog, vm, vmobj, proto, pkey):
     dump = prog.dump
     saved = dump.buf_patch, dump.tab_patch
     dump.buf_patch, dump.tab_patch = PatchLog(), PatchLog()
     nmiss = sum(dump.misses.values())
-    ent = {"requests": set(), "children": [], "child_facts": [], "errors": 0, "clean": False, "bw": {}, "tw": {}}
+    ent = {"requests": set(), "children": [], "errors": 0, "clean": False, "bw": {}, "tw": {}}
     try:
         lf = ProtoLifter(vm, dump, vmobj, proto, UpList(), prog.globals,
                          cap=dump.cap_by_self.get(proto.tid))
-        if init_facts:
-            lf.init_facts.update(init_facts)
         lf.walk_only = True
         st = make_stepper(vm, lf)
         for _ in range(WALK_RESTARTS):
@@ -5260,12 +4917,6 @@ def _walk_one(prog, vm, vmobj, proto, pkey, init_facts=None):
     kids = [c for c in lf.children if isinstance(c.proto, LTable)]
     ent["children"] = [pkey.get(c.proto.tid, c.proto) for c in kids]
     ent["child_vms"] = [getattr(getattr(c, "vm", None), "tag", None) for c in kids]
-    cfacts = []
-    for c in kids:
-        cf = dict(getattr(c, "up_facts", None) or {})
-        cf.update(getattr(c, "arg_facts", None) or {})
-        cfacts.append(cf)
-    ent["child_facts"] = cfacts
     ent["clean"] = not lf.requests and sum(dump.misses.values()) == nmiss and \
         all(isinstance(c, str) for c in ent["children"])
     return ent
@@ -5295,4 +4946,3 @@ run_big_stack = backend.run_big_stack
 
 if __name__ == "__main__":
     run_big_stack(main)
-

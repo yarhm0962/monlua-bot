@@ -100,38 +100,30 @@ function findDispatchers(root) {
     }
     if (!body) return;
     if (body.length < 2) return;
-    for (const idx of [0, 1]) {
-      if (idx >= body.length - 1) break;
-      const st = body[idx];
-      if (!['AstStatLocal', 'AstStatAssign'].includes(st.type)) continue;
-      const vars = st.vars || [];
-      const vals = st.values || [];
-      let matched = false;
-      for (let k = 0; k < Math.min(vars.length, vals.length); k++) {
-        const v = _unwrap(vals[k]);
-        if (!v || v.type !== 'AstExprIndexExpr') continue;
-        const arr = localName(_unwrap(v.expr)), pc = localName(_unwrap(v.index));
-        if (!arr || !pc) continue;
-        const opname = st.type === 'AstStatLocal' ? vars[k].name : localName(vars[k]);
-        if (!opname) continue;
-        const nxtI = idx + 1;
-        if (nxtI < body.length && body[nxtI].type === 'AstStatIf') {
-          found.push({ node: n, op: opname, arr, pc, tree: body[nxtI], rest: body.slice(nxtI + 1) });
-          matched = true;
-          break;
-        } else if (nxtI + 1 < body.length && ['AstStatLocal', 'AstStatAssign'].includes(body[nxtI].type) && body[nxtI + 1].type === 'AstStatIf') {
-          const st1 = body[nxtI];
-          if ((st1.values || []).length === 1) {
-            const v1 = _unwrap(st1.values[0]);
-            if (v1 && v1.type === 'AstExprBinary' && OPS[v1.op]) {
-              found.push({ node: n, op: opname, arr, pc, tree: n.body, rest: body.slice(nxtI + 2) });
-              matched = true;
-              break;
-            }
-          }
+    const st = body[0];
+    if (!['AstStatLocal', 'AstStatAssign'].includes(st.type)) return;
+    if ((st.values || []).length !== 1) return;
+    let opname;
+    if (st.type === 'AstStatLocal') {
+      opname = st.vars[0].name;
+    } else {
+      opname = localName(st.vars[0]);
+      if (!opname) return;
+    }
+    const v = _unwrap(st.values ? st.values[0] : null);
+    if (!v || v.type !== 'AstExprIndexExpr') return;
+    const arr = localName(_unwrap(v.expr)), pc = localName(_unwrap(v.index));
+    if (!arr || !pc) return;
+    if (body[1].type === 'AstStatIf') {
+      found.push({ node: n, op: opname, arr, pc, tree: body[1], rest: body.slice(2) });
+    } else if (body.length >= 3 && ['AstStatLocal', 'AstStatAssign'].includes(body[1].type) && body[2].type === 'AstStatIf') {
+      const st1 = body[1];
+      if ((st1.values || []).length === 1) {
+        const v1 = _unwrap(st1.values[0]);
+        if (v1 && v1.type === 'AstExprBinary' && OPS[v1.op]) {
+          found.push({ node: n, op: opname, arr, pc, tree: n.body, rest: body.slice(3) });
         }
       }
-      if (matched) break;
     }
   });
   return found;
@@ -187,34 +179,7 @@ function _makerParams(maker) {
   const args = maker.args || [];
   const visible = {};
   args.forEach((a, i) => { visible[a.name] = i; });
-  const counts = {}, kcounts = {}, acounts = {}, used = new Set();
-  const paramLocs = new Set(args.map(a => a.location));
-  const aliases = {};
-
-  function collectAliases(n) {
-    if (!n || typeof n !== 'object') return;
-    if (Array.isArray(n)) { n.forEach(collectAliases); return; }
-    if (n.type === 'AstStatLocal' && Array.isArray(n.vars) && Array.isArray(n.values)) {
-      for (let i = 0; i < Math.min(n.vars.length, n.values.length); i++) {
-        const vr = n.vars[i], vl = n.values[i];
-        if (vr?.type === 'AstLocal' && vl?.type === 'AstExprLocal') {
-          const src = vl.local?.location;
-          if (paramLocs.has(src) || aliases[src]) aliases[vr.location] = src;
-        }
-      }
-    }
-    Object.values(n).forEach(collectAliases);
-  }
-  collectAliases(maker.body);
-
-  function resolveLoc(loc) {
-    let d = 0;
-    while (d < 10 && !paramLocs.has(loc) && aliases[loc]) {
-      loc = aliases[loc];
-      d++;
-    }
-    return loc;
-  }
+  const counts = {}, kcounts = {}, used = new Set();
 
   function visit(n) {
     if (!n || typeof n !== 'object') return;
@@ -226,16 +191,12 @@ function _makerParams(maker) {
         n.index.expr.local.location === n.expr.local.location) {
       const k = n.expr.local.location;
       counts[k] = (counts[k] || 0) + 1;
-      const ak = resolveLoc(k);
-      if (ak !== k) acounts[ak] = (acounts[ak] || 0) + 1;
     }
 
     if (n.type === 'AstExprIndexExpr' && n.expr?.type === 'AstExprLocal' &&
         n.index?.type === 'AstExprConstantNumber') {
       const k = n.expr.local.location;
       kcounts[k] = (kcounts[k] || 0) + 1;
-      const ak = resolveLoc(k);
-      if (ak !== k) kcounts[ak] = (kcounts[ak] || 0) + 1;
     }
     Object.values(n).forEach(visit);
   }
@@ -250,18 +211,12 @@ function _makerParams(maker) {
       }, cands[0])
     : 1;
   if (!counts[args[pi]?.location]) {
-    const ac = cands.filter(i => acounts[args[i]?.location]);
+    pi = 1;
     const kc = cands.filter(i => kcounts[args[i]?.location]);
-    if (ac.length) {
-      pi = ac.reduce((best, i) => (acounts[args[i].location] > acounts[args[best].location] ? i : best), ac[0]);
-    } else if (kc.length) {
-      pi = kc.reduce((best, i) => (kcounts[args[i].location] > kcounts[args[best].location] ? i : best), kc[0]);
-    } else {
-      pi = 1;
-    }
+    if (kc.length) pi = kc.reduce((best, i) => (kcounts[args[i].location] > kcounts[args[best].location] ? i : best), kc[0]);
   }
   const others = Object.values(visible).filter(i => i !== 0 && i !== pi && used.has(args[i]?.location)).sort();
-  const ui = others.length ? others[0] : (pi + 1 >= args.length && pi > 1 ? pi - 1 : pi + 1);
+  const ui = others.length ? others[0] : pi + 1;
   return [pi, ui];
 }
 
@@ -459,8 +414,8 @@ function makerInfo(root) {
                   maker: stack[oi], vm: clo, stmt: st,
                   chain: stack.slice(0, oi),
                 });
+                registered = true;
               }
-              registered = true;
             }
           });
         }
@@ -537,7 +492,6 @@ function patchEntries(source, filePath, chunkTag) {
     const k = `(${name} or __PID)`;
     edits.push([l1, c1,
       `if not __PID[${k}] then __PID.n=__PID.n+1;__PID[${k}]=__PID.n;end;` +
-      `if __PARG1 and not __PARG1[__PID[${k}]] and type((...))=="number" then __PARG1[__PID[${k}]]=(...) end;` +
       `__ENT.n=__ENT.n+1;__ENT[__ENT.n%64]=__PID[${k}];__PLAST[__PID[${k}]]=__ENT.n;` +
       `if __SKIPP[__PID[${k}]] then return end;`
     ]);
@@ -546,7 +500,7 @@ function patchEntries(source, filePath, chunkTag) {
   for (const info of makerInfo(root)) {
     const [l2, c2] = info.at;
     if (info.curried3) {
-      const { f3, f2, f1, retStmt, f2Ret, uName, zName, kind } = info.curried3;
+      const { f3, f2, retStmt, f2Ret, uName, zName, kind } = info.curried3;
       const f3b = f3.body.body;
       const [f3_l0, f3_c0] = loc(f3b[0]);
       const f3Params = [...new Set((f3.args || []).map(a => a.name).filter(nm => nm && nm !== '...'))];
@@ -562,11 +516,6 @@ function patchEntries(source, filePath, chunkTag) {
         const [fn_l1, fn_c1, fn_l2, fn_c2] = loc(f2);
         edits.push([fn_l1, fn_c1, `(function(__mk)__PF[__mk]=__pv;__PK[__pv]=__mk;return __mk end)(`]);
         edits.push([fn_l2, fn_c2, `)`]);
-        if (f1) {
-          const [f1_l1, f1_c1, f1_l2, f1_c2] = loc(f1);
-          edits.push([f1_l1, f1_c1, `(function(__fn)__PF[__fn]=__pv;return __fn end)(`]);
-          edits.push([f1_l2, f1_c2, `)`]);
-        }
       }
       continue;
     }
@@ -597,15 +546,15 @@ function patchEntries(source, filePath, chunkTag) {
 
 function patchSpin(src) {
   const INJ = '__SPIN.n=__SPIN.n+1;if __SPIN.n>=__SPIN.step then __SPIN.f()end;';
-  // classic:  while true do X=Y[Z]; or local TJ,H=q,w[s]if ... or d[2349588]=s;local o=w[s]
+  // classic:  while true do X=Y[Z];            (Luraph v15 dispatch)
   let out = src.replace(
-    /while true do (?:[A-Za-z_][A-Za-z0-9_]*\[\d+\]=[A-Za-z_][A-Za-z0-9_]*;\s*)?(?:local )?[A-Za-z_][A-Za-z0-9_]*(?:,[A-Za-z_][A-Za-z0-9_]*)*=(?:[A-Za-z_][A-Za-z0-9_]*,)?\(?[A-Za-z_][A-Za-z0-9_]*\[[A-Za-z_][A-Za-z0-9_]*\]\)?;?(?=\s*(?:if|local)\b)/g,
-    m => (m.endsWith(';') ? m : m + ';') + INJ
+    /while true do (?:local )?[A-Za-z_]+(?:,[A-Za-z_]+)*=[A-Za-z_]+\[[A-Za-z_]+\];/g,
+    m => m + INJ
   );
   // repeat form:  repeat local y=(V[W]);       (Luraph v15 dispatch, some builds)
   out = out.replace(
-    /repeat (?:[A-Za-z_][A-Za-z0-9_]*\[\d+\]=[A-Za-z_][A-Za-z0-9_]*;\s*)?(?:local )?[A-Za-z_][A-Za-z0-9_]*(?:,[A-Za-z_][A-Za-z0-9_]*)*=(?:[A-Za-z_][A-Za-z0-9_]*,)?\(?[A-Za-z_][A-Za-z0-9_]*\[[A-Za-z_][A-Za-z0-9_]*\]\)?;?(?=\s*(?:if|local)\b)/g,
-    m => (m.endsWith(';') ? m : m + ';') + INJ
+    /repeat (?:local )?[A-Za-z_]+=\([A-Za-z_]+\[[A-Za-z_]+\]\);/g,
+    m => m + INJ
   );
   return out;
 }

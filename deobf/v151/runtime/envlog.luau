@@ -29,6 +29,7 @@ local R = {
         setmetatable = setmetatable, getmetatable = getmetatable,
         pcall = pcall, xpcall = xpcall, error = error,
         getfenv = __RAW.getfenv, setfenv = __RAW.setfenv, loadstring = __RAW.loadstring,
+        gc = __RAW.collectgarbage,   -- REAL collectgarbage (the script-facing one is pinned/fake)
         newproxy = newproxy, print = print, clock = os.clock,
         unpack = table.unpack, insert = table.insert, concat = table.concat,
         remove = table.remove, fmt = string.format, rep = string.rep,
@@ -281,16 +282,24 @@ function CHAIN.get()
         local parts = {}
         local lvl = 3
         local inner = nil
+        local innermost = nil
         while true do
                 local f = debug.info(lvl, "f")
                 if f == nil then break end
                 local proto = pf[f]
                 local id = proto and pid[proto]
                 if id then
+                        if innermost == nil then innermost = id end
                         if id == 1 and #parts > 0 then inner = parts[1] end
                         R.insert(parts, 1, id .. ":" .. R.tostring(plast[id]))
                 end
                 lvl += 1
+        end
+        -- statements per function (innermost script frame): which captured
+        -- functions do the script's work -- the payload roots are found from it
+        if innermost ~= nil then
+                CHAIN.emit = CHAIN.emit or {}
+                CHAIN.emit[innermost] = (CHAIN.emit[innermost] or 0) + 1
         end
         -- the function the first proto (the VM root) called last: the script's
         -- main function when Luraph's bootstrap and the script share one VM
@@ -302,13 +311,6 @@ function CHAIN.get()
                 CHAIN.seen[c] = CHAIN.seen[c] or "ok"
         elseif #parts == 1 and R.match(parts[1], "^1:") then
                 for c in R.next, CHAIN.seen do CHAIN.seen[c] = "probe" end
-                CHAIN.rootCallee = nil
-        elseif #parts >= 1 and not R.match(parts[1], "^1:") and (not CHAIN.rootCallee or CHAIN.seen[CHAIN.rootCallee] == "probe") then
-                local c = R.tonumber(R.match(parts[1], "^(%d+):"))
-                if c and CHAIN.seen[c] ~= "probe" then
-                        CHAIN.rootCallee = c
-                        CHAIN.seen[c] = "ok"
-                end
         end
         return R.concat(parts, ",")
 end
@@ -330,6 +332,14 @@ local function checkBudget()
         end
         if stmtCount > MAX_STMTS then
                 ABORT_REASON = "statement limit reached"
+                R.error(ABORT, 0)
+        end
+        -- hard memory ceiling: a runaway loop (e.g. a wait-loop whose clock never
+        -- advances) can balloon the trace to gigabytes and get OOM-killed, taking
+        -- the whole API down with a 502. Abort cleanly well before that. Lua-heap
+        -- KB from the REAL collectgarbage (CFG.mem_cap_kb, default ~1.5 GB).
+        if R.gc and stmtCount % 512 == 0 and R.gc("count") > (CFG.mem_cap_kb or 1500000) then
+                ABORT_REASON = "memory limit reached"
                 R.error(ABORT, 0)
         end
         local now = R.clock()
@@ -408,6 +418,19 @@ local function newP(info)
         end
         INFO[p] = info
         BYID[nextId] = p
+        -- proxy creation is the main memory consumer; a runaway loop making
+        -- millions of them (bypassing emit/checkBudget) would OOM the process and
+        -- 502 the API. Check the real heap every 4096 proxies and abort cleanly.
+        if nextId % 4096 == 0 and R.gc and R.gc("count") > (CFG.mem_cap_kb or 1500000) then
+                ABORT_REASON = "memory limit reached"
+                R.error(ABORT, 0)
+        end
+        if CFG.debug_pcall then
+                R.szRing = R.szRing or {}
+                R.szRingN = (R.szRingN or 0) + 1
+                R.szRing[R.szRingN % 24 + 1] = R.tostring(R.szRingN) .. "#" .. (info.kind or "?") .. ":"
+                        .. R.tostring(info.key or info.hint or info.text or info.tname or "")
+        end
         return p
 end
 
@@ -482,6 +505,8 @@ local function keySuffix(k)
 end
 
 local ENV -- forward
+-- opaque-scalar helpers live on the private R table (R.sz*): the top-level chunk
+-- is already at Luau's 200-local limit, so no new top-level locals may be added.
 
 function fmt(v, depth, seen)
         local t = R.type(v)
@@ -725,9 +750,8 @@ local NOREAL = R.setmetatable({}, { __tostring = function() return "<envlog: no 
 local function unwrap(v, depth)
         if isP(v) then
                 local r = REALV[v]
-                if r ~= nil then return r end
-                if INFO[v] and INFO[v].tname == "EnumItem" then return v end
-                R.error(NOREAL, 0)
+                if r == nil then R.error(NOREAL, 0) end
+                return r
         elseif R.type(v) == "table" and depth < 3 then
                 local t = {}
                 for k, x in R.pairs(v) do t[unwrap(k, depth + 1)] = unwrap(x, depth + 1) end
@@ -763,7 +787,6 @@ end
 -- source expression that produced it. Returns (value, true) or (nil, false)
 -- when the value cannot be represented (the caller falls back to a proxy).
 local function wrapReal(r, text, hint, depth)
-        if isP(r) then return r, true end
         local t = R.type(r)
         if PLAIN_T[t] then return r, true end
         local tt = R.typeof(r)
@@ -1316,124 +1339,6 @@ local function destroyInst(p)
         local r = REALV[p]
         if r ~= nil and R.typeof(r) == "Instance" then R.pcall(r.Destroy, r) end
 end
-function CHAIN.isClassA(cls, want)
-        local c = cls
-        local guard = 0
-        while c and guard < 32 do
-                guard += 1
-                if c == want then return true end
-                c = API.classes[c] and API.classes[c].super
-        end
-        return want == "Instance" or want == "Object"
-end
-function CHAIN.cloneInst(root, text)
-        local ri = INFO[root]
-        if not ri or ri.props.Archivable == false then return nil end
-        local cmap = {}
-        local function rec(src, newPar)
-                local si = INFO[src]
-                local cp
-                if src == root then
-                        cp = callP(text, "clone")
-                else
-                        cp = newP({ kind = "expr", text = tok(newPar) .. ":FindFirstChild(" .. quote(R.tostring(si.props.Name or si.className or "Child")) .. ")", tname = "Instance", hint = si.className or "clone" })
-                end
-                cmap[src] = cp
-                local ci = INFO[cp]
-                ci.created = true
-                ci.className = si.className
-                ci.kids = {}
-                ci.modelScale = si.modelScale
-                if si.attrs then ci.attrs = table.clone(si.attrs) end
-                for k, v in R.pairs(si.props) do
-                        if k ~= "Parent" then ci.props[k] = v end
-                end
-                if newPar then setParent(cp, newPar) end
-                for _, child in kidsOf(src) do
-                        local chi = INFO[child]
-                        if chi and chi.props.Archivable ~= false then
-                                rec(child, cp)
-                        end
-                end
-                return cp
-        end
-        local top = rec(root, nil)
-        for _, cp in R.pairs(cmap) do
-                local ci = INFO[cp]
-                for k, v in R.pairs(ci.props) do
-                        if cmap[v] ~= nil then ci.props[k] = cmap[v] end
-                end
-        end
-        return top
-end
-function CHAIN.attParentWorldCF(p)
-        local par = INFO[p] and INFO[p].props.Parent
-        if isP(par) then
-                local pi = INFO[par]
-                if pi.className == "Attachment" or pi.className == "Bone" then
-                        return par.WorldCFrame
-                end
-                if pi.props.CFrame then return pi.props.CFrame end
-        end
-        return ENV.CFrame.identity
-end
-function CHAIN.modelBounds(self)
-        local f32 = CHAIN.p2d.f32
-        local minX, minY, minZ = math.huge, math.huge, math.huge
-        local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
-        local found = false
-        for _, d in descendants(self, {}) do
-                local di = INFO[d]
-                if di and CHAIN.isClassA(di.className, "BasePart") then
-                        found = true
-                        local cf = di.props.CFrame or ENV.CFrame.identity
-                        local sz = di.props.Size or vector.create(4, 1.2, 2)
-                        local hx, hy, hz = sz.X * 0.5, sz.Y * 0.5, sz.Z * 0.5
-                        for sx = -1, 1, 2 do
-                                for sy = -1, 1, 2 do
-                                        for szs = -1, 1, 2 do
-                                                local wp = cf * vector.create(sx * hx, sy * hy, szs * hz)
-                                                if wp.X < minX then minX = wp.X end
-                                                if wp.Y < minY then minY = wp.Y end
-                                                if wp.Z < minZ then minZ = wp.Z end
-                                                if wp.X > maxX then maxX = wp.X end
-                                                if wp.Y > maxY then maxY = wp.Y end
-                                                if wp.Z > maxZ then maxZ = wp.Z end
-                                        end
-                                end
-                        end
-                end
-        end
-        if not found then return ENV.CFrame.identity, vector.create(0, 0, 0) end
-        local ext = vector.create(f32(maxX - minX), f32(maxY - minY), f32(maxZ - minZ))
-        local ctr = vector.create(f32((minX + maxX) * 0.5), f32((minY + maxY) * 0.5), f32((minZ + maxZ) * 0.5))
-        local pp = INFO[self].props.PrimaryPart
-        local rot = (isP(pp) and INFO[pp].props.CFrame and INFO[pp].props.CFrame.Rotation) or ENV.CFrame.identity
-        return rot + ctr, ext
-end
-function CHAIN.guiScale(p)
-        local sc = 1
-        local cur = p
-        while isP(cur) do
-                for _, c in kidsOf(cur) do
-                        if INFO[c] and INFO[c].className == "UIScale" then
-                                sc = sc * (R.tonumber(INFO[c].props.Scale) or 1)
-                        end
-                end
-                cur = INFO[cur].props.Parent
-        end
-        return sc
-end
-function CHAIN.guiUnscaledSize(p)
-        if not isP(p) or not INFO[p] or INFO[p].className == "ScreenGui" then return 0, 0 end
-        local pw, ph = CHAIN.guiUnscaledSize(INFO[p].props.Parent)
-        local sz = INFO[p].props.Size
-        if isP(sz) and REALV[sz] then
-                local r = REALV[sz]
-                return r.X.Scale * pw + r.X.Offset, r.Y.Scale * ph + r.Y.Offset
-        end
-        return 0, 0
-end
 local RUNSERVICE_BOOL = { IsStudio = false, IsServer = false, IsClient = true, IsRunning = true,
         IsRunMode = false, IsEdit = false }
 
@@ -1441,9 +1346,7 @@ local NO_NATIVE_METHOD = { Clone = 1, Destroy = 1, Remove = 1, GetChildren = 1, 
         FindFirstChild = 1, WaitForChild = 1, FindFirstChildOfClass = 1, FindFirstChildWhichIsA = 1,
         FindFirstAncestor = 1, FindFirstAncestorOfClass = 1, FindFirstAncestorWhichIsA = 1, FindFirstDescendant = 1,
         ClearAllChildren = 1, IsA = 1, Connect = 1, Once = 1, Wait = 1, GetPropertyChangedSignal = 1,
-        GetAttributeChangedSignal = 1, IsDescendantOf = 1, IsAncestorOf = 1, GetFullName = 1,
-        SetAttribute = 1, GetAttribute = 1, GetAttributes = 1, GetMass = 1, GetPivot = 1, PivotTo = 1,
-        GetBoundingBox = 1, GetExtentsSize = 1, GetScale = 1, ScaleTo = 1 }
+        GetAttributeChangedSignal = 1, IsDescendantOf = 1, IsAncestorOf = 1, GetFullName = 1 }
 ---------------------------------------------------------------------------
 -- Offline Path2D model (bit-exact float32 reproduction of the engine; see
 -- research/path2d/README.md). Used when no recorded answer exists.
@@ -1509,7 +1412,10 @@ do
                 return u[2], u[4]
         end
         local function resolve(u, W, H)
-                return f32(f32(u[1] * W) + u[2]), f32(f32(u[3] * H) + u[4])
+                -- UDim.Scale is stored as f32 by the engine; round it BEFORE the
+                -- multiply or the absolute coordinate is off by ~1 ulp (breaks the
+                -- Luraph Path2D fingerprint). Offsets are integers (exact).
+                return f32(f32(f32(u[1]) * W) + u[2]), f32(f32(f32(u[3]) * H) + u[4])
         end
         -- control point proxies -> list of segments {x0,y0, x1,y1, ...} (pixels)
         function M.segments(cps, W, H)
@@ -1682,7 +1588,40 @@ do
                 if name == "GetLength" then
                         return R.fmt("n:%.17g", M.length(segs))
                 elseif name == "GetBoundingRect" then
-                        return "r:0,0,0,0"
+                        -- engine returns the curve's extent bbox padded by 1px
+                        local minx, miny, maxx, maxy = math.huge, math.huge, -math.huge, -math.huge
+                        local function consider(c, u)
+                                if u < 0 or u > 1 then return end
+                                local x, y = M.eval(c, u)
+                                if x < minx then minx = x end
+                                if x > maxx then maxx = x end
+                                if y < miny then miny = y end
+                                if y > maxy then maxy = y end
+                        end
+                        local function crit(c, c1, c2, c3)
+                                if c.n == 3 then
+                                        if c2 ~= 0 then return { f32(-c1 / f32(c2 * 2)) } end
+                                        return {}
+                                elseif c.n == 4 then
+                                        local A, B, C = f32(c3 * 3), f32(c2 * 2), c1
+                                        if A == 0 then
+                                                if B ~= 0 then return { f32(-C / B) } end
+                                                return {}
+                                        end
+                                        local disc = f32(f32(B * B) - f32(f32(4 * A) * C))
+                                        if disc < 0 then return {} end
+                                        local sq = f32(math.sqrt(disc))
+                                        return { f32(f32(-B + sq) / f32(2 * A)), f32(f32(-B - sq) / f32(2 * A)) }
+                                end
+                                return {}
+                        end
+                        for _, c in R.ipairs(segs) do
+                                consider(c, 0); consider(c, 1)
+                                for _, u in R.ipairs(crit(c, c.c1x, c.c2x, c.c3x)) do consider(c, u) end
+                                for _, u in R.ipairs(crit(c, c.c1y, c.c2y, c.c3y)) do consider(c, u) end
+                        end
+                        if minx == math.huge then return "r:0,0,0,0" end
+                        return R.fmt("r:%.17g,%.17g,%.17g,%.17g", f32(minx - 1), f32(miny - 1), f32(maxx + 1), f32(maxy + 1))
                 end
                 if R.type(t) ~= "number" then return nil end
                 local c, u
@@ -1863,179 +1802,15 @@ local function onCall(p, ...)
                         for _, c in table.clone(kidsOf(self)) do destroyInst(c) end
                         return
                 elseif name == "IsA" and sinfo.created then
-                        return CHAIN.isClassA(sinfo.className, a1)
-                elseif name == "IsDescendantOf" and sinfo.created and isP(a1) and INFO[a1].created then
-                        local cur = sinfo.props.Parent
-                        while isP(cur) do
-                                if cur == a1 then return true end
-                                cur = INFO[cur].props.Parent
-                        end
-                        return false
-                elseif name == "IsAncestorOf" and sinfo.created and isP(a1) and INFO[a1].created then
-                        local cur = INFO[a1].props.Parent
-                        while isP(cur) do
-                                if cur == self then return true end
-                                cur = INFO[cur].props.Parent
-                        end
-                        return false
-                elseif name == "SetAttribute" and sinfo.created and R.type(a1) == "string" then
-                        emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                        sinfo.attrs = sinfo.attrs or {}
-                        sinfo.attrs[a1] = args[2]
-                        return
-                elseif name == "GetAttribute" and sinfo.created and R.type(a1) == "string" then
-                        emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                        return sinfo.attrs and sinfo.attrs[a1] or nil
-                elseif name == "GetAttributes" and sinfo.created then
-                        emit({ text = calleeText .. "()" })
-                        return sinfo.attrs and table.clone(sinfo.attrs) or {}
-                elseif name == "Clone" and sinfo.created then
-                        return CHAIN.cloneInst(self, calleeText .. "()")
-                elseif name == "GetMass" and sinfo.created and CHAIN.isClassA(sinfo.className, "BasePart") then
-                        emit({ text = calleeText .. "()" })
-                        return self.Mass
-                elseif name == "GetPivot" and sinfo.created and (CHAIN.isClassA(sinfo.className, "BasePart") or sinfo.className == "Model") then
-                        emit({ text = calleeText .. "()" })
-                        if sinfo.className == "Model" then
-                                local pp = sinfo.props.PrimaryPart
-                                if isP(pp) then
-                                        return (INFO[pp].props.CFrame or ENV.CFrame.identity) * (INFO[pp].props.PivotOffset or ENV.CFrame.identity)
-                                end
-                                local bcf = CHAIN.modelBounds(self)
-                                return bcf
-                        end
-                        return (sinfo.props.CFrame or ENV.CFrame.identity) * (sinfo.props.PivotOffset or ENV.CFrame.identity)
-                elseif name == "PivotTo" and sinfo.created and isP(a1) and (CHAIN.isClassA(sinfo.className, "BasePart") or sinfo.className == "Model") then
-                        emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                        if sinfo.className == "Model" then
-                                local pp = sinfo.props.PrimaryPart
-                                local oldPivot
-                                if isP(pp) then
-                                        oldPivot = (INFO[pp].props.CFrame or ENV.CFrame.identity) * (INFO[pp].props.PivotOffset or ENV.CFrame.identity)
-                                else
-                                        oldPivot = CHAIN.modelBounds(self)
-                                end
-                                local delta = a1 * oldPivot:Inverse()
-                                for _, d in descendants(self, {}) do
-                                        local di = INFO[d]
-                                        if di and CHAIN.isClassA(di.className, "BasePart") then
-                                                local ncf = delta * (di.props.CFrame or ENV.CFrame.identity)
-                                                di.props.CFrame = ncf
-                                                di.props.Position = ncf.Position
-                                        end
-                                end
-                                return
-                        end
-                        local po = sinfo.props.PivotOffset or ENV.CFrame.identity
-                        local ncf = a1 * po:Inverse()
-                        sinfo.props.CFrame = ncf
-                        sinfo.props.Position = ncf.Position
-                        return
-                elseif name == "GetBoundingBox" and sinfo.created and sinfo.className == "Model" then
-                        emit({ text = calleeText .. "()" })
-                        return CHAIN.modelBounds(self)
-                elseif name == "GetExtentsSize" and sinfo.created and sinfo.className == "Model" then
-                        emit({ text = calleeText .. "()" })
-                        local _, ext = CHAIN.modelBounds(self)
-                        return ext
-                elseif name == "GetScale" and sinfo.created and sinfo.className == "Model" then
-                        emit({ text = calleeText .. "()" })
-                        return sinfo.modelScale or 1
-                elseif name == "ScaleTo" and sinfo.created and sinfo.className == "Model" and R.type(a1) == "number" then
-                        emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                        local f32 = CHAIN.p2d.f32
-                        local oldScale = sinfo.modelScale or 1
-                        local newScale = f32(a1)
-                        local ratio = f32(newScale / oldScale)
-                        local pp = sinfo.props.PrimaryPart
-                        local pivotCF
-                        if isP(pp) then
-                                pivotCF = (INFO[pp].props.CFrame or ENV.CFrame.identity) * (INFO[pp].props.PivotOffset or ENV.CFrame.identity)
-                        else
-                                pivotCF = CHAIN.modelBounds(self)
-                        end
-                        local ppos = pivotCF.Position
-                        for _, d in descendants(self, {}) do
-                                local di = INFO[d]
-                                if di and CHAIN.isClassA(di.className, "BasePart") then
-                                        local sz = di.props.Size or vector.create(4, 1.2, 2)
-                                        di.props.Size = sz * ratio
-                                        local cf = di.props.CFrame or ENV.CFrame.identity
-                                        local np = ppos + (cf.Position - ppos) * ratio
-                                        di.props.CFrame = (cf - cf.Position) + np
-                                        di.props.Position = np
-                                end
-                        end
-                        sinfo.modelScale = newScale
-                        return
+                        return a1 == sinfo.className or a1 == "Instance" or (a1 == "GuiObject" and sinfo.className == "Frame")
+                                or (a1 == "BasePart" and (sinfo.className == "Part" or sinfo.className == "MeshPart"))
                 end
-        end
-        if sinfo and sinfo.className == "TweenService" and name == "GetValue" then
-                emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                local f32 = CHAIN.p2d.f32
-                local x = f32(R.tonumber(a1) or 0)
-                if x <= 0 then return 0 end
-                if x >= 1 then return 1 end
-                local es = isP(args[2]) and INFO[args[2]].props.Name or args[2]
-                local ed = isP(args[3]) and INFO[args[3]].props.Name or args[3]
-                local function base(t)
-                        if es == "Linear" then return t end
-                        if es == "Cubic" then return f32(f32(t * t) * t) end
-                        if es == "Quart" then local t2 = f32(t * t) return f32(t2 * t2) end
-                        if es == "Quint" then local t2 = f32(t * t) return f32(f32(t2 * t2) * t) end
-                        return f32(t * t)
-                end
-                if ed == "In" then return base(x) end
-                if ed == "InOut" then
-                        if x < 0.5 then return f32(0.5 * base(f32(x * 2))) end
-                        return f32(1 - f32(0.5 * base(f32(2 - f32(x * 2)))))
-                end
-                return f32(1 - base(f32(1 - x)))
-        end
-        if sinfo and sinfo.className == "TextService" and name == "GetTextSize" then
-                emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                local txt = R.tostring(a1 or "")
-                local fs = R.tonumber(args[2]) or 14
-                local fnm = isP(args[3]) and INFO[args[3]].props.Name or R.tostring(args[3] or "Code")
-                local fsz = args[4]
-                local maxW = (isP(fsz) and REALV[fsz] and REALV[fsz].X) or 4096
-                local mono = (fnm == "Code" or fnm == "Arcade" or fnm == "RobotoMono")
-                local baseW = math.max(1, math.floor(fs * 0.6 + 0.5))
-                local function charW(ch)
-                        if mono then return baseW end
-                        if ch == "i" or ch == "l" or ch == "I" or ch == "." or ch == " " then return math.max(1, math.floor(fs * 0.3)) end
-                        if ch == "W" or ch == "M" then return math.max(baseW + 2, math.floor(fs * 0.85)) end
-                        return baseW
-                end
-                local function strW(s)
-                        local w = 0
-                        for i = 1, #s do w += charW(R.sub(s, i, i)) end
-                        return w
-                end
-                local maxLineW, numLines = 0, 0
-                for line in string.gmatch(txt .. "\n", "([^\n]*)\n") do
-                        local curW = 0
-                        local firstWord = true
-                        for word in string.gmatch(line, "%S+") do
-                                local ww = strW(word)
-                                local spw = firstWord and 0 or charW(" ")
-                                if not firstWord and curW + spw + ww > maxW then
-                                        if curW > maxLineW then maxLineW = curW end
-                                        numLines += 1
-                                        curW = ww
-                                else
-                                        curW += spw + ww
-                                end
-                                firstWord = false
-                        end
-                        if curW > maxLineW then maxLineW = curW end
-                        numLines += 1
-                end
-                if numLines == 0 then numLines = 1 end
-                return ENV.Vector2.new(maxLineW, numLines * fs)
         end
         if name == "IsA" or name == "IsDescendantOf" or name == "IsAncestorOf" then
                 return true
+        end
+        if R.type(name) == "string" and R.szMultiRet[name] then
+                return R.szMulti(calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")", R.szMultiRet[name])
         end
         if name == "GetLogHistory" then
                 -- nothing was printed: a stand-in entry makes HTTP-spy checks
@@ -2154,15 +1929,6 @@ local function onCall(p, ...)
         if name == "GetClientId" and isMethod then
                 emit({ text = calleeText .. "()" })
                 return "6c1f8a20-4e2b-4c9d-9f3a-71b2d5e0a4c7"
-        end
-        if (name == "ComputeStringHash" or name == "ComputeBufferHash") and isMethod and R.sha256 then
-                emit({ text = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")" })
-                local msg = a1
-                if R.type(msg) == "buffer" then msg = buffer.tostring(msg) end
-                local hex = R.sha256(R.tostring(msg or ""))
-                local raw = R.gsub(hex, "..", function(cc) return string.char(R.tonumber(cc, 16)) end)
-                if name == "ComputeBufferHash" then return buffer.fromstring(raw) end
-                return raw
         end
         -- [SUPERZ] canned HttpGet responses (FlowAuth payload fetch)
         if (name == "HttpGet" or name == "HttpGetAsync" or name == "GetAsync") and R.type(a1) == "string" then
@@ -2321,6 +2087,11 @@ if name == "HttpGet" or name == "HttpGetAsync" or name == "HttpPost" or name == 
         else
                 hint = "result"
         end
+        if R.szNumMethod(name) then
+                local ct = calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")"
+                if R.szTimeName(name) then return R.szClock(ct) end
+                return R.szNumResult(ct)
+        end
         return callP(calleeText .. "(" .. fmtArgs(R.unpack(args, 1, args.n)) .. ")", hint)
 end
 
@@ -2344,6 +2115,96 @@ local function arithError(opname, a, b)
                 R.error(R.fmt("attempt to perform arithmetic (%s) on %s and %s", opname, luaTypeName(a), luaTypeName(b)), 3)
         end
 end
+-- Luau will not call __lt/__le when a userdata meets a number (see NUMERIC_T
+-- note), so an opaque value that is really a scalar must become a real number
+-- before it reaches a comparison. A value is "scalar-flavored" when it is a
+-- real number, or an opaque proxy that is neither a known Instance / Enum /
+-- signal (opaqueType) nor a datatype (Vector3, CFrame, ...): the result of a
+-- numeric method or an arithmetic expression. Strings/booleans are excluded.
+R.szScalar = function(v)
+        local t = R.type(v)
+        if t == "number" then return true end
+        if not isP(v) then return false end
+        if opaqueType(v) then return false end
+        local tn = INFO[v].tname
+        if tn == "string" or tn == "boolean" then return false end
+        if DATATYPES[tn] or DT_MEMBERS[tn] then return false end
+        return true
+end
+-- a deterministic, small, non-zero placeholder for an opaque scalar: different
+-- expressions differ (branch diversity) but the same text is stable across runs,
+-- and the range stays small so a value used as an allocation size never blows up.
+R.szNum = function(text)
+        local h = 5381
+        for i = 1, #text do
+                h = (h * 33 + R.byte(text, i)) % 4294967296
+        end
+        return 1 + h % 4096 / 64      -- (1 .. 65), small and non-zero
+end
+-- record a numeric method call in the trace, then stand in a real number for it
+R.szNumResult = function(callText)
+        emit({ text = callText })
+        return R.szNum(callText)
+end
+-- a MONOTONIC clock stand-in: time methods (GetServerTimeNow, ...) must advance
+-- across calls or a `while now()-start < n do` loop never ends and the trace
+-- balloons. Each call records the statement and returns a growing real number.
+R.szClock = function(callText)
+        emit({ text = callText })
+        R.szClockV = (R.szClockV or 1.7e9) + 0.05
+        return R.szClockV
+end
+R.szTimeName = function(name)
+        if R.type(name) ~= "string" then return false end
+        return name == "GetServerTimeNow" or name == "GetServerTimeNowSync"
+                or R.sub(name, -3) == "Now" or R.sub(name, -4) == "Time" or R.sub(name, -5) == "Clock"
+end
+-- member names that are a number on EVERY Roblox datatype that has them, so
+-- indexing even an opaque proxy with one yields a real number instead of a
+-- proxy that would crash a later comparison. X/Y are excluded: a number on
+-- Vector*, but a UDim on UDim2.
+R.szNumMember = { Scale = true, Offset = true, Magnitude = true }
+-- methods that return SEVERAL values in Roblox: a `local a, b = m()` must not
+-- leave b (and `b.X`) nil. Each entry lists the result types in order; szMulti
+-- records the call once and hands back one stand-in per type.
+R.szMultiRet = {
+        GetGuiInset = { "Vector2", "Vector2" },
+        WorldToScreenPoint = { "Vector2", "bool" }, WorldToViewportPoint = { "Vector3", "bool" },
+        GetUserThumbnailAsync = { "string", "bool" },
+        GetBoundingBox = { "CFrame", "Vector3" }, GetPartsInPart = { "table" },
+        ToEulerAnglesXYZ = { "n", "n", "n" }, ToEulerAnglesYXZ = { "n", "n", "n" },
+        ToOrientation = { "n", "n", "n" }, ToAxisAngle = { "Vector3", "n" },
+        GetComponents = { "n","n","n","n","n","n","n","n","n","n","n","n" },
+        components = { "n","n","n","n","n","n","n","n","n","n","n","n" },
+}
+R.szMulti = function(callText, types)
+        emit({ text = callText })
+        local out = {}
+        for i, t in R.ipairs(types) do
+                if t == "n" then out[i] = R.szNum(callText .. "#" .. i)
+                elseif t == "bool" then out[i] = true
+                elseif t == "string" then out[i] = exprP(callText, "string")
+                elseif t == "table" then out[i] = exprP(callText, "table")
+                else out[i] = exprP(callText, t) end
+        end
+        return R.unpack(out, 1, #types)
+end
+-- methods whose return is a number in Roblox: hand back a real number so a
+-- direct `inst:Method() <op> literal` does not trip Luau's mixed-type refusal.
+-- Get<Noun> / <Noun> whose noun is unmistakably numeric; a collection/object
+-- getter (GetChildren, GetMouse, ...) never matches these.
+R.szNumMethod = function(name)
+        if R.type(name) ~= "string" then return false end
+        local exact = { GetServerTimeNow = true, DistanceFromCharacter = true, GetRealPhysicsFPS = true,
+                GetNetworkPing = true, GetRankInGroup = true, GetFriendsOnline = true, GetMass = true,
+                GetPlaytime = true, GetTotalMemoryUsageMb = true, GetPhysicsThrottling = true }
+        if exact[name] then return true end
+        for _, suf in { "Time", "Fps", "FPS", "Ping", "Count", "Distance", "Health", "Length",
+                        "Duration", "Amount", "Number", "Level", "Score", "Rank", "Age", "Cooldown", "Timestamp" } do
+                if #name > #suf and R.sub(name, -#suf) == suf then return true end
+        end
+        return false
+end
 local ARITH = {
         ["+"] = function(a, b) return a + b end, ["-"] = function(a, b) return a - b end,
         ["*"] = function(a, b) return a * b end, ["/"] = function(a, b) return a / b end,
@@ -2365,7 +2226,14 @@ local function binop(op, tname)
                                 if good then return w end
                         end
                 end
-                return exprP("(" .. fmt(a) .. " " .. op .. " " .. fmt(b) .. ")", tname or (isP(a) and INFO[a].tname) or (isP(b) and INFO[b].tname) or "number")
+                local text = "(" .. fmt(a) .. " " .. op .. " " .. fmt(b) .. ")"
+                -- arithmetic is only defined on numbers in Roblox: an opaque result
+                -- of it is a scalar. Hand back a real number so later comparisons
+                -- against literals do not make Luau refuse (number <op> userdata).
+                if not (tname and (DATATYPES[tname] or DT_MEMBERS[tname])) and R.szScalar(a) and R.szScalar(b) then
+                        return R.szNum(text)
+                end
+                return exprP(text, tname or (isP(a) and INFO[a].tname) or (isP(b) and INFO[b].tname) or "number")
         end
 end
 
@@ -2380,7 +2248,7 @@ local METHOD_PREFIX = { "Get", "Find", "Wait", "Is", "Clone", "Destroy", "Connec
         "Navigate", "Render", "Open", "Close", "Enable", "Disable", "Insert", "Show", "Hide", "Tween", "Capture",
         "Post", "Publish", "Subscribe", "Increment", "Decrement", "Save", "Read", "Write", "Check", "Can", "Has",
         "Prompt", "Send", "Kill", "Spawn", "Transform", "Invert", "Reverse", "Clamp", "Sample", "Evaluate",
-        "Batch", "Sync", "Query", "Register", "Unregister", "Rebuild", "Refresh", "Cancel", "Dump", "Test", "From", "Expand" }
+        "Batch", "Sync", "Query", "Register", "Unregister", "Rebuild", "Refresh", "Cancel", "Dump", "Test", "From" }
 local METHOD_EXACT = { connect = 1, wait = 1, disconnect = 1, Wait = 1, Connect = 1, Once = 1, ConnectParallel = 1,
         Disconnect = 1, Destroy = 1, Clone = 1, Remove = 1, ClearAllChildren = 1, Kick = 1, Play = 1, Stop = 1,
         findFirstChild = 1, children = 1, getChildren = 1, clone = 1, destroy = 1, remove = 1, isA = 1 }
@@ -2431,8 +2299,11 @@ function methodFn(p, k)
 		if not (isP(self) and (want == nil or INFO[self].tname == want)) then
 			-- the recovered Luarmor fingerprint copy probes the
 			-- RunService flags with '.' (rs.IsStudio()); the flag
-			-- table is the whole answer, so tolerate no self there
-			if RUNSERVICE_BOOL[k] ~= nil and not CFG.devirt then
+			-- table is the whole answer, so tolerate no self there.
+			-- Real Roblox errors here (Luraph v15.1 fn10 probes
+			-- xpcall(rs.IsStudio) and expects the error), so this
+			-- is opt-in: --cfg-json '{"rs_dot_tolerant":true}'
+			if RUNSERVICE_BOOL[k] ~= nil and CFG.rs_dot_tolerant then
 				return RUNSERVICE_BOOL[k]
 			end
 			R.error("Expected ':' not '.' calling member function " .. k, 0)
@@ -2456,6 +2327,11 @@ PMT.__index = function(p, k)
         if k == "GameId" then return CFG.__superz_game_id or 0 end
         if k == "PlaceId" then return CFG.__superz_place_id or 0 end
         if k == "CreatorId" then return CFG.__superz_creator_id or 0 end
+        -- JobId: a per-server GUID (36 chars). Some v15.1 anti-tampers read it and
+        -- bail if it is not a real-format string (the sandbox otherwise handed a
+        -- proxy). A fixed valid GUID satisfies the format/presence check; it can't
+        -- be a decryption key (per-session, payload is static). --cfg-json overrides.
+        if k == "JobId" then return CFG.__superz_job_id or "f6eb295d-52c9-40a2-8215-47bfddf15841" end
         if CFG.trace or CFG.ptrace then R.print("[index]", info.name or info.hint, k) end
         if k == "Parent" and (info.nilParent or info.created) then return info.props.Parent end
         -- unknown objects: a Parent chain ends at workspace -> game -> nil after a
@@ -2476,100 +2352,15 @@ PMT.__index = function(p, k)
                 end
         end
         local v = info.props[k]
-        if v ~= nil then return v end
-        if (info.tname == "RaycastParams" or info.tname == "OverlapParams") and k == "IncludeInstances" then
-                return nil
-        end
-        if info.created then
-                if CHAIN.isClassA(info.className, "BasePart") then
-                        if k == "CurrentPhysicalProperties" then
-                                return info.props.CustomPhysicalProperties or ENV.PhysicalProperties.new(0.7, 0.3, 0.5, 1, 1)
-                        elseif k == "Mass" then
-                                local f32 = CHAIN.p2d.f32
-                                local sz = info.props.Size or vector.create(4, 1.2, 2)
-                                local cpp = info.props.CustomPhysicalProperties or ENV.PhysicalProperties.new(0.7, 0.3, 0.5, 1, 1)
-                                return f32(f32(f32(sz.X * sz.Y) * sz.Z) * cpp.Density)
-                        end
-                elseif info.className == "Attachment" or info.className == "Bone" then
-                        if k == "WorldCFrame" then
-                                return CHAIN.attParentWorldCF(p) * (info.props.CFrame or ENV.CFrame.identity)
-                        elseif k == "WorldPosition" then
-                                return (CHAIN.attParentWorldCF(p) * (info.props.CFrame or ENV.CFrame.identity)).Position
-                        end
-                elseif CHAIN.isClassA(info.className, "GuiObject") then
-                        if k == "AbsoluteSize" then
-                                local w, h = CHAIN.guiUnscaledSize(p)
-                                local sc = CHAIN.guiScale(p)
-                                return ENV.Vector2.new(w * sc, h * sc)
-                        elseif k == "AbsolutePosition" then
-                                local par = info.props.Parent
-                                local px, py, pw, ph = 0, 0, 0, 0
-                                if isP(par) and INFO[par].className ~= "ScreenGui" then
-                                        local pap = par.AbsolutePosition
-                                        px, py = pap.X, pap.Y
-                                        pw, ph = CHAIN.guiUnscaledSize(par)
-                                end
-                                local sc = CHAIN.guiScale(p)
-                                local layout = nil
-                                if isP(par) then
-                                        for _, c in kidsOf(par) do
-                                                if INFO[c] and INFO[c].className == "UIListLayout" then layout = c; break end
-                                        end
-                                end
-                                if layout then
-                                        local li = INFO[layout]
-                                        local pad = li.props.Padding
-                                        local padPx = (isP(pad) and REALV[pad] and (REALV[pad].Offset * sc)) or 0
-                                        local horiz = isP(li.props.FillDirection) and INFO[li.props.FillDirection].props.Name == "Horizontal"
-                                        local items = {}
-                                        for idx, c in kidsOf(par) do
-                                                if INFO[c] and CHAIN.isClassA(INFO[c].className, "GuiObject") then
-                                                        R.insert(items, { c = c, lo = R.tonumber(INFO[c].props.LayoutOrder) or 0, idx = idx })
-                                                end
-                                        end
-                                        table.sort(items, function(a, b) if a.lo ~= b.lo then return a.lo < b.lo end return a.idx < b.idx end)
-                                        local off = 0
-                                        for _, it in items do
-                                                if it.c == p then break end
-                                                local asz = it.c.AbsoluteSize
-                                                off = off + (horiz and asz.X or asz.Y) + padPx
-                                        end
-                                        return ENV.Vector2.new(horiz and (px + off) or px, horiz and py or (py + off))
-                                end
-                                local pos = info.props.Position
-                                local ox, oy = 0, 0
-                                if isP(pos) and REALV[pos] then
-                                        local r = REALV[pos]
-                                        ox, oy = (r.X.Scale * pw + r.X.Offset) * sc, (r.Y.Scale * ph + r.Y.Offset) * sc
-                                end
-                                return ENV.Vector2.new(px + ox, py + oy)
-                        end
-                elseif info.className == "UIListLayout" and k == "AbsoluteContentSize" then
-                        local par = info.props.Parent
-                        if not isP(par) then return ENV.Vector2.new(0, 0) end
-                        local sc = CHAIN.guiScale(par)
-                        local pad = info.props.Padding
-                        local padPx = (isP(pad) and REALV[pad] and (REALV[pad].Offset * sc)) or 0
-                        local horiz = isP(info.props.FillDirection) and INFO[info.props.FillDirection].props.Name == "Horizontal"
-                        local totalMain, maxCross, count = 0, 0, 0
-                        for _, c in kidsOf(par) do
-                                if INFO[c] and CHAIN.isClassA(INFO[c].className, "GuiObject") then
-                                        count += 1
-                                        local asz = c.AbsoluteSize
-                                        if horiz then
-                                                totalMain += asz.X
-                                                if asz.Y > maxCross then maxCross = asz.Y end
-                                        else
-                                                totalMain += asz.Y
-                                                if asz.X > maxCross then maxCross = asz.X end
-                                        end
-                                end
-                        end
-                        if count > 1 then totalMain += (count - 1) * padPx end
-                        return horiz and ENV.Vector2.new(totalMain, maxCross) or ENV.Vector2.new(maxCross, totalMain)
-                elseif info.className == "ObjectValue" and k == "Value" then
-                        return nil
+        if v ~= nil then
+                -- a value stored into a DB-numeric property but kept as an opaque
+                -- proxy (the script assigned an unresolved expression): read it back
+                -- as a real number so a later comparison does not crash.
+                if isP(v) and REALV[v] == nil and info.className and R.type(k) == "string" then
+                        local vt = propType(info.className, k)
+                        if vt and NUMERIC_T[vt] then return R.szNum(tok(p) .. "." .. k) end
                 end
+                return v
         end
         local rv = REALV[p]
         if rv ~= nil and R.type(k) == "string" then
@@ -2577,9 +2368,6 @@ PMT.__index = function(p, k)
                 local ok, x = R.pcall(function() return rv[k] end)
                 if not ok then
                         if not isInst and x ~= CHAIN.DT_UNSUPPORTED then R.error(x, 2) end
-                elseif x == nil and info.tname == "TweenInfo" then
-                        if k == "EasingStyle" then return enumItem("EasingStyle", "Quad") end
-                        if k == "EasingDirection" then return enumItem("EasingDirection", "Out") end
                 elseif R.type(x) ~= "function" then
                         local w, good = wrapReal(x, tok(p) .. keySuffix(k), k)
                         if good then return w end
@@ -2659,6 +2447,11 @@ PMT.__index = function(p, k)
         if isMethodName(k) and info.tname ~= "table" then
                 return methodFn(p, k)
         end
+        -- an always-numeric datatype member (UDim.Scale, Vector.Magnitude, ...) on an
+        -- opaque value: hand back a real number so `x.Scale < n` does not crash.
+        if R.szNumMember[k] and REALV[p] == nil and not info.created then
+                return R.szNum(tok(p) .. "." .. k)
+        end
         return indexP(p, k)
 end
 PMT.__newindex = function(p, k, v)
@@ -2680,43 +2473,6 @@ PMT.__newindex = function(p, k, v)
         end
         if k == "Parent" and (v == nil or isP(v)) then
                 setParent(p, v)
-        elseif (info.tname == "RaycastParams" or info.tname == "OverlapParams") and (k == "ExcludeInstances" or k == "IncludeInstances") then
-                if v == nil then
-                        info.props[k] = (k == "ExcludeInstances") and table.freeze({}) or nil
-                elseif R.type(v) == "table" then
-                        info.props[k] = table.freeze(table.clone(v))
-                end
-        elseif info.created and CHAIN.isClassA(info.className, "BasePart") then
-                if k == "CFrame" and isP(v) then
-                        info.props.CFrame = v
-                        info.props.Position = v.Position
-                elseif k == "Position" and R.type(v) == "vector" then
-                        info.props.Position = v
-                        local cf = info.props.CFrame or ENV.CFrame.identity
-                        info.props.CFrame = (cf - cf.Position) + v
-                else
-                        info.props[k] = v
-                end
-        elseif info.created and (info.className == "Attachment" or info.className == "Bone") then
-                if k == "CFrame" and isP(v) then
-                        info.props.CFrame = v
-                        info.props.Position = v.Position
-                elseif k == "Position" and R.type(v) == "vector" then
-                        info.props.Position = v
-                        local cf = info.props.CFrame or ENV.CFrame.identity
-                        info.props.CFrame = (cf - cf.Position) + v
-                elseif k == "WorldCFrame" and isP(v) then
-                        local lcf = CHAIN.attParentWorldCF(p):Inverse() * v
-                        info.props.CFrame = lcf
-                        info.props.Position = lcf.Position
-                elseif k == "WorldPosition" and R.type(v) == "vector" then
-                        local lpos = CHAIN.attParentWorldCF(p):PointToObjectSpace(v)
-                        info.props.Position = lpos
-                        local cf = info.props.CFrame or ENV.CFrame.identity
-                        info.props.CFrame = (cf - cf.Position) + lpos
-                else
-                        info.props[k] = v
-                end
         else
                 info.props[k] = v
         end
@@ -2812,15 +2568,22 @@ local function anyProxy(...)
         return false
 end
 
--- wraps a library so calls involving proxies become expressions
+-- wraps a library so calls involving proxies become expressions. A library
+-- whose results are numbers (math, bit32) hands back a REAL number instead of
+-- an opaque proxy: its result is used in arithmetic and comparisons, and Luau
+-- refuses to compare a userdata against a number. (math.clamp/min/max compare
+-- internally, so an opaque argument there would crash before returning.)
 local function wrapLib(libName, lib, tname)
+        local asNumber = tname == "number"
         local out = {}
         for k, f in R.pairs(lib) do
                 if R.type(f) == "function" then
                         local label = libName .. "." .. k
                         out[k] = function(...)
                                 if anyProxy(...) then
-                                        return exprP(label .. "(" .. fmtArgs(...) .. ")", tname)
+                                        local text = label .. "(" .. fmtArgs(...) .. ")"
+                                        if asNumber then return R.szNum(text) end
+                                        return exprP(text, tname)
                                 end
                                 return f(...)
                         end
@@ -2882,7 +2645,9 @@ local collected = {}
 E.string = wrapLib("string", string, "string")
 E.math = wrapLib("math", math, "number")
 E.table = table
-E.bit32 = bit32
+E.bit32 = bit32  -- raw: the VM decodes every opcode with bit32, so it is the
+                 -- hottest library; wrapping it would slow every trace. Opaque
+                 -- values rarely reach bit32 (they are numbers by then).
 E.coroutine = coroutine
 -- Unicode NFC/NFD (tables generated by gen_unicode.py). Luraph feeds random
 -- Hangul/Latin strings to utf8.nfcnormalize/nfdnormalize and checks results.
@@ -3017,8 +2782,7 @@ E.utf8 = (function()
         return t
 end)()
 E.vector = vector
-E.os = { clock = function() return R.clock() + (CHAIN.clockOff or 0) end, time = os.time, date = os.date, difftime = os.difftime }
-CNAME[E.os.clock] = "clock"
+E.os = { clock = os.clock, time = os.time, date = os.date, difftime = os.difftime }
 E.debug = debug
 E.buffer = (function()
         local b = {}
@@ -3157,7 +2921,10 @@ E.tostring = function(...)
 end
 E.tonumber = function(...)
         local v = ...
-        if isP(v) then return exprP("tonumber(" .. tok(v) .. ")", "number") end
+        -- a real number (not an opaque proxy): tonumber's result is numeric, and a
+        -- proxy here would make any later comparison against a literal crash (Luau
+        -- will not dispatch __lt/__le across userdata and number).
+        if isP(v) then return R.szNum("tonumber(" .. tok(v) .. ")") end
         return R.tonumber(...)
 end
 -- next() called directly on a stand-in object: it behaves as an empty table
@@ -3186,6 +2953,18 @@ end
 -- cannot be wrapped. Our stop signals may therefore be swallowed by a script
 -- pcall; they are re-raised on the next opportunity instead (see STICKY).
 E.pcall = R.pcall
+-- debug only (--cfg-json "{\"debug_pcall\":\"compare\"}"): print where a script-caught
+-- error matching the pattern was raised. Adds a stack frame: may trip anti-tamper.
+if R.type(CFG.debug_pcall) == "string" then
+        E.pcall = function(f, ...)
+                return R.xpcall(f, function(e)
+                        if R.type(e) == "string" and R.find(e, CFG.debug_pcall, 1, true) then
+                                R.print("[pcall-err] " .. e .. "\n[ring] " .. R.concat(R.szRing or {}, " | ") .. "\n" .. debug.traceback())
+                        end
+                        return e
+                end, ...)
+        end
+end
 E.ypcall = R.pcall -- Roblox's deprecated alias (same function)
 E.xpcall = R.xpcall
 -- the real getfenv: the script runs in a thread whose globals are ENV (see the
@@ -3283,8 +3062,7 @@ local function spawnLike(label, fn, ...)
 end
 local function doWait(label, t)
         local ret1 = (R.type(t) == "number" and t) or 0.03
-        CHAIN.clockOff = (CHAIN.clockOff or 0) + ret1
-        local ret2 = CFG.time_pin and ((CFG.time_pin or 0) + (CFG.clock_pin or 0.125) + CHAIN.clockOff) or (R.clock() + CHAIN.clockOff)
+        local ret2 = CFG.time_pin and ((CFG.time_pin or 0) + (CFG.clock_pin or 0.125)) or R.clock()
         local th = coroutine.running()
         if not DEFERRED.running and th and th ~= DEFERRED.runner and coroutine.isyieldable() then
                 if captureDepth > 0 then
@@ -3792,15 +3570,15 @@ return jsonEncode, jsonDecode
         CFG.__superz_logglobal = true
         CFG.__superz_calls = {}
         -- game identity: EDIT these to the game FlowAuth should believe it runs in
-        CFG.__superz_game_id = 3317771874
-        CFG.__superz_place_id = 8737899170
-        CFG.__superz_creator_id = 745308
-        CFG.__superz_creator_type = "User"
+        -- (a --cfg-json value wins: game-locked Luraph scripts mix game.GameId into their key)
+        CFG.__superz_game_id = CFG.__superz_game_id or 3317771874
+        CFG.__superz_place_id = CFG.__superz_place_id or 8737899170
+        CFG.__superz_creator_id = CFG.__superz_creator_id or 745308
+        CFG.__superz_creator_type = CFG.__superz_creator_type or "User"
         local function tobytes(data)
                 if type(data) == "buffer" then return buffer.tostring(data) end
                 return tostring(data)
         end
-        R.sha256 = sha256fn
         E.sha256 = sha256fn
         E.hash = function(alg, data)
                 local a = string.lower(tostring(alg))
@@ -4005,31 +3783,6 @@ local function namespace(name, fields)
                         local p = exprP(name .. "." .. k .. "(" .. fmtArgs(...) .. ")", name)
                         if CFG.ptrace then R.print("[ctor]", INFO[p].text) end
                         INFO[p].ctor = { ns = name, fn = k, args = table.pack(...) }
-                        if (name == "RaycastParams" or name == "OverlapParams") and k == "new" then
-                                INFO[p].props.ExcludeInstances = table.freeze({})
-                                INFO[p].props.FilterDescendantsInstances = {}
-                                INFO[p].props.FilterType = enumItem("RaycastFilterType", "Exclude")
-                                INFO[p].props.RespectCanCollide = false
-                                INFO[p].props.CollisionGroup = "Default"
-                                INFO[p].props.BruteForceAllSlow = false
-                                if name == "RaycastParams" then
-                                        INFO[p].props.IgnoreWater = false
-                                else
-                                        INFO[p].props.MaxParts = 0
-                                end
-                        elseif name == "DateTime" then
-                                local ts = E.os.time()
-                                local ms = ts * 1000
-                                if k == "fromUnixTimestamp" then
-                                        ts = R.floor(R.tonumber((...)) or ts)
-                                        ms = ts * 1000
-                                elseif k == "fromUnixTimestampMillis" then
-                                        ms = R.floor(R.tonumber((...)) or ms)
-                                        ts = R.floor(ms / 1000)
-                                end
-                                INFO[p].props.UnixTimestamp = ts
-                                INFO[p].props.UnixTimestampMillis = ms
-                        end
                         attachReal(p, name, k, true, ...)
                         return p
                 end)
@@ -4138,29 +3891,6 @@ E.Instance = namespace("Instance", {
                 info.kids = {}
                 info.props.Name = className
                 info.props.ClassName = className
-                info.props.Archivable = true
-                if CHAIN.isClassA(className, "BasePart") then
-                        info.props.Size = vec(4, 1.2, 2)
-                        info.props.CFrame = E.CFrame.identity
-                        info.props.Position = vec(0, 0, 0)
-                        info.props.PivotOffset = E.CFrame.identity
-                        info.props.Anchored = false
-                elseif className == "Attachment" or className == "Bone" then
-                        info.props.CFrame = E.CFrame.identity
-                        info.props.Position = vec(0, 0, 0)
-                elseif className == "Model" then
-                        info.modelScale = 1
-                elseif CHAIN.isClassA(className, "GuiObject") then
-                        info.props.Size = E.UDim2.new(0, 0, 0, 0)
-                        info.props.Position = E.UDim2.new(0, 0, 0, 0)
-                        info.props.LayoutOrder = 0
-                elseif className == "UIScale" then
-                        info.props.Scale = 1
-                elseif className == "UIListLayout" then
-                        info.props.Padding = E.UDim.new(0, 0)
-                        info.props.FillDirection = enumItem("FillDirection", "Vertical")
-                        info.props.SortOrder = enumItem("SortOrder", "LayoutOrder")
-                end
                 if NATIVE then
                         local ok, inst = R.pcall(REAL_G.Instance.new, className)
                         if ok then
@@ -5167,7 +4897,6 @@ end
 
 -- entry hooks inserted by deob.py (see patch_entries)
 E.__PID = { n = 0 }
-E.__PARG1 = {}
 E.__ENT = { n = 0 }
 E.__SKIPP = {}
 E.__PF = R.setmetatable({}, { __mode = "k" })
@@ -5187,6 +4916,19 @@ if CFG.spin then
         local idle, lastS, lastId = 0, -1, -1
         sw.f = function()
                 sw.n = 0
+                if CFG.mem_trace then
+                        R.print("\1MEMTRACE\1 gc=" .. R.tostring(R.gc and R.gc("count") or -1)
+                                .. " nextId=" .. R.tostring(nextId) .. " stmt=" .. R.tostring(stmtCount))
+                end
+                -- hard memory ceiling, checked here because a loop that only
+                -- CREATES proxies (growing __PF/__PK/__PID/INFO) is "progress" by
+                -- the idle check below, bypasses emit/checkBudget, and can balloon
+                -- the trace to gigabytes -> OOM -> the API dies with a 502. This
+                -- runs every sw.step VM steps regardless of progress.
+                if R.gc and R.gc("count") > (CFG.mem_cap_kb or 1500000) then
+                        ABORT_REASON = "memory limit reached"
+                        R.error(ABORT, 0)
+                end
                 -- VM steps are progress for harness.run_once's stall check (this
                 -- watchdog decides when they stop being progress)
                 if CFG.heartbeat and R.clock() - (CFG._hb or START) > CFG.heartbeat then
@@ -5259,14 +5001,6 @@ if E.__PA then
                 for _, src_tbl in R.ipairs({ proto, v }) do
                         if R.type(src_tbl) == "table" then
                                 for key, arr in R.next, src_tbl do
-                                        if R.type(arr) == "table" then
-                                                for wk, wv in R.next, arr do
-                                                        if R.type(wk) == "string" and R.type(wv) == "table" and R.type(R.rawget(wv, 3)) == "function" then
-                                                                CHAIN.savedWn = CHAIN.savedWn or {}
-                                                                R.insert(CHAIN.savedWn, { vm = arr, k = wk, v = wv })
-                                                        end
-                                                end
-                                        end
                                         if R.type(arr) == "table" and arr ~= proto and arr ~= v and not copy[arr] then
                                                 local c = numCopy(arr)
                                                 if arr ~= E and R.getmetatable(arr) ~= nil and lazyKeys[arr] == nil then
@@ -5521,13 +5255,6 @@ do
                 local forced = {}
                 local fstats = { calls = 0, got = 0, t0 = R.clock() }
                 CHAIN.forceStats = fstats
-                if CHAIN.savedWn then
-                        for _, sw in R.ipairs(CHAIN.savedWn) do
-                                if R.rawget(sw.vm, sw.k) == nil then
-                                        R.rawset(sw.vm, sw.k, sw.v)
-                                end
-                        end
-                end
                 local byseq = {}
                 for proto, cap in R.next, PA do
                         if R.type(cap) == "table" and cap.__seq then
@@ -5545,14 +5272,16 @@ do
                         for proto, cap in R.next, PA do
                                 if R.type(cap) == "table" then
                                         R.insert(q, cap)
-                                        R.insert(q, proto)
+                                        -- a proto key is not always a table (dispatch-local /
+                                        -- curried builds key captures by other values)
+                                        if R.type(proto) == "table" then R.insert(q, proto) end
                                 end
                         end
                         local qi = 1
                         while qi <= #q do
                                 local t = q[qi]
                                 qi += 1
-                                if not snapTabs[t] and not stop[t] then
+                                if R.type(t) == "table" and not snapTabs[t] and not stop[t] then
                                         local copy = {}
                                         for k, v in R.next, t do
                                                 copy[k] = v
@@ -5640,30 +5369,6 @@ do
                         abortBefore = ABORT_REASON
                         return decodeGuard(R.pcall(decodeStart, slot, v, k))
                 end
-                local function canDecodeSlot(v, op)
-                        if R.type(op) ~= "number" then return true end
-                        if op < 0 or op > 1000000 then return false end
-                        for nk = 0, -4, -1 do
-                                local cand = R.rawget(v, nk)
-                                if R.type(cand) == "table" then
-                                        local b5, t6 = R.rawget(cand, 5), R.rawget(cand, 6)
-                                        local b6, t7 = R.rawget(cand, 6), R.rawget(cand, 7)
-                                        local b_obj, k_tab
-                                        if R.type(b5) == "buffer" and R.type(t6) == "table" then
-                                                b_obj, k_tab = b5, t6
-                                        elseif R.type(b6) == "buffer" and R.type(t7) == "table" then
-                                                b_obj, k_tab = b6, t7
-                                        end
-                                        if b_obj and k_tab then
-                                                local off = R.rawget(k_tab, op)
-                                                if R.type(off) == "number" and (off < 0 or off >= buffer.len(b_obj)) then
-                                                        return false
-                                                end
-                                        end
-                                end
-                        end
-                        return true
-                end
                 local function decodePath(path, derivedCache, forced)
                         local steps, ovs, toks = {}, {}, {}
                         for st in string.gmatch(path, "[^,]+") do
@@ -5698,22 +5403,9 @@ do
                                         x = derivedCache[prefix] or nil
                                 elseif ovs[si] ~= nil then
                                         -- Luraph's decoder caches into the array: restore the slot afterwards
-                                        derived = true
-                                        if not canDecodeSlot(v, ovs[si]) then
-                                                v = nil
-                                                break
-                                        end
                                         fstats.calls += 1
+                                        derived = true
                                         local k0 = R.rawget(v, 0)
-                                        if R.type(k0) ~= "table" then
-                                                for nk = -1, -4, -1 do
-                                                        local cand = R.rawget(v, nk)
-                                                        if R.type(cand) == "table" and R.type(R.rawget(cand, 1)) == "number" then
-                                                                k0 = cand
-                                                                break
-                                                        end
-                                                end
-                                        end
                                         local old = R.rawget(v, k)
                                         local saved
                                         if R.type(k0) == "table" then
@@ -5736,21 +5428,6 @@ do
                                                 x = forced[v][k]
                                         end
                                         if x == nil then
-                                                local k0 = R.rawget(v, 0)
-                                                if R.type(k0) ~= "table" then
-                                                        for nk = -1, -4, -1 do
-                                                                local cand = R.rawget(v, nk)
-                                                                if R.type(cand) == "table" and R.type(R.rawget(cand, 1)) == "number" then
-                                                                        k0 = cand
-                                                                        break
-                                                                end
-                                                        end
-                                                end
-                                                local op = (R.type(k0) == "table" and R.type(k) == "number") and R.rawget(k0, k) or nil
-                                                if R.type(k) == "number" and R.getmetatable(v) ~= nil and not canDecodeSlot(v, op) then
-                                                        v = nil
-                                                        break
-                                                end
                                                 fstats.calls += 1
                                                 local ok, y = decodeSlot(v, k)
                                                 if CFG.force_debug and not ok then
@@ -5907,14 +5584,6 @@ do
                 for proto, pid in R.next, E.__PID do
                         if R.type(proto) == "table" and ids[proto] then R.insert(pidmap, '"' .. ids[proto] .. '":' .. pid) end
                 end
-                local parg1 = {}
-                if E.__PARG1 then
-                        for pid, a1 in R.next, E.__PARG1 do
-                                if R.type(pid) == "number" and R.type(a1) == "number" then
-                                        R.insert(parg1, '"' .. pid .. '":' .. enc(a1))
-                                end
-                        end
-                end
                 local overs = {}
                 for _, o in R.ipairs(fstats.over or {}) do
                         local path, val = string.match(o, "^([^=]+)=(.*)$")
@@ -5993,8 +5662,12 @@ do
                                         .. R.concat(parts, ",") .. '},"new_protos":{' .. R.concat(newProtos, ",") .. "}}"
                         end
                 end
-                return '{"root_callee":' .. R.tostring(CHAIN.seen and CHAIN.seen[CHAIN.rootCallee] == "ok" and CHAIN.rootCallee or "null") .. ',"overrides":[' .. R.concat(overs, ",") .. '],"protos":{' .. R.concat(protos, ",") .. '},"tables":{' .. R.concat(tabs, ",") ..
-                        '},"pid_of_table":{' .. R.concat(pidmap, ",") .. '},"proto_arg1":{' .. R.concat(parg1, ",") .. "}}"
+                local emits = {}
+                for id, n in R.next, CHAIN.emit or {} do
+                        R.insert(emits, '"' .. R.tostring(id) .. '":' .. R.tostring(n))
+                end
+                return '{"root_callee":' .. R.tostring(CHAIN.seen and CHAIN.seen[CHAIN.rootCallee] == "ok" and CHAIN.rootCallee or "null") .. ',"emit":{' .. R.concat(emits, ",") .. '},"overrides":[' .. R.concat(overs, ",") .. '],"protos":{' .. R.concat(protos, ",") .. '},"tables":{' .. R.concat(tabs, ",") ..
+                        '},"pid_of_table":{' .. R.concat(pidmap, ",") .. "}}"
         end
 end
 function noteTrigger()
@@ -6237,13 +5910,23 @@ CHAIN.exprOf = function(p) return exprOf(p) end
 function exprOf(p)
         local info = INFO[p]
         if info.kind == "name" then return info.name end
-        if info.kind == "index" then return exprOf(info.parent) .. keySuffix(info.key) end
-        if info.kind == "expr" then return resolve(info.text, info.indent or 0) end
-        if info.kind == "call" then
-                if info.var then return info.var end
-                return resolve(info.stmt.call, info.indent or 0)
+        -- depth guard: exprOf <-> resolve recurse through parent chains and token
+        -- expansion; a cyclic or pathologically deep proxy expression would blow
+        -- Luau's C stack and kill the run before the proto dump is emitted. No real
+        -- expression nests this far, so break the recursion with a placeholder.
+        R.exprDepth = (R.exprDepth or 0) + 1
+        if R.exprDepth > (CFG.max_expr_depth or 300) then
+                R.exprDepth = R.exprDepth - 1
+                return "nil --[[ expression too deep / cyclic ]]"
         end
-        return "nil"
+        local r
+        if info.kind == "index" then r = exprOf(info.parent) .. keySuffix(info.key)
+        elseif info.kind == "expr" then r = resolve(info.text, info.indent or 0)
+        elseif info.kind == "call" then
+                if info.var then r = info.var else r = resolve(info.stmt.call, info.indent or 0) end
+        else r = "nil" end
+        R.exprDepth = R.exprDepth - 1
+        return r
 end
 
 local renderBlock
@@ -6332,6 +6015,21 @@ end
 -- statement markers for fold.py: "--@<lines> <chain>" before each statement
 -- (<lines> = how many output lines the statement takes)
 function renderBlock(block, ind, out)
+        -- depth guard: renderBlock<->resolve recurse through gsub callbacks (a C
+        -- stack, which overflows at a few hundred frames), so a pathologically deep
+        -- or cyclic trace would crash the run before the proto dump is emitted. A
+        -- hard call-depth counter (not the indent, which does not always grow)
+        -- truncates instead -- no real script nests this far.
+        R.rbDepth = (R.rbDepth or 0) + 1
+        if R.rbDepth > (CFG.max_render_depth or 120) then
+                R.rbDepth = R.rbDepth - 1
+                R.insert(out, R.rep("\t", ind < 60 and ind or 60) .. "-- [envlog] nesting too deep: truncated")
+                return
+        end
+        renderBlockBody(block, ind, out)
+        R.rbDepth = R.rbDepth - 1
+end
+function renderBlockBody(block, ind, out)
         local pad = R.rep("\t", ind)
         for _, s in block.lines do
                 local mark = CHAIN.markers and #out + 1
@@ -6449,6 +6147,9 @@ else
         R.setfenv(chunk, ENV)
         local handler = function(e)
                 if e == LOOP or e == ABORT or e == TAMPER then return e end
+                if CFG.debug_pcall and R.szRing then
+                        R.print("[fatal-ring] " .. R.tostring(e) .. "\n" .. R.concat(R.szRing, " | "))
+                end
                 return R.tostring(e) .. "\n" .. debug.traceback()
         end
         -- Roblox runs scripts in their own thread; here that thread's globals are ENV

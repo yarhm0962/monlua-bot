@@ -176,22 +176,9 @@ async function run(job) {
             executor: args.executor || 'Wave',
           },
         };
-        const cfgPath = job.path('.cfg.json');
-        fs.writeFileSync(cfgPath, JSON.stringify(cfgData), 'utf8');
-
-        const { execFileSync } = require('child_process');
-        const { getPythonBin } = require('./pyenv');
-        const pythonBin = getPythonBin();
-        const bridgePy = path.join(__dirname, 'devirt_bridge.py');
-        const coreDir = path.join(__dirname, '..', 'core');
-        try {
-          execFileSync(pythonBin, [bridgePy, 'pipeline', cfgPath], {
-            env: Object.assign({}, process.env, { PYTHONPATH: coreDir }),
-            stdio: 'inherit',
-          });
-        } finally {
-          try { fs.unlinkSync(cfgPath); } catch {}
-        }
+        // Python stage: several candidates in parallel (PyPy + fixed hash seeds),
+        // best result kept -- see src/parallel.js. DEOB_KEEP_CFG=1 keeps the inputs.
+        await require('./parallel').runCandidates(cfgData, job);
       }
     }
   }
