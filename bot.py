@@ -225,11 +225,17 @@ _active_jobs = 0
 # back to the local engine. Identical re-runs are answered instantly from
 # _RESULT_CACHE.
 GH_JOBS_REPO = os.getenv("GH_JOBS_REPO", "yarhm0962/monlua-jobs")
-GH_DISPATCH_TOKEN = os.getenv("GH_DISPATCH_TOKEN", "")
-CLOUD_V151_MIN_BYTES = 150_000
-CLOUD_OTHER_MIN_BYTES = 1_000_000
-CLOUD_WAIT_SECONDS = 1500
-CLOUD_POLL_SECONDS = 8
+GH_DISPATCH_TOKEN = os.getenv("GH_DISPATCH_TOKEN", "").strip()
+GH_TOKEN_PLACEHOLDERS = ("placeholder", "replace_me", "your_token", "your-token", "paste_token", "changeme")
+
+
+def cloud_runner_configured() -> bool:
+    token = GH_DISPATCH_TOKEN.lower()
+    return len(token) >= 20 and not any(marker in token for marker in GH_TOKEN_PLACEHOLDERS)
+CLOUD_V151_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_V151_MIN_BYTES", "150000")))
+CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "512000")))
+CLOUD_WAIT_SECONDS = max(60, min(1800, int(os.getenv("CLOUD_WAIT_SECONDS", "1500"))))
+CLOUD_POLL_SECONDS = max(3, min(20, int(os.getenv("CLOUD_POLL_SECONDS", "5"))))
 cloud_slots = asyncio.Semaphore(1)
 _RESULT_CACHE: OrderedDict = OrderedDict()
 _RESULT_CACHE_BYTES = 0
@@ -282,8 +288,11 @@ def _human_size(n: int) -> str:
     return f"{n / (1024 * 1024):.2f} MB"
 
 
+LONG_COMMENT_OPEN_RE = re.compile(r"--\[(=*)\[")
+LONG_STRING_OPEN_RE = re.compile(r"\[(=*)\[")
+
+
 def _strip_lua_comments(source: str) -> str:
-    """Remove Lua/Luau comments without touching quoted or long-bracket strings."""
     out = []
     i, n = 0, len(source)
     marker = "-- [[ Deobfuscated by MonLua ]]"
@@ -296,10 +305,10 @@ def _strip_lua_comments(source: str) -> str:
             if source[line_start:i].strip() == "" and source[i:line_end].strip() == marker:
                 i = line_end + (1 if line_end < n else 0)
                 continue
-            long_comment = re.match(r"--\[(=*)\[", source[i:])
+            long_comment = LONG_COMMENT_OPEN_RE.match(source, i)
             if long_comment:
                 close = "]" + long_comment.group(1) + "]"
-                end = source.find(close, i + long_comment.end())
+                end = source.find(close, long_comment.end())
                 end = n if end < 0 else end + len(close)
                 removed_lines = source[i:end].count("\n")
                 out.append("\n" * removed_lines if removed_lines else " ")
@@ -308,7 +317,7 @@ def _strip_lua_comments(source: str) -> str:
                 out.append("\n" if line_end < n else "")
                 i = line_end + (1 if line_end < n else 0)
             continue
-        if source[i] == '"' or source[i] == "'" or source[i] == chr(96):
+        if source[i] in ('"', "'", chr(96)):
             quote = source[i]
             start = i
             i += 1
@@ -323,11 +332,11 @@ def _strip_lua_comments(source: str) -> str:
             out.append(source[start:i])
             continue
         if source[i] == "[":
-            long_string = re.match(r"\[(=*)\[", source[i:])
+            long_string = LONG_STRING_OPEN_RE.match(source, i)
             if long_string:
                 close = "]" + long_string.group(1) + "]"
                 start = i
-                end = source.find(close, i + long_string.end())
+                end = source.find(close, long_string.end())
                 i = n if end < 0 else end + len(close)
                 out.append(source[start:i])
                 continue
@@ -341,6 +350,8 @@ def _beautify_lua(source: str) -> str:
     body = source.strip()
     if not body:
         return ""
+    if len(body) > MAX_FORMAT_BYTES:
+        return body
     stylua = shutil.which("stylua")
     if stylua:
         try:
@@ -372,9 +383,9 @@ def _prepare_deobfuscated_output(source: str) -> str:
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
-PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
-PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
-PASTEFY_CHUNK_CHARS = 450_000   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
+PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
+PASTEFY_CHUNK_CHARS = 450_000
+MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(1024 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
 
 
 def _pastefy_post(payload: dict):
@@ -385,7 +396,7 @@ def _pastefy_post(payload: dict):
             request = urllib.request.Request(
                 PASTEFY_API_URL, data=json.dumps(payload).encode("utf-8"),
                 headers={**headers, **auth})
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=PASTEFY_TIMEOUT) as response:
                 data = json.loads(response.read().decode("utf-8", errors="replace"))
             paste = data.get("paste") or {}
             if paste.get("id"):
@@ -1074,7 +1085,7 @@ async def _run_process(args: list[str], timeout: int, env: Optional[dict[str, st
     async def _watch_memory() -> None:
         nonlocal mem_peak_kb, mem_exceeded
         while proc.returncode is None:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
             rss = _tree_rss_kb(pgid)
             if rss > mem_peak_kb:
                 mem_peak_kb = rss
@@ -1335,15 +1346,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
                 status = await ctx.reply(f"Checking `{filename}`…", mention_author=False)
-                detected, diagnostic = await _scan_engine(input_path)
-                if detected is None:
-                    print(f"scan uncertain on {filename} ({diagnostic[:120]}); proceeding with the requested engine {engine}", flush=True)
-                if detected is not None and detected != engine and not (engine == "luraph_v151" and detected == "luraph_v15"):
-                    detected_label = SUPPORTED[detected]["label"]
-                    await status.edit(content=(
-                        f"That file is **{detected_label}**. Use `{SUPPORTED[detected]['command']}` instead."
-                    ))
-                    return
+                print(f"selected engine={label}; automatic pre-scan skipped for faster large-file processing", flush=True)
 
                 wait_note = ""
                 if engine == "luraph_v151":
@@ -1358,10 +1361,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 cache_key = _cache_key(engine, input_path)
                 cached = _RESULT_CACHE.get(cache_key) if cache_key[0] else None
                 if cached is not None:
+                    _RESULT_CACHE.move_to_end(cache_key)
                     output_path.write_bytes(cached)
                 else:
                     go_cloud = engine != "moonveil_v145" and ((size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES))
-                    if go_cloud and GH_DISPATCH_TOKEN:
+                    if go_cloud and cloud_runner_configured():
                         try:
                             await status.edit(content=f"☁️ `{filename}` is a big file: running it on the free cloud runner…")
                             async with cloud_slots:
@@ -1372,7 +1376,6 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
                             await status.edit(content=f"☁️ Cloud runner unavailable ({str(exc)[:120]}). Running locally instead…")
                     if not output_path.is_file():
-                        start_time = time.monotonic()
                         process_env = None
                         if engine == "luraph_v151":
                             try:
@@ -1421,28 +1424,49 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                             return
 
-                raw_output = output_path.read_text(encoding="utf-8", errors="replace")
-                out_text = _prepare_deobfuscated_output(raw_output)
-                output_path.write_text(out_text, encoding="utf-8", newline="\n")
-                output_size = output_path.stat().st_size
-                if output_size > MAX_OUTPUT_BYTES:
-                    await status.edit(content=f"📦 Output too large: {output_size:,} bytes (limit {MAX_OUTPUT_BYTES:,}).")
-                    return
-                _result_cache_store(cache_key, output_path.read_bytes())
+                if cached is None:
+                    raw_output = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                    out_text = await asyncio.to_thread(_prepare_deobfuscated_output, raw_output)
+                    await asyncio.to_thread(output_path.write_text, out_text, encoding="utf-8", newline="\n")
+                    output_size = output_path.stat().st_size
+                    if output_size > MAX_OUTPUT_BYTES:
+                        await status.edit(content=None, view=error_view("Output limit exceeded", f"The recovered file is {_human_size(output_size)}. The configured output limit is {_human_size(MAX_OUTPUT_BYTES)}."))
+                        return
+                    await asyncio.to_thread(_result_cache_store, cache_key, await asyncio.to_thread(output_path.read_bytes))
+                else:
+                    out_text = None
+                    output_size = output_path.stat().st_size
                 elapsed_seconds = max(1, int(time.monotonic() - start_time))
                 elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
-                await status.edit(content=f"✅ Deobfuscated `{filename}` with **{label}**.")
-                pastefy_url = ""
-                try:
-                    pastefy_url = await asyncio.to_thread(
-                        _pastefy_upload, out_text.rstrip(), Path(filename).stem)
-                except Exception as exc:
-                    print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
-                if output_size <= 1600 and "```" not in out_text:
-                    await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed, pastefy_url=pastefy_url), mention_author=False)
+                await status.edit(content=None, view=info_view("Deobfuscation complete", f"**Engine** · {label}\\n**Output size** · {_human_size(output_size)}\\n**Time** · {elapsed}", color=0x57F287))
+                upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
+                if output_size <= 1600:
+                    if out_text is None:
+                        out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                    if "```" not in out_text:
+                        await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed), mention_author=False)
+                    else:
+                        await ctx.reply(
+                            view=result_view(filename, label, output_size, None, output_path.name, elapsed),
+                            file=discord.File(str(output_path), filename=output_path.name),
+                            mention_author=False,
+                        )
+                elif output_size > upload_limit:
+                    if out_text is None:
+                        out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                    try:
+                        pastefy_url = await asyncio.to_thread(_pastefy_upload, out_text.rstrip(), Path(filename).stem)
+                    except Exception as exc:
+                        pastefy_url = ""
+                        print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
+                    if pastefy_url:
+                        await ctx.reply(view=result_view(filename, label, output_size, None, None, elapsed, pastefy_url=pastefy_url), mention_author=False)
+                    else:
+                        await status.edit(content=None, view=error_view("Output exceeds the upload limit", "The recovered file is larger than this server can attach, and the online upload service did not accept it."))
+                        return
                 else:
                     await ctx.reply(
-                        view=result_view(filename, label, output_size, None, output_path.name, elapsed, pastefy_url=pastefy_url),
+                        view=result_view(filename, label, output_size, None, output_path.name, elapsed),
                         file=discord.File(str(output_path), filename=output_path.name),
                         mention_author=False,
                     )
