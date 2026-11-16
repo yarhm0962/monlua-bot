@@ -27,6 +27,15 @@ class NewEngineRegistryTests(unittest.TestCase):
         engine = by_name("ironbrew2")
         self.assertEqual(engine.detect("-- IronBrew2\nreturn function() end"), 1.0)
 
+    def test_ironbrew1_remains_available_for_legacy_detection(self):
+        self.assertEqual(by_name("ironbrew1").label, "ironbrew1")
+        self.assertEqual(by_name("ironbrew2").label, "IronBrew2")
+
+    def test_ironbrew2_is_the_only_selectable_ironbrew_engine(self):
+        bot_source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+        self.assertIn('"ironbrew2": {"label": "IronBrew2"', bot_source)
+        self.assertNotIn('"ironbrew1": {"label":', bot_source)
+
 
 if __name__ == "__main__":
     unittest.main()
