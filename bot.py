@@ -1577,59 +1577,59 @@ async def mv(ctx: commands.Context, *, url: str = "") -> None:
 async def detect(ctx: commands.Context, *, url: str = "") -> None:
     attachments = ctx.message.attachments
     if attachments and url.strip():
-        await ctx.reply("Use either one attached file or one raw-file URL, not both.", mention_author=False)
+        await ctx.reply(view=info_view("Choose one input", "Attach one source file or provide a raw-file URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply("Please send exactly one source file per command.", mention_author=False)
+        await ctx.reply(view=info_view("One file at a time", "Please send exactly one source file per command."), mention_author=False)
         return
     attachment = attachments[0] if attachments else None
     source_url = url.strip().strip("<>")
     if attachment is None and not source_url:
-        await ctx.reply(
-            "Use `.detect` with one `.lua`, `.luau`, or `.txt` attachment, or a direct raw-file URL.\n"
-            "Example: `.detect https://example.com/raw/script.lua`",
-            mention_author=False,
-        )
+        await ctx.reply(view=info_view("Input required", "Use .detect with one .lua, .luau, or .txt attachment, or a direct raw-file URL.\nExample: .detect https://example.com/raw/script.lua"), mention_author=False)
         return
     if attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply("Unsupported file type. Only `.lua`, `.luau`, and `.txt` files are accepted.", mention_author=False)
+            await ctx.reply(view=info_view("Unsupported file", "Only .lua, .luau, and .txt files are accepted."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(f"File is too large. Maximum size is {MAX_INPUT_BYTES:,} bytes.", mention_author=False)
+            await ctx.reply(view=info_view("File is too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
             source_url, filename = _validate_public_url(source_url)
         except ValueError as exc:
-            await ctx.reply(f"Invalid raw-file URL: {exc}", mention_author=False)
+            await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
     with tempfile.TemporaryDirectory(prefix="detect_bot_") as temp:
         input_path = Path(temp) / filename
         try:
             if attachment is not None:
                 await attachment.save(input_path)
-                if input_path.stat().st_size == 0:
-                    await ctx.reply("That file is empty.", mention_author=False)
-                    return
             else:
                 filename, _size = await asyncio.to_thread(_download_url, source_url, input_path)
-            status = await ctx.reply(f"Analyzing `{filename}`\u2026", mention_author=False)
+            size = input_path.stat().st_size
+            if size == 0:
+                await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
+                return
+            if size > MAX_INPUT_BYTES:
+                await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+                return
+            status = await ctx.reply(view=info_view("Analyzing source", f"**File** · `{filename[:120]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
             start_time = time.monotonic()
             try:
-                rows, basis = await _detect_scores(input_path)
+                async with job_slots:
+                    rows, basis = await _detect_scores(input_path)
             except ValueError as exc:
-                await status.edit(content=str(exc)[:1900])
+                await status.edit(content=None, view=error_view("Detection scan failed", str(exc)[:900]))
                 return
             elapsed_seconds = max(1, int(time.monotonic() - start_time))
             elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
             source = None
-            best = max(((c, n) for n, c, _l, _e in rows
-                        if n not in ("obfuscated", "plain", "generic")), default=(0.0, ""))
+            best = max(((confidence, name) for name, confidence, _label, _evidence in rows if name not in ("obfuscated", "plain", "generic")), default=(0.0, ""))
             if best[0] >= 0.999 and best[1] in SUPPORTED:
                 if attachment is not None:
-                    source = ("attachment", filename, input_path.read_bytes())
+                    source = ("attachment", filename, await asyncio.to_thread(input_path.read_bytes))
                 else:
                     source = ("url", source_url)
             try:
@@ -1637,10 +1637,9 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             except discord.HTTPException:
                 best_label = rows[0][2] if rows else "nothing"
                 best_pct = int(round(rows[0][1] * 100)) if rows else 0
-                await status.edit(content=f"\U0001f50d Detection: {best_label} ({best_pct}%). Your Discord client may not show the full report.")
+                await status.edit(content=None, view=info_view("Detection result", f"**Best match** · {best_label}\n**Confidence** · {best_pct}%\nThe full report could not be displayed by this Discord client.", color=0xFAA61A))
         except discord.HTTPException:
             print("Discord permission error during .detect: cannot read/send messages.", flush=True)
-
 
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
 async def deobfs(ctx: commands.Context) -> None:
