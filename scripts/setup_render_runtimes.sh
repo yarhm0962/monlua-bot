@@ -59,7 +59,7 @@ if [[ ! -x "$NODE/bin/node" ]]; then
     chmod +x "$NODE/bin/node"
 fi
 
-if ! command -v java >/dev/null 2>&1 && [[ ! -x "$JAVA/bin/java" ]]; then
+if [[ "${FORCE_BUNDLED_JAVA:-0}" == "1" ]] || { ! command -v java >/dev/null 2>&1 && [[ ! -x "$JAVA/bin/java" ]]; }; then
     JAVA_ARCHIVE="$ROOT/deobf/bin/jre17.tar.gz"
     if [[ ! -s "$JAVA_ARCHIVE" ]]; then
         printf 'The bundled Java 17 runtime archive is missing.\n' >&2
