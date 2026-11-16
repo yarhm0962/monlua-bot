@@ -1508,50 +1508,50 @@ async def lrph15_1(ctx: commands.Context, *, url: str = "") -> None:
 
 @bot.command(name="get")
 async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
-    """Fetch links, unwrap common share pages, and resolve static loadstring loaders."""
     url = (url or "").strip().strip("<>").strip()
     if not url:
-        await ctx.reply("Usage: `.get <url>` — fetches raw content and follows supported loadstring URLs.", mention_author=False)
+        await ctx.reply(view=info_view("Usage", "Use .get followed by a URL to fetch raw source or resolve a supported static loadstring URL."), mention_author=False)
         return
 
     url = _normalize_get_url(url)
-    status = await ctx.reply("Fetching link and checking for embedded loader URLs…", mention_author=False)
-    tmp = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
+    status = await ctx.reply(view=info_view("Fetching source", "Checking the URL and resolving supported embedded source links."), mention_author=False)
+    temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
-        filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, tmp)
-        base = Path(filename).name or "raw.txt"
-        if not base.lower().endswith((".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")):
-            base = base + ".txt"
-        data = tmp.read_bytes()
-        text = data.decode("utf-8-sig", errors="replace")
-        resolution = ""
+        filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, temporary)
+        safe_name = Path(filename).name or "raw.txt"
+        allowed_names = (".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")
+        if not safe_name.lower().endswith(allowed_names):
+            safe_name += ".txt"
+        details = [f"**File** · `{safe_name[:120]}`", f"**Size** · {_human_size(size)}"]
         if loader_depth:
-            resolution += f"\nResolved {loader_depth} embedded loadstring loader(s) to the underlying source."
+            details.append(f"Resolved {loader_depth} embedded loadstring loader(s).")
         if fetch_note:
-            resolution += f"\nNote: {fetch_note}"
+            details.append(f"Note · {fetch_note}")
+        details_text = "\n".join(details)
+        upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
 
-        pastefy_url = ""
-        if size > 1800:
-            try:
-                pastefy_url = await asyncio.to_thread(_pastefy_upload, text, Path(filename).stem or "raw")
-            except Exception as exc:
-                print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
-        link = f"\n🔗 [Pastefy]({pastefy_url}) · [raw]({pastefy_url}/raw)" if pastefy_url else ""
         if size <= 1800:
-            await status.edit(content=f"`{filename}` ({_human_size(size)}){resolution}:\n{text[:1800]}")
-        elif size <= 7 * 1024 * 1024:
-            await status.edit(content=f"`{filename}` ({_human_size(size)}){resolution} — attached below.{link}")
-            await ctx.send(file=discord.File(fp=str(tmp), filename=base))
+            preview = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
+            preview = preview[:1200].replace("```", "`\u200b``")
+            body = details_text + "\n\n```text\n" + preview + "\n```"
+            await status.edit(content=None, view=info_view("Source preview", body))
+        elif size <= upload_limit:
+            await status.edit(content=None, view=info_view("Source fetched", details_text + "\nThe complete file is attached below."))
+            await ctx.send(view=info_view("Download ready", "The complete source file is attached."), file=discord.File(fp=str(temporary), filename=safe_name))
         else:
-            await status.edit(content=f"`{filename}` is {_human_size(size)}{resolution} — too big to attach, uploaded to Pastefy instead.{link}")
+            source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
+            pastefy_url = await asyncio.to_thread(_pastefy_upload, source_text, Path(filename).stem or "raw")
+            if pastefy_url:
+                await status.edit(content=None, view=info_view("Source fetched", details_text + f"\n\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
+            else:
+                await status.edit(content=None, view=error_view("Source exceeds the upload limit", "The file is larger than this server can attach, and the online upload service did not accept it."))
     except Exception as exc:
-        await status.edit(content=f"Couldn't fetch that link: {str(exc)[:200]}")
+        await status.edit(content=None, view=error_view("Could not fetch source", f"{type(exc).__name__}: {str(exc)[:700]}"))
     finally:
         try:
-            tmp.unlink()
+            temporary.unlink()
         except OSError:
             pass
-
 
 @bot.command(name="iron")
 async def iron(ctx: commands.Context, *, url: str = "") -> None:
