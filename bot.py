@@ -1483,7 +1483,13 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     await status.edit(content=None, view=error_view("Input could not be processed", message[:900]))
                 else:
                     await ctx.reply(view=error_view("Input could not be processed", message[:900]), mention_author=False)
+            except discord.Forbidden:
                 print("Discord permission error: cannot read/send messages or attachments.", flush=True)
+                if status:
+                    try:
+                        await status.edit(content=None, view=error_view("Missing Discord permissions", "The bot cannot read or send messages or attachments in this channel."))
+                    except discord.HTTPException:
+                        pass
             except discord.HTTPException as exc:
                 if status:
                     try:
@@ -1502,7 +1508,6 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         pass
                 else:
                     await ctx.reply(view=error_view("Unexpected processing error", message[:700]), mention_author=False)
-
 
 @bot.command(name="lrph15")
 async def lrph15(ctx: commands.Context, *, url: str = "") -> None:
