@@ -783,6 +783,9 @@ class _CancelDeobfButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         parent = self.view
         if isinstance(parent, _ConfirmDeobfView):
+            if parent.claimed:
+                await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
+                return
             parent.claimed = True
         await interaction.response.edit_message(
             content=None,
@@ -797,6 +800,7 @@ class _EnginePickerView(discord.ui.LayoutView):
         self.source = source
         self.owner_id = ctx.author.id
         self.message = None
+        self.claimed = False
         source_name = source[1] if source else "Attach a file or provide a raw URL"
         container = discord.ui.Container(accent_color=0x5865F2)
         container.add_item(discord.ui.TextDisplay("## MonLua · Select an engine"))
@@ -842,6 +846,10 @@ class _EngineSelect(discord.ui.Select):
         if not isinstance(parent, _EnginePickerView):
             await interaction.response.send_message("This engine selector is no longer active.", ephemeral=True)
             return
+        if parent.claimed:
+            await interaction.response.send_message("An engine has already been selected for this request.", ephemeral=True)
+            return
+        parent.claimed = True
         engine = self.values[0]
         if parent.source is None:
             await interaction.response.edit_message(
