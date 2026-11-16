@@ -41,12 +41,12 @@ MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
 URL_TIMEOUT = max(5, min(180, int(os.getenv("URL_TIMEOUT", "60"))))
 ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
-    "luraph_v15": {"label": "Luraph v15", "command": ".lrph15"},
-    "luraph_v151": {"label": "Luraph v15.1", "command": ".lrph15.1"},
-    "ironbrew1": {"label": "IronBrew1", "command": ".iron"},
-    "moonsec_v3": {"label": "MoonSec V3", "command": ".moon"},
-    "centurion": {"label": "Centurion", "command": ".cent"},
-    "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".mv"},
+    "luraph_v15": {"label": "Luraph v15", "command": ".do"},
+    "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
+    "ironbrew1": {"label": "IronBrew1", "command": ".do"},
+    "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
+    "centurion": {"label": "Centurion", "command": ".do"},
+    "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
 }
 
 V151_DIR = DEOB_DIR / "v151"
@@ -1696,14 +1696,37 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     await ctx.reply(view=error_view("Unexpected processing error", message[:700]), mention_author=False)
 
-@bot.command(name="lrph15")
-async def lrph15(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "luraph_v15", url)
+@bot.command(name="do", aliases=["deobf"])
+async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
+    attachments = ctx.message.attachments
+    source_url = (url or "").strip().strip("<>")
+    if attachments and source_url:
+        await ctx.reply(view=error_view("Choose one source", "Attach one file or provide a raw-file URL, not both."), mention_author=False)
+        return
+    if len(attachments) > 1:
+        await ctx.reply(view=error_view("Single-file processing", "Attach one source file per request."), mention_author=False)
+        return
+    source = None
+    if attachments:
+        filename = Path(attachments[0].filename).name
+        if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are .lua, .luau, and .txt."), mention_author=False)
+            return
+        if attachments[0].size > MAX_INPUT_BYTES:
+            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            return
+        source = ("attachment", filename)
+    elif source_url:
+        try:
+            source_url, filename = _validate_public_url(source_url)
+        except ValueError as exc:
+            await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
+            return
+        source = ("url", source_url)
+    view = _EnginePickerView(ctx, source)
+    message = await ctx.reply(view=view, mention_author=False)
+    view.message = message
 
-
-@bot.command(name="lrph15.1")
-async def lrph15_1(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "luraph_v151", url)
 
 @bot.command(name="get")
 async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
@@ -1751,26 +1774,6 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             temporary.unlink()
         except OSError:
             pass
-
-@bot.command(name="iron")
-async def iron(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "ironbrew1", url)
-
-
-@bot.command(name="moon")
-async def moon(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "moonsec_v3", url)
-
-
-@bot.command(name="cent")
-async def cent(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "centurion", url)
-
-
-@bot.command(name="mv")
-async def mv(ctx: commands.Context, *, url: str = "") -> None:
-    await process_input(ctx, "moonveil_v145", url)
-
 
 @bot.command(name="detect")
 async def detect(ctx: commands.Context, *, url: str = "") -> None:
