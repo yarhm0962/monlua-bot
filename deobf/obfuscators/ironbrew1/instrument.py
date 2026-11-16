@@ -183,7 +183,7 @@ def spin_edits(root):
 def patch_spin(src, root=None):
     if root is None:
         import luauast
-        root = luauast.parse(src)
+        root = luauast.parse_shared(src)
     return insert_at(src, spin_edits(root))
 
 
@@ -233,7 +233,7 @@ def capture_edits(root):
 def instrument(src, spin=True):
     """(patched source, makers) for the capture run"""
     import luauast
-    root = luauast.parse(src)
+    root = luauast.parse_shared(src)
     edits, makers = capture_edits(root)
     if spin:
         edits += spin_edits(root)

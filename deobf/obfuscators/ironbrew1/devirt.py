@@ -2231,11 +2231,39 @@ def build_tree(paths, d, start):
     fp = [p for p in paths if not p[0][d]]
     then = build_tree(tp, d + 1, at) if tp else None
     els = build_tree(fp, d + 1, at) if fp else None
-    if then is not None and els is not None and _node_text(then) == _node_text(els):
+    if then is not None and els is not None and _nodes_equal(then, els):
         # both ways do the same (e.g. a close loop comparing a box's value)
         then.stmts = stmts + then.stmts
         return then
     return Node(stmts, cond=cond, then=then, els=els)
+
+
+def _nodes_equal(left, right):
+    todo = [(left, right)]
+    while todo:
+        a, b = todo.pop()
+        if a is b:
+            continue
+        if a is None or b is None or len(a.stmts) != len(b.stmts):
+            return False
+        if any(fmt_stmt(x) != fmt_stmt(y) for x, y in zip(a.stmts, b.stmts)):
+            return False
+        if (a.cond is None) != (b.cond is None):
+            return False
+        if a.cond is not None:
+            if fmt_expr(a.cond) != fmt_expr(b.cond):
+                return False
+            todo.append((a.then, b.then))
+            todo.append((a.els, b.els))
+            continue
+        ao, bo = a.outcome, b.outcome
+        if type(ao) is not type(bo):
+            return False
+        if isinstance(ao, Next) and ao.state.key() != bo.state.key():
+            return False
+        if isinstance(ao, Ret) and fmt_multi(ao.values) != fmt_multi(bo.values):
+            return False
+    return True
 
 
 def _node_text(n):
@@ -2329,7 +2357,7 @@ class Program:
     def __init__(self, source, dump_json):
         import luauast
         self.source = source
-        self.root = luauast.parse(source)
+        self.root = luauast.parse_shared(source)
         self.funcs = ast_functions(self.root)
         self.vms = {}
         for mk, interp in instrument.find_vms(self.root):

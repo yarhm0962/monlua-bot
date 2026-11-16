@@ -29,16 +29,14 @@ class Centurion(Obfuscator):
     label = "Centurion"
     doc = "CENTURION.md"
 
-    def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
-        # A precise vendor banner is strong evidence, but a mere URL/name mention
-        # is corroboration only and must agree with executable-code shape.
-        leading_comments = leading_lua_comments(source)[:4000]
+    def detect(self, source, analysis=None):
+        from obfuscators.extra_families import LuaAnalysis
+        analysis = analysis or LuaAnalysis(source)
+        leading_comments = analysis.header[:4000]
         if HEADER.search(leading_comments):
             self.last_evidence = ["Centurion vendor header (centurion.best)"]
             return 1.0
-        code = strip_lua_comments(source)
-        structure = strip_lua_strings(code)
+        structure = analysis.structure
         domain_hint = "centurion.best" in leading_comments.lower()
         c3 = len(re.findall(r"\bc3\[", structure))
         fz = len(re.findall(r"function\(Z\)", structure))

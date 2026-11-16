@@ -221,18 +221,17 @@ class MoonsecV3(Obfuscator):
     label = "MoonSec V3"
     doc = "MOONSECV3.md"
 
-    def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments
-        header = leading_lua_comments(source)[:4000]
+    def detect(self, source, analysis=None):
+        from obfuscators.extra_families import LuaAnalysis
+        analysis = analysis or LuaAnalysis(source)
+        header = analysis.header[:4000]
         if HEADER.search(header):
             self.last_evidence = ["MoonSec V3 header comment"]
             return 1.0
         if "moonsec v3" in header.lower():
             self.last_evidence = ["Unverified MoonSec V3 mention in a leading comment (not a validated banner)"]
             return 0.25
-        # Structural signals are counted on comment-stripped code. String
-        # literals remain intact because MoonSec's decoder calls use them.
-        head = strip_lua_comments(source).lstrip()
+        head = analysis.code.lstrip()
         calls = sum(1 for _ in _DEC_CALL.finditer(head))
         esc8 = sum(1 for _ in _ESC8.finditer(head))
         if calls >= 5:
@@ -276,6 +275,7 @@ class MoonsecV3(Obfuscator):
         candidates.append(source)
         if scan["strays"] and scan["cleaned"] != source:
             candidates.append(scan["cleaned"])
+        candidates = list(dict.fromkeys(candidates))
         env = dict(os.environ, DOTNET_SYSTEM_GLOBALIZATION_INVARIANT="1", DOTNET_CLI_TELEMETRY_OPTOUT="1")
         cand_path = job.path(".moonsec_in.lua")
         dev_path = job.path(".moonsec.bytecode")

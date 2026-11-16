@@ -14,6 +14,7 @@ latin-1 and every str here is a byte string in disguise (chr(0..255)).
 import json
 import os
 import subprocess
+from functools import lru_cache
 import sys
 import tempfile
 
@@ -27,8 +28,7 @@ BINOPS = {
 UNOPS = {"Not": "not ", "Minus": "-", "Len": "#"}
 
 
-def parse(text):
-    """AST dict of Luau source `text` (latin-1 str)."""
+def _parse_uncached(text):
     fd, path = tempfile.mkstemp(suffix=".lua")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -39,6 +39,14 @@ def parse(text):
         os.remove(path)
     return json.loads(out.decode("latin-1"))["root"]
 
+
+@lru_cache(maxsize=2)
+def parse_shared(text):
+    return _parse_uncached(text)
+
+
+def parse(text):
+    return _parse_uncached(text)
 
 def quote(s):
     out = ['"']

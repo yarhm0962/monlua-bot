@@ -1,12 +1,5 @@
-"""
-Obfuscator registry and detection.
-
-To add an obfuscator: write a plugin (a module or package in this folder
-with an `Obfuscator` subclass, see base.py and generic.py), then add an
-instance to PLUGINS below. deob.py picks the plugin whose detect() is most
-confident; `--obfuscator NAME` forces one.
-"""
-from obfuscators.base import Obfuscator, Job  # noqa: F401
+"""Obfuscator registry and code-aware detection."""
+from obfuscators.base import Obfuscator, Job
 from obfuscators.luraph_v15 import LuraphV15
 from obfuscators.luraph_v151 import LuraphV151
 from obfuscators.ironbrew1 import Ironbrew1
@@ -21,55 +14,49 @@ PLUGINS = [
     Ironbrew1(),
     MoonsecV3(),
     Centurion(),
-    Generic(),      # fallback: behaviour trace only
+    Generic(),
 ]
 
-MIN_CONFIDENCE = 0.5    # below this the input counts as unrecognized (the fallback runs)
+MIN_CONFIDENCE = 0.5
 
 
 def by_name(name):
-    for p in PLUGINS:
-        if p.name == name:
-            return p
+    for plugin in PLUGINS:
+        if plugin.name == name:
+            return plugin
     raise KeyError("unknown obfuscator %r (known: %s)" % (name, ", ".join(p.name for p in PLUGINS)))
 
 
-def scores(source):
-    """[(confidence, plugin)], most confident first."""
+def scores(source, analysis=None):
+    analysis = analysis or extra_families.LuaAnalysis(source)
     out = []
-    for p in PLUGINS:
+    for plugin in PLUGINS:
         try:
-            c = p.detect(source)
-        except Exception:  # noqa: BLE001 - a broken detector must not stop the others
-            c = 0.0
-        out.append((c, p))
-    return sorted(out, key=lambda cp: -cp[0])
+            confidence = plugin.detect(source, analysis)
+        except Exception:
+            confidence = 0.0
+        out.append((confidence, plugin))
+    return sorted(out, key=lambda item: -item[0])
 
 
 def all_scores(source):
-    """Rank every supported engine and detection-only family together.
-
-    Evidence includes validated leading-banner comments and code structure;
-    the generic obfuscation meter is kept separate from engine candidates.
-    """
+    analysis = extra_families.LuaAnalysis(source)
     candidates = []
-    for c, p in scores(source):
-        candidates.append((p.name, c, p.label, list(getattr(p, "last_evidence", []) or [])))
-    candidates.extend(extra_families.family_scores(source))
-    # A detection-only family can be a better match than a supported engine.
-    # Sort them together so the report presents the strongest evidence first.
+    for confidence, plugin in scores(source, analysis):
+        candidates.append((plugin.name, confidence, plugin.label, list(getattr(plugin, "last_evidence", []) or [])))
+    candidates.extend(extra_families.family_scores(source, analysis))
     candidates.sort(key=lambda row: row[1], reverse=True)
-    obs, ev = extra_families.obfuscation_score(source)
-    if obs >= 0.5:
-        candidates.append(("obfuscated", obs, "Obfuscated (unknown engine)", ev))
+    score, evidence = extra_families.obfuscation_score(source, analysis)
+    if score >= 0.5:
+        candidates.append(("obfuscated", score, "Obfuscated (unknown engine)", evidence))
     else:
-        candidates.append(("plain", obs, "No obfuscation detected", ev))
+        candidates.append(("plain", score, "No obfuscation detected", evidence))
     return candidates
 
+
 def detect(source):
-    """(plugin, confidence) for `source`; the generic fallback when no
-    plugin is confident enough."""
-    best = scores(source)[0]
+    analysis = extra_families.LuaAnalysis(source)
+    best = scores(source, analysis)[0]
     if best[0] >= MIN_CONFIDENCE:
         return best[1], best[0]
     return by_name(Generic.name), best[0] if best[1].name == Generic.name else 0.0

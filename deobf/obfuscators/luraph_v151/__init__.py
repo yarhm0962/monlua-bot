@@ -10,11 +10,11 @@ class LuraphV151(LuraphV15):
     label = "Luraph v15.1"
     doc = "LURAPH.md"
 
-    def detect(self, source):
-        from obfuscators.extra_families import leading_lua_comments, strip_lua_comments, strip_lua_strings
-        comments = leading_lua_comments(source)
-        code = strip_lua_comments(source)
-        structure = strip_lua_strings(code)
+    def detect(self, source, analysis=None):
+        from obfuscators.extra_families import LuaAnalysis
+        analysis = analysis or LuaAnalysis(source)
+        comments = analysis.header
+        structure = analysis.structure
         m = HEADER.search(comments[:4000])
         if m:
             minor = m.group(2)

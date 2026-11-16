@@ -1,16 +1,20 @@
-"""Detection-only signatures for obfuscator families the bot cannot deobfuscate.
-
-`.detect` reports these so the user knows what they are looking at even when
-no deobfuscation engine supports them. Every entry here is a real published
-family signature: an official header line, or a structural marker that only
-that family emits (identifier prefixes, pragma names, string encodings).
-Confidences are graded by evidence weight, never invented.
-"""
 import re
 
+_IDENT_RX = re.compile(r"\b[A-Za-z_]\w*\b")
+_ESC_RX = re.compile(r"\\x[0-9a-fA-F]{2}|\\\d{1,3}")
+_BLOB_RX = re.compile(r'"[^"\\]{500,}"|\'[^\'\\]{500,}\'')
+_DECODER_RX = re.compile(r"\b(?:string\.(?:byte|char|sub)|bit32\.(?:bxor|band|bor|rshift|lshift))\b")
+_NUM_TABLE_RX = re.compile(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}")
+_DISPATCH_RX = re.compile(r"\[\s*[A-Za-z_]\w*\s*\]\s*\(")
+_KEYWORDS = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
+    "true", "until", "while", "continue", "export", "type", "typeof"
+}
 
-def _strip_comments(head):
-    return re.sub(r"(?m)^\s*--.*$", "", head)
+
+def _mask(text):
+    return "".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in text)
 
 
 def _long_bracket_open(source, index):
@@ -24,172 +28,215 @@ def _long_bracket_open(source, index):
     return None
 
 
-def scan_lua_source(source):
-    """Return (code_without_comments, all_comments), respecting Lua strings."""
-    code = []
-    comments = []
-    i, n = 0, len(source)
-    while i < n:
-        char = source[i]
-        if char == "'" or char == '"' or char == chr(96):
-            start = i
-            quote = char
-            i += 1
-            while i < n:
-                if source[i] == "\\":
-                    i += 2
-                    continue
-                if source[i] == quote:
-                    i += 1
-                    break
-                i += 1
-            code.append(source[start:i])
+def _quoted_end(source, start):
+    quote = source[start]
+    cursor = start + 1
+    while cursor < len(source):
+        if source[cursor] == "\\":
+            cursor += 2
             continue
-        if char == "[":
-            opened = _long_bracket_open(source, i)
-            if opened is not None:
-                level, after_open = opened
-                close = "]" + "=" * level + "]"
-                found = source.find(close, after_open)
-                end = n if found < 0 else found + len(close)
-                code.append(source[i:end])
+        if source[cursor] == quote:
+            return cursor + 1
+        cursor += 1
+    return len(source)
+
+
+def _count(rx, text, cap=200000):
+    total = 0
+    for _ in rx.finditer(text):
+        total += 1
+        if total >= cap:
+            break
+    return total
+
+
+class LuaAnalysis:
+    __slots__ = (
+        "source", "code", "structure", "comments", "header", "identifier_count",
+        "short_identifier_count", "unique_identifier_count", "function_count",
+        "loop_count", "branch_count", "string_count", "string_bytes",
+        "max_string_length", "nonspace_size", "line_count", "escape_count",
+        "numeric_table_count", "dispatch_call_count"
+    )
+
+    def __init__(self, source):
+        self.source = source
+        code_parts = []
+        structure_parts = []
+        comments = []
+        header = []
+        leading = True
+        string_count = 0
+        string_bytes = 0
+        max_string_length = 0
+        i = 0
+        n = len(source)
+
+        while i < n:
+            c = source[i]
+
+            if source.startswith("--", i):
+                opened = _long_bracket_open(source, i + 2)
+                if opened is not None:
+                    level, after_open = opened
+                    close = "]" + "=" * level + "]"
+                    found = source.find(close, after_open)
+                    end = n if found < 0 else found + len(close)
+                else:
+                    found = source.find("\n", i)
+                    end = n if found < 0 else found
+                comment = source[i:end]
+                comments.append(comment)
+                if leading:
+                    header.append(comment)
+                masked = _mask(comment)
+                code_parts.append(masked)
+                structure_parts.append(masked)
                 i = end
                 continue
-        if source.startswith("--", i):
-            opened = _long_bracket_open(source, i + 2)
-            if opened is not None:
-                level, after_open = opened
-                close = "]" + "=" * level + "]"
-                found = source.find(close, after_open)
-                end = n if found < 0 else found + len(close)
-            else:
-                found = source.find("\n", i)
-                end = n if found < 0 else found
-            comments.append(source[i:end])
-            code.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[i:end]))
-            i = end
-            continue
-        code.append(char)
-        i += 1
-    return "".join(code), "\n".join(comments)
+
+            if c in ("'", '"', chr(96)):
+                end = _quoted_end(source, i)
+                literal = source[i:end]
+                code_parts.append(literal)
+                structure_parts.append(_mask(literal))
+                string_count += 1
+                string_bytes += len(literal)
+                max_string_length = max(max_string_length, len(literal))
+                leading = False
+                i = end
+                continue
+
+            if c == "[":
+                opened = _long_bracket_open(source, i)
+                if opened is not None:
+                    level, after_open = opened
+                    close = "]" + "=" * level + "]"
+                    found = source.find(close, after_open)
+                    end = n if found < 0 else found + len(close)
+                    literal = source[i:end]
+                    code_parts.append(literal)
+                    structure_parts.append(_mask(literal))
+                    string_count += 1
+                    string_bytes += len(literal)
+                    max_string_length = max(max_string_length, len(literal))
+                    leading = False
+                    i = end
+                    continue
+
+            if c.isspace():
+                code_parts.append(c)
+                structure_parts.append(c)
+                i += 1
+                continue
+
+            leading = False
+            code_parts.append(c)
+            structure_parts.append(c)
+            i += 1
+
+        self.code = "".join(code_parts)
+        self.structure = "".join(structure_parts)
+        self.comments = "\n".join(comments)
+        self.header = "\n".join(header)
+        self.string_count = string_count
+        self.string_bytes = string_bytes
+        self.max_string_length = max_string_length
+        self.line_count = source.count("\n") + 1
+        self.nonspace_size = sum(not c.isspace() for c in self.code)
+        identifiers = set()
+        identifier_count = 0
+        short_identifier_count = 0
+        for match in _IDENT_RX.finditer(self.structure):
+            name = match.group(0)
+            if name in _KEYWORDS:
+                continue
+            identifier_count += 1
+            identifiers.add(name)
+            if len(name) <= 2:
+                short_identifier_count += 1
+        self.identifier_count = identifier_count
+        self.short_identifier_count = short_identifier_count
+        self.unique_identifier_count = len(identifiers)
+        self.function_count = _count(re.compile(r"\bfunction\b"), self.structure)
+        self.loop_count = _count(re.compile(r"\b(?:while|repeat|for)\b"), self.structure)
+        self.branch_count = _count(re.compile(r"\b(?:if|elseif)\b"), self.structure)
+        self.escape_count = _count(_ESC_RX, self.code)
+        self.numeric_table_count = _count(_NUM_TABLE_RX, self.structure)
+        self.dispatch_call_count = _count(_DISPATCH_RX, self.structure)
+
+
+def scan_lua_source(source):
+    analysis = LuaAnalysis(source)
+    return analysis.code, analysis.comments
 
 
 def strip_lua_comments(source):
-    return scan_lua_source(source)[0]
+    return LuaAnalysis(source).code
 
 
 def strip_lua_strings(source):
-    """Mask quoted and long-bracket literals when measuring code structure."""
     out = []
-    i, n = 0, len(source)
+    i = 0
+    n = len(source)
     while i < n:
-        char = source[i]
-        if char == "'" or char == '"' or char == chr(96):
-            start = i
-            quote = char
-            i += 1
-            while i < n:
-                if source[i] == "\\":
-                    i += 2
-                    continue
-                if source[i] == quote:
-                    i += 1
-                    break
-                i += 1
-            out.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[start:i]))
+        c = source[i]
+        if c in ("'", '"', chr(96)):
+            end = _quoted_end(source, i)
+            out.append(_mask(source[i:end]))
+            i = end
             continue
-        if char == "[":
+        if c == "[":
             opened = _long_bracket_open(source, i)
             if opened is not None:
                 level, after_open = opened
                 close = "]" + "=" * level + "]"
                 found = source.find(close, after_open)
                 end = n if found < 0 else found + len(close)
-                out.append("".join("\n" if c == "\n" else "\r" if c == "\r" else " " for c in source[i:end]))
+                out.append(_mask(source[i:end]))
                 i = end
                 continue
-        out.append(char)
+        out.append(c)
         i += 1
     return "".join(out)
 
 
 def leading_lua_comments(source):
-    """Return only comment blocks before the first real Lua token."""
-    result = []
-    i, n = 0, len(source)
-    while i < n:
-        while i < n and source[i].isspace():
-            i += 1
-        if not source.startswith("--", i):
-            break
-        start = i
-        opened = _long_bracket_open(source, i + 2)
-        if opened is not None:
-            level, after_open = opened
-            close = "]" + "=" * level + "]"
-            found = source.find(close, after_open)
-            i = n if found < 0 else found + len(close)
-        else:
-            found = source.find("\n", i)
-            i = n if found < 0 else found + 1
-        result.append(source[start:i])
-    return "\n".join(result)
+    return LuaAnalysis(source).header
 
 
-# (name, label, header regex on the first 800 chars, shape regex, min shape hits
-#  for a confident match, confident score, weak score)
 FAMILIES = [
-    # Synapse Xen: generated scripts carry SynapseXen_ prefixed identifiers
     ("xen", "Synapse Xen",
      re.compile(r"generated by xen\b|obfuscated (?:by|using) xen\b", re.I),
      re.compile(r"SynapseXen_[A-Za-z_]\w+"), 5, 0.9, 0.65),
-    # MoonSec V2: the version string is the signature; a bare "moonsec" is NOT
-    # evidence (plain code mentioning MoonSec V3 must not match)
     ("moonsec_v2", "MoonSec V2",
      re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:with|by|using)\s+moonsec\s*v2\b", re.I),
      None, 0, 0.9, 0.6),
-    # IronBrew2: version string only, so "IronBrew1" in plain text never matches
     ("ironbrew2", "IronBrew2",
      re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:with|by|using)\s+ironbrew\s*2\b", re.I),
      None, 0, 0.9, 0.6),
-    # PSU (psu.dev): vendor domain is the strong marker; bare "psu" needs volume
     ("psu", "PSU",
      re.compile(r"psu\.dev\b|protected by psu\b|obfuscated (?:by|using) psu\b", re.I),
      None, 0, 0.85, 0.55),
-    # Boronide: vendor name is distinctive enough at volume
     ("boronide", "Boronide",
      re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+boronide\b", re.I),
      None, 0, 0.85, 0.55),
-    # PromethEus / Prometheus: distinctive token
     ("prometheus", "PromethEus",
      re.compile(r"(?:obfuscated|protected|generated|created)\s+(?:by|with|using)\s+prometheus\b", re.I),
      None, 0, 0.85, 0.55),
-    # Hierarchy: common English word, so header-level evidence only
     ("hierarchy", "Hierarchy",
      re.compile(r"obfuscated (?:by|using) hierarchy\b|protected (?:by|with) hierarchy\b|hierarchy\s*obfuscator", re.I),
      None, 0, 0.85, 0.55),
-    # LuauGuard
     ("luauguard", "LuauGuard",
      re.compile(r"(?:protected|obfuscated|generated|created)\s+(?:by|with|using)\s+luau\s*guard\b", re.I),
      None, 0, 0.85, 0.55),
 ]
 
 
-def _count(rx, text, cap=200000):
-    """Count regex hits over the whole text without building a result list."""
-    n = 0
-    for _m in rx.finditer(text):
-        n += 1
-        if n >= cap:
-            break
-    return n
-
-
-def family_scores(source):
-    """Rank detection-only families using leading comments and executable-code shape."""
-    code, _comments = scan_lua_source(source)
-    structure = strip_lua_strings(code)
-    header = leading_lua_comments(source)[:800]
+def family_scores(source, analysis=None):
+    analysis = analysis or (source if isinstance(source, LuaAnalysis) else LuaAnalysis(source))
+    structure = analysis.structure
+    header = analysis.header[:800]
     out = []
     for name, label, header_rx, shape_rx, min_hits, conf, weak in FAMILIES:
         if header_rx.search(header):
@@ -205,67 +252,52 @@ def family_scores(source):
     return out
 
 
-_ESC_RX = re.compile(r"\\x[0-9a-fA-F]{2}|\\\d{1,3}")
-_IDENT_RX = re.compile(r"\b[A-Za-z_]\w*\b")
-_BLOB_RX = re.compile(r"\"[^\"\\]{500,}\"|'[^'\\]{500,}'")
-
-
-# ------------------------------------------------------------------
-# Generic obfuscation meter: how obfuscated is this file at all, engine aside?
-# Weighted structural signals; calibrated so plain scripts stay low.
-# ------------------------------------------------------------------
-
-def obfuscation_score(source):
-    """(score, evidence) 0..1 structural obfuscation level, family-agnostic.
-    Every signal is measured over the whole file, and each fired signal is
-    reported with its measured number so the confidence is auditable."""
-    code = strip_lua_comments(source)
-    structure = strip_lua_strings(code)
+def obfuscation_score(source, analysis=None):
+    analysis = analysis or (source if isinstance(source, LuaAnalysis) else LuaAnalysis(source))
+    code = analysis.code
+    structure = analysis.structure
+    size = max(1, analysis.nonspace_size)
+    per_kb = 1000.0 / size
     score = 0.0
     evidence = []
-    # Ignore whitespace left where comments were removed; include literal
-    # bytes in the size denominator so escaped payloads aren't over-weighted.
-    size = max(1, sum(1 for char in code if not char.isspace()))
-    per_kb = 1000.0 / size
 
-    # 1. minified: a real obfuscator usually collapses everything to few lines
     newlines = structure.count("\n")
     if size > 4000 and newlines < size / 2000.0:
         score += 0.2
         evidence.append("minified (%.0f newlines in %.0f KB)" % (newlines, size / 1000.0))
 
-    # 2. escaped-string density: \\xNN / \\ddd byte escapes in bulk
-    escapes = _count(_ESC_RX, code)
+    escapes = analysis.escape_count
     if escapes * per_kb > 20:
         score += 0.2
         evidence.append("%.0f string escapes per KB" % (escapes * per_kb))
 
-    # 3. machine-looking identifiers: dense runs of very short names
-    total = short = 0
-    for m in _IDENT_RX.finditer(structure):
-        total += 1
-        if len(m.group(0)) <= 2:
-            short += 1
-        if total >= 1500000:
-            break
+    total = analysis.identifier_count
+    short = analysis.short_identifier_count
     if total >= 500 and short / total > 0.35:
         score += 0.2
         evidence.append("%.0f%% 1-2-character identifiers" % (100.0 * short / total))
 
-    # 4. big numeric constant tables (VM bytecode as integers)
-    if re.search(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}", structure):
+    if analysis.numeric_table_count:
         score += 0.2
         evidence.append("large numeric constant tables (VM bytecode)")
 
-    # 5. dispatcher loop + table-index dispatch
-    if re.search(r"\bwhile\s+true\s+do\b", structure) and re.search(r"\[\s*\w+\s*\]\s*\(", structure):
+    if re.search(r"\bwhile\s+true\s+do\b", structure) and analysis.dispatch_call_count:
         score += 0.15
-        evidence.append("while-true dispatch loop with table-index calls")
+        evidence.append("while-true dispatcher with table-index calls")
 
-    # 6. giant opaque string blobs
     blobs = _count(_BLOB_RX, code, cap=50)
     if blobs:
         score += 0.15
         evidence.append("%d opaque 500+ character string blobs" % blobs)
+
+    if size >= 8000 and analysis.function_count >= 25 and analysis.branch_count >= 40:
+        if total >= 250 and short / max(1, total) >= 0.25:
+            score += 0.1
+            evidence.append("dense function and branch structure with generated identifiers")
+
+    decoder_ops = _count(_DECODER_RX, structure)
+    if decoder_ops >= 12 and analysis.string_bytes >= size * 0.15:
+        score += 0.1
+        evidence.append("%d string/bitwise decoder operations around encoded data" % decoder_ops)
 
     return min(1.0, score), evidence

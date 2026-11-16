@@ -16,6 +16,8 @@ from obfuscators.extra_families import (
     strip_lua_comments,
 )
 from obfuscators.ironbrew1 import Ironbrew1
+from obfuscators.luraph_v15 import LuraphV15
+from obfuscators.centurion import Centurion
 from obfuscators.luraph_v151 import LuraphV151
 from obfuscators.moonsec_v3 import MoonsecV3
 
@@ -160,3 +162,43 @@ class ChannelCommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class CodeAwareDetectionTests(unittest.TestCase):
+    def test_shared_analysis_masks_comments_and_string_literals(self):
+        from obfuscators.extra_families import LuaAnalysis
+
+        source = (
+            '-- return setmetatable({[75]=bit32.rrotate})\n'
+            'local text = "LPH_ENCSTR return setmetatable({})"\n'
+            'return text\n'
+        )
+        analysis = LuaAnalysis(source)
+        self.assertIn("return setmetatable", analysis.comments)
+        self.assertNotIn("return setmetatable", analysis.structure)
+        self.assertNotIn("LPH_ENCSTR", analysis.structure)
+        self.assertIn("LPH_ENCSTR", analysis.code)
+
+    def test_luraph_is_detected_from_executable_vm_shape_without_banner(self):
+        source = (
+            'return setmetatable({[75]=bit32.rrotate,[84]=table.concat}, function() end)\n'
+            'local marker = LPH_ENCSTR\n'
+            'return marker\n'
+        )
+        self.assertGreaterEqual(LuraphV15().detect(source), 0.8)
+
+    def test_centurion_is_detected_from_executable_factory_shape(self):
+        source = 'local c3 = {}\n' + '\n'.join(
+            'c3[%d] = function(Z) return Z end' % index for index in range(1, 22)
+        )
+        self.assertGreaterEqual(Centurion().detect(source), 0.7)
+
+    def test_moonsec_is_detected_from_decoder_calls_without_banner(self):
+        encoded = '"' + ('x' * 80) + '"'
+        source = '\n'.join('r(1,' + encoded + ')' for _ in range(6))
+        self.assertGreaterEqual(MoonsecV3().detect(source), 0.8)
+
+    def test_luraph_marker_inside_string_is_not_executable_evidence(self):
+        source = 'local value = "LPH_ENCSTR"\nreturn value'
+        self.assertEqual(LuraphV15().detect(source), 0.0)
+
+
