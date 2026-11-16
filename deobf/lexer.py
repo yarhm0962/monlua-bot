@@ -6,8 +6,8 @@ KEYWORDS = {"and","break","do","else","elseif","end","false","for","function","i
 
 _num = re.compile(r"0[xX][0-9a-fA-F_]+|0[bB][01_]+|(?:\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(?:[eE][+-]?\d+)?")
 _name = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
-_LONG_COMMENT_OPEN = re.compile(r"--\\[(=*)\\[")
-_LONG_STRING_OPEN = re.compile(r"\\[(=*)\\[")
+_LONG_COMMENT_OPEN = re.compile(r"--\[(=*)\[")
+_LONG_STRING_OPEN = re.compile(r"\[(=*)\[")
 _ops = ["...", "..=", "==", "~=", "<=", ">=", "//=", "//", "..", "::", "->", "+=", "-=", "*=", "/=", "%=", "^=",
         "+", "-", "*", "/", "%", "^", "#", "<", ">", "=", "(", ")", "{", "}", "[", "]", ";", ":", ",", ".", "&", "|", "?"]
 
@@ -22,7 +22,7 @@ def tokenize(src):
             i += 1
             continue
         if src.startswith("--", i):
-            m = re.match(r"--\[(=*)\[", src[i:])
+            m = _LONG_COMMENT_OPEN.match(src, i)
             if m:
                 close = "]" + m.group(1) + "]"
                 j = src.find(close, m.end())
@@ -34,10 +34,10 @@ def tokenize(src):
             i = j
             continue
         if c == "[":
-            m = re.match(r"\[(=*)\[", src[i:i + 64])
+            m = _LONG_STRING_OPEN.match(src, i)
             if m:
                 close = "]" + m.group(1) + "]"
-                j = src.find(close, i + m.end())
+                j = src.find(close, m.end())
                 j = n if j < 0 else j + len(close)
                 out.append(("str", src[i:j]))
                 i = j
