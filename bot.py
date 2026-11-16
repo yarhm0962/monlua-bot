@@ -1286,10 +1286,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         attachment = None
         source_url = ""
     elif attachments and url.strip():
-        await ctx.reply("Use either one attached file or one raw-file URL, not both.", mention_author=False)
+        await ctx.reply(view=info_view("Choose one input", "Attach a source file or provide a raw-file URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply("Please send exactly one source file per command.", mention_author=False)
+        await ctx.reply(view=info_view("One file at a time", "Please send exactly one source file per command."), mention_author=False)
         return
     if preset is None:
         attachment = attachments[0] if attachments else None
@@ -1308,16 +1308,16 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
     elif attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply("Unsupported file type. Only `.lua`, `.luau`, and `.txt` files are accepted.", mention_author=False)
+            await ctx.reply(view=info_view("Unsupported file", "Only .lua, .luau, and .txt files are accepted."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(f"File is too large. Maximum size is {MAX_INPUT_BYTES:,} bytes.", mention_author=False)
+            await ctx.reply(view=info_view("File is too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
             source_url, filename = _validate_public_url(source_url)
         except ValueError as exc:
-            await ctx.reply(f"Invalid raw-file URL: {exc}", mention_author=False)
+            await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
 
     runtime_ok, runtime_detail = runtime_status(engine)
@@ -1339,7 +1339,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     input_path.write_bytes(preset_bytes)
                     size = input_path.stat().st_size
                     if size == 0:
-                        await ctx.reply("That file is empty.", mention_author=False)
+                        await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
                         return
                 elif attachment is not None:
                     await attachment.save(input_path)
@@ -1348,7 +1348,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         await ctx.reply("That file is empty.", mention_author=False)
                         return
                     if size > MAX_INPUT_BYTES:
-                        await ctx.reply(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.", mention_author=False)
+                        await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                         return
                 else:
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
@@ -1366,11 +1366,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 await status.edit(content=None, view=info_view("Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}"))
                 start_time = time.monotonic()
                 # result cache: an identical file + engine re-run is instant
-                cache_key = _cache_key(engine, input_path)
+                cache_key = await asyncio.to_thread(_cache_key, engine, input_path)
                 cached = _RESULT_CACHE.get(cache_key) if cache_key[0] else None
                 if cached is not None:
                     _RESULT_CACHE.move_to_end(cache_key)
-                    output_path.write_bytes(cached)
+                    await asyncio.to_thread(output_path.write_bytes, cached)
                 else:
                     go_cloud = engine != "moonveil_v145" and ((size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES))
                     if go_cloud and cloud_runner_configured():
@@ -1379,7 +1379,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             async with cloud_slots:
                                 cloud_out = await asyncio.to_thread(
                                     _cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS)
-                            output_path.write_bytes(cloud_out)
+                            await asyncio.to_thread(output_path.write_bytes, cloud_out)
                         except Exception as exc:
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
                             await status.edit(content=None, view=info_view("Using local engine", f"The cloud runner could not complete this job.\n{str(exc)[:180]}\nTrying the local engine instead.", color=0xFAA61A))
@@ -1422,9 +1422,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                                     (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
                                 ))
                             except discord.HTTPException:
-                                await status.edit(content=(
-                                    f"❌ Deobfuscation failed on `{filename}`. The script structure may not be supported.\n```text\n{detail[-400:] or 'No diagnostic output.'}\n```"
-                                )[:1900])
+                                await status.edit(content=None, view=error_view("Deobfuscation failed", (detail[-600:] or "No diagnostic output.") + "\nThe script structure may not be supported."))
                             print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                             return
 
@@ -1436,7 +1434,8 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     if output_size > MAX_OUTPUT_BYTES:
                         await status.edit(content=None, view=error_view("Output limit exceeded", f"The recovered file is {_human_size(output_size)}. The configured output limit is {_human_size(MAX_OUTPUT_BYTES)}."))
                         return
-                    await asyncio.to_thread(_result_cache_store, cache_key, await asyncio.to_thread(output_path.read_bytes))
+                    cached_output = await asyncio.to_thread(output_path.read_bytes)
+                    await asyncio.to_thread(_result_cache_store, cache_key, cached_output)
                 else:
                     out_text = None
                     output_size = output_path.stat().st_size
