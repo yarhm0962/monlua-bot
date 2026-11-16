@@ -9,3 +9,6 @@ services:
     buildCommand: pip install -r requirements.txt && bash scripts/setup_render_runtimes.sh
     startCommand: python run.py
     autoDeployTrigger: commit
+    envVars:
+      - key: ORACLE
+        sync: false
