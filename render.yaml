@@ -3,7 +3,7 @@ services:
     name: monlua-bot
     runtime: python
     repo: https://github.com/yarhm0962/monlua-bot
-    branch: main
+    branch: integration/ironveil-77fuscator-ironbrew2
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt && bash scripts/setup_render_runtimes.sh
