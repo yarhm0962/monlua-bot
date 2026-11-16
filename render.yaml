@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: monlua-bot
+    runtime: python
+    repo: https://github.com/yarhm0962/monlua-bot
+    branch: main
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt && bash scripts/setup_render_runtimes.sh
+    startCommand: python run.py
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.5
