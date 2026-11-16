@@ -1208,41 +1208,31 @@ def _cloud_cleanup(job_id: str) -> None:
 
 
 def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> bytes:
-    """Run one deobfuscation job on the free GitHub Actions runner."""
-    if not GH_DISPATCH_TOKEN:
-        raise RuntimeError("no GitHub token configured")
-    job_id = os.urandom(6).hex()
-    _cloud_upload_input(job_id, input_path.read_bytes())
-    _cloud_dispatch(engine, job_id)
-    started_unix = time.time()
-    deadline = started_unix + wait_seconds
-    conclusion = None
-    while time.time() < deadline:
-        code, resp = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/runs?event=workflow_dispatch&per_page=15")
-        if code == 200:
-            try:
-                runs = json.loads(resp.decode("utf-8", errors="replace")).get("workflow_runs") or []
-            except ValueError:
-                runs = []
-            for run in runs:
-                if run.get("head_branch") != "main":
-                    continue
-                if _gh_time(run.get("created_at", "")) < started_unix - 5:
-                    continue
-                if run.get("status") == "completed":
-                    conclusion = run.get("conclusion") or "unknown"
-                    break
-        if conclusion is not None:
-            break
-        time.sleep(CLOUD_POLL_SECONDS)
-    if conclusion is None:
-        raise RuntimeError("the cloud runner did not answer in time")
-    if conclusion != "success":
-        raise RuntimeError(f"cloud run {conclusion}")
-    out = _cloud_fetch_result(job_id)
-    _cloud_cleanup(job_id)
-    return out
-
+    if not cloud_runner_configured():
+        raise RuntimeError("the remote runner token is missing or still a placeholder")
+    job_id = os.urandom(8).hex()
+    uploaded = False
+    try:
+        _cloud_upload_input(job_id, input_path.read_bytes())
+        uploaded = True
+        _cloud_dispatch(engine, job_id)
+        deadline = time.monotonic() + wait_seconds
+        result_ref = f"/repos/{GH_JOBS_REPO}/git/ref/heads/result/{job_id}"
+        while time.monotonic() < deadline:
+            code, response = _gh_api("GET", result_ref)
+            if code == 200:
+                result = _cloud_fetch_result(job_id)
+                if not result:
+                    raise RuntimeError("the cloud runner created an empty result file")
+                return result
+            if code not in (404, 409):
+                detail = response.decode("utf-8", errors="replace")[:240]
+                raise RuntimeError(f"could not check cloud result status: HTTP {code}: {detail}")
+            time.sleep(CLOUD_POLL_SECONDS)
+        raise RuntimeError("the cloud runner did not publish this job's result before the deadline")
+    finally:
+        if uploaded:
+            _cloud_cleanup(job_id)
 
 def _cache_key(engine: str, input_path: Path) -> tuple[str, str]:
     try:
