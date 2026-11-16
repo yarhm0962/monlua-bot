@@ -27,7 +27,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22.23.5"
+      - name: Set up .NET runtimes
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
       - name: Install bot dependencies
         run: python -m pip install -r requirements.txt
       - name: Prepare portable Luraph v15.1 Luau runtime
@@ -37,6 +43,17 @@ jobs:
           fi
           chmod +x deobf/v151/bin/luau deobf/v151/bin/luau-ast
           chmod +x deobf/bin/luau deobf/bin/luau-ast
+      - name: Materialize added engine sources
+        run: bash scripts/materialize_engine_assets.sh
+      - name: Build 77fuscator and restore IronBrew2 runtime dependencies
+        run: |
+          dotnet publish .runtime/vendor/77fuscator/deobfuscator.csproj -c Release --no-self-contained -o .runtime/77fuscator
+          dotnet restore deobf/ironbrew2/restore.csproj --packages .runtime/nuget
+          python -c 'import json,pathlib; pathlib.Path(".runtime/vendor/ironbrew2/LuaAnalysis.Ironbrew2.runtimeconfig.dev.json").write_text(json.dumps({"runtimeOptions":{"additionalProbingPaths":[str(pathlib.Path(".runtime/nuget").resolve())]}}))'
+      - name: Check Ironveil JavaScript
+        run: |
+          node --check .runtime/vendor/ironveil/index.js
+          for file in .runtime/vendor/ironveil/utils/*.js; do node --check "$file"; done
       - name: Compile Python modules
         run: python -m compileall -q bot.py deobf/obfuscators deobf/moonveil deobf/v151/core
       - name: Check Luraph Node.js modules
