@@ -986,16 +986,17 @@ async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str,
     """Score every engine against the file:
     [(name, confidence, label, evidence), ...], best first."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect-all", "--no-pypy",
-            cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        returncode, stdout, stderr = await _run_process(
+            [PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect-all", "--no-pypy"],
+            90,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
     except asyncio.TimeoutError:
         raise ValueError("The detection scan timed out.")
+    except JobMemoryExceeded as exc:
+        raise ValueError(f"The detection scan exceeded the memory budget ({exc}).") from exc
     except OSError as exc:
-        raise ValueError(f"Could not start the detection scan: {exc}")
-    if proc.returncode != 0:
+        raise ValueError(f"Could not start the detection scan: {exc}") from exc
+    if returncode != 0:
         detail = stderr.decode("utf-8", errors="replace").strip()
         raise ValueError(f"The detection scan failed: {detail[-300:] or 'no diagnostic output'}")
     rows: list[tuple[str, float, str, list[str]]] = []
