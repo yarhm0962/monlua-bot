@@ -1435,7 +1435,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     output_size = output_path.stat().st_size
                 elapsed_seconds = max(1, int(time.monotonic() - start_time))
                 elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
-                await status.edit(content=None, view=info_view("Deobfuscation complete", f"**Engine** · {label}\\n**Output size** · {_human_size(output_size)}\\n**Time** · {elapsed}", color=0x57F287))
+                try:
+                    await status.delete()
+                except discord.HTTPException:
+                    pass
                 upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
                 if output_size <= 1600:
                     if out_text is None:
@@ -1470,29 +1473,28 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
             except ValueError as exc:
                 message = str(exc)
                 if status:
-                    await status.edit(content=message[:1900])
+                    await status.edit(content=None, view=error_view("Input could not be processed", message[:900]))
                 else:
-                    await ctx.reply(message[:1900], mention_author=False)
-            except discord.Forbidden:
+                    await ctx.reply(view=error_view("Input could not be processed", message[:900]), mention_author=False)
                 print("Discord permission error: cannot read/send messages or attachments.", flush=True)
             except discord.HTTPException as exc:
                 if status:
                     try:
-                        await status.edit(content=f"Discord file/message error: {exc}"[:1900])
+                        await status.edit(content=None, view=error_view("Discord could not send the result", str(exc)[:700]))
                     except discord.HTTPException:
                         pass
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 print(f"Unexpected job error: {type(exc).__name__}: {exc}", flush=True)
-                message = f"Unexpected processing error: `{type(exc).__name__}`. Check Render logs."
+                message = f"{type(exc).__name__}: {exc}"
                 if status:
                     try:
-                        await status.edit(content=message)
+                        await status.edit(content=None, view=error_view("Unexpected processing error", message[:700]))
                     except discord.HTTPException:
                         pass
                 else:
-                    await ctx.reply(message, mention_author=False)
+                    await ctx.reply(view=error_view("Unexpected processing error", message[:700]), mention_author=False)
 
 
 @bot.command(name="lrph15")
