@@ -46,7 +46,6 @@ ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".do"},
     "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
-    "ironbrew1": {"label": "IronBrew1", "command": ".do"},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
     "centurion": {"label": "Centurion", "command": ".do"},
     "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
@@ -1246,39 +1245,45 @@ def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
     dotnet_root = runtime_root / "dotnet"
     dotnet = dotnet_root / "dotnet"
     if engine == "ironveil_v1":
-        node = shutil.which("node") or str(runtime_root / "node" / "bin" / "node")
-        required = [runtime_root / "vendor" / "ironveil" / "index.js"]
-        missing = [str(path) for path in required if not path.is_file()]
-        if not shutil.which("node") and not Path(node).is_file():
-            missing.append("Node.js 22.23.5 or newer")
+        script = runtime_root / "vendor" / "ironveil" / "deobfuscator" / "index.js"
+        node = shutil.which("node") or runtime_root / "node" / "bin" / "node"
+        missing = []
+        if not script.is_file():
+            missing.append("Ironveil v1 CLI")
+        if not Path(node).is_file() and not shutil.which("node"):
+            missing.append("Node.js runtime")
         return (not missing, ", ".join(missing) if missing else "Ironveil v1 and Node.js are ready")
     if engine == "77fuscator":
         app = runtime_root / "77fuscator" / "deobfuscator.dll"
-        java = runtime_root / "java" / "bin" / "java"
-        required = [dotnet, app, DEOB_DIR / "bin" / "unluac.jar"]
-        missing = [str(path) for path in required if not path.is_file()]
-        if not shutil.which("java") and not java.is_file():
-            missing.append("Java runtime")
+        java = shutil.which("java") or runtime_root / "java" / "bin" / "java"
         shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
+        missing = []
+        for path in (dotnet, app, DEOB_DIR / "bin" / "unluac.jar"):
+            if not path.is_file():
+                missing.append(str(path))
+        if not Path(java).is_file() and not shutil.which("java"):
+            missing.append("Java runtime")
         if not shared.is_dir() or not any(path.name.startswith("8.") for path in shared.iterdir()):
             missing.append(".NET 8 runtime")
-        return (not missing, ", ".join(missing) if missing else "77fuscator, .NET 8, and unluac are ready")
+        return (not missing, ", ".join(missing) if missing else "77fuscator, .NET 8, Java, and unluac are ready")
     if engine == "ironbrew2":
         app_dir = runtime_root / "vendor" / "ironbrew2"
-        required = [
+        native = app_dir / "runtimes" / "linux-x64" / "native" / "liblua54.so"
+        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
+        required = (
             dotnet,
             app_dir / "LuaAnalysis.Ironbrew2.dll",
             app_dir / "LuaAnalysis.Ironbrew2.deps.json",
             app_dir / "LuaAnalysis.Ironbrew2.runtimeconfig.json",
             app_dir / "LuaAnalysis.Common.dll",
-        ]
+            native,
+        )
         missing = [str(path) for path in required if not path.is_file()]
-        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
         if not shared.is_dir() or not any(path.name.startswith("9.") for path in shared.iterdir()):
             missing.append(".NET 9 runtime")
-        if not os.getenv("ORACLE") and not os.getenv("IRONBREW2_ORACLE_KEY"):
+        if not (os.getenv("ORACLE") or os.getenv("IRONBREW2_ORACLE_KEY")):
             missing.append("ORACLE environment variable")
-        return (not missing, ", ".join(missing) if missing else "IronBrew2, .NET 9, and Oracle configuration are ready")
+        return (not missing, ", ".join(missing) if missing else "IronBrew2, .NET 9, Oracle, and Linux native runtime are ready")
     suffix = ".exe" if os.name == "nt" else ""
     required = [
         DEOB_DIR / "bin" / f"luau{suffix}",
