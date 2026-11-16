@@ -1325,12 +1325,16 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         )
         return
 
+    status = await ctx.reply(
+        view=info_view("Request queued", f"**Engine** · {label}\\n**Source** · `{filename[:120]}`\\nWaiting for an available processing slot."),
+        mention_author=False,
+    )
+
     async with job_slots:
         with tempfile.TemporaryDirectory(prefix="deobf_bot_") as temp:
             workdir = Path(temp)
             input_path = workdir / filename
             output_path = workdir / f"{Path(filename).stem}_deobfuscated.luau"
-            status: Optional[discord.Message] = None
             try:
                 if preset_bytes is not None:
                     input_path.write_bytes(preset_bytes)
@@ -1350,7 +1354,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
-                status = await ctx.reply(view=info_view("Job queued", f"**Engine** · {label}\nPreparing the source file."), mention_author=False)
+                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\\n**Input** · {_human_size(size)}\\nSource is ready. Starting the selected engine."))
                 print(f"selected engine={label}; automatic pre-scan skipped for faster large-file processing", flush=True)
 
                 wait_note = ""
