@@ -40,7 +40,10 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate Luraph runtime models
         run: |
-          python deobf/v151/tests/test_datatypes.py
+          file deobf/v151/bin/luau deobf/v151/bin/luau-ast
+          ldd deobf/v151/bin/luau || true
+          deobf/v151/bin/luau --version || true
+          python -u deobf/v151/tests/test_datatypes.py
           deobf/v151/bin/luau deobf/v151/tests/test_for_lowering.luau
       - name: Run Luraph v15.1 sample regression
         run: python deobf/v151/tests/run_samples.py
