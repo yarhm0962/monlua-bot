@@ -33,6 +33,7 @@ tar -xzf "$TEMP/ironveil.tar.gz" -C "$TEMP/ironveil" --strip-components=1
 rm -rf "$RUNTIME/vendor/ironveil"
 mkdir -p "$RUNTIME/vendor/ironveil"
 cp -a "$TEMP/ironveil/deobfuscator" "$RUNTIME/vendor/ironveil/deobfuscator"
+cp -a "$TEMP/ironveil/Samples" "$RUNTIME/vendor/ironveil/Samples"
 
 curl -fsSL "https://codeload.github.com/Bytecoded1337/77fuscatorDeobfuscator/tar.gz/$SEVENTYSEVEN_COMMIT" -o "$TEMP/77fuscator.tar.gz"
 mkdir -p "$TEMP/77fuscator"
