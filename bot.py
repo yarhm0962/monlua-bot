@@ -587,8 +587,7 @@ class _DeobfuscateButton(discord.ui.Button):
                 view=error_view("Confirmation unavailable", "Use the matching engine command from the help guide."),
                 ephemeral=True)
             return
-        src_name = self._source[1] if self._source[0] == "attachment" else "the linked file"
-        await interaction.response.send_message(f"Deobfuscate `{src_name}` with **{label}**?", view=view)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
 
 class _ConfirmDeobfView(discord.ui.LayoutView):
@@ -609,6 +608,8 @@ class _ConfirmDeobfView(discord.ui.LayoutView):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
         print(f"Confirm view error for {item}: {error!r}\n{traceback.format_exc()}", flush=True)
+
+
 class _ConfirmDeobfButton(discord.ui.Button):
     def __init__(self, engine: str, source: tuple):
         super().__init__(label="Continue", style=discord.ButtonStyle.success, custom_id="deobf_confirm")
@@ -652,9 +653,10 @@ class _CancelDeobfButton(discord.ui.Button):
         super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="deobf_cancel")
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
             content=None,
             view=info_view("Cancelled", "No deobfuscation job was started.")
-
+        )
 
 @bot.listen("on_interaction")
 async def _log_component_clicks(interaction: discord.Interaction) -> None:
