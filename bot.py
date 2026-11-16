@@ -1450,8 +1450,16 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     if out_text is None:
                         out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
                     if "```" not in out_text:
+                        try:
+                            await status.delete()
+                        except discord.HTTPException:
+                            pass
                         await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed), mention_author=False)
                     else:
+                        try:
+                            await status.delete()
+                        except discord.HTTPException:
+                            pass
                         await ctx.reply(
                             view=result_view(filename, label, output_size, None, output_path.name, elapsed),
                             file=discord.File(str(output_path), filename=output_path.name),
@@ -1466,11 +1474,19 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         pastefy_url = ""
                         print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
                     if pastefy_url:
+                        try:
+                            await status.delete()
+                        except discord.HTTPException:
+                            pass
                         await ctx.reply(view=result_view(filename, label, output_size, None, None, elapsed, pastefy_url=pastefy_url), mention_author=False)
                     else:
                         await status.edit(content=None, view=error_view("Output exceeds the upload limit", "The recovered file is larger than this server can attach, and the online upload service did not accept it."))
                         return
                 else:
+                    try:
+                        await status.delete()
+                    except discord.HTTPException:
+                        pass
                     await ctx.reply(
                         view=result_view(filename, label, output_size, None, output_path.name, elapsed),
                         file=discord.File(str(output_path), filename=output_path.name),
