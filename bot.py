@@ -190,10 +190,11 @@ class ChannelRestrictedCommandTree(app_commands.CommandTree):
         else:
             message = "This command can't be used in this context."
         try:
+            response_view = info_view("Command unavailable here", message)
             if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
+                await interaction.followup.send(view=response_view, ephemeral=True)
             else:
-                await interaction.response.send_message(message, ephemeral=True)
+                await interaction.response.send_message(view=response_view, ephemeral=True)
         except discord.HTTPException:
             pass
         return False
@@ -1695,19 +1696,13 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
-        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        await interaction.response.send_message(view=error_view("Server only", "This command can only be used in a server."), ephemeral=True)
         return
     if not permissions or not (permissions.manage_guild or permissions.administrator):
-        await interaction.response.send_message(
-            "You need Manage Server or Administrator permission to change command channels.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message(view=error_view("Permission required", "You need Manage Server or Administrator permission to change command channels."), ephemeral=True)
         return
     if channel.guild.id != interaction.guild_id:
-        await interaction.response.send_message(
-            "Choose a text channel from this server.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message(view=error_view("Invalid channel", "Choose a text channel from this server."), ephemeral=True)
         return
     guild_key = str(interaction.guild_id)
     async with _channel_settings_lock:
@@ -1719,21 +1714,13 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
             _persist_channel_restrictions(updated)
         except OSError as exc:
             print(f"Couldn't persist channel restriction: {type(exc).__name__}: {exc}", flush=True)
-            await interaction.response.send_message(
-                "Couldn't save this setting. Check the bot's file permissions and try again.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(view=error_view("Could not save setting", "Check the bot file permissions and try again."), ephemeral=True)
             return
         CHANNEL_RESTRICTIONS.clear()
         CHANNEL_RESTRICTIONS.update(updated)
         CHANNEL_CONFIG_LOAD_FAILED = False
         configured_count = len(updated[guild_key])
-    await interaction.response.send_message(
-        f"Command-channel restriction saved. Bot commands in this server now work only in {channel.mention}"
-        + (f" and {configured_count - 1} other configured channel(s)." if configured_count > 1 else ".")
-        + "\nYou can use the set channel command again to allow another channel.",
-        ephemeral=True,
-    )
+    await interaction.response.send_message(view=info_view("Command channel saved", f"Bot commands are now allowed in {channel.mention}" + (f" and {configured_count - 1} other configured channel(s)." if configured_count > 1 else ".") + "\nRun /set channel again to allow another channel.", color=0x57F287), ephemeral=True)
 
 
 remove_group = app_commands.Group(
@@ -1767,10 +1754,7 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
     async with _channel_settings_lock:
         current = set(CHANNEL_RESTRICTIONS.get(guild_key, []))
         if channel.id not in current:
-            await interaction.response.send_message(
-                f"{channel.mention} isn't in this server's configured command-channel list.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(view=info_view("Channel not configured", f"{channel.mention} is not in this server command-channel list."), ephemeral=True)
             return
         current.remove(channel.id)
         updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
@@ -1782,10 +1766,7 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
             _persist_channel_restrictions(updated)
         except OSError as exc:
             print(f"Couldn't persist channel restriction removal: {type(exc).__name__}: {exc}", flush=True)
-            await interaction.response.send_message(
-                "Couldn't save this change. The existing restriction is still active.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(view=error_view("Could not save change", "The existing channel restriction is still active."), ephemeral=True)
             return
         CHANNEL_RESTRICTIONS.clear()
         CHANNEL_RESTRICTIONS.update(updated)
@@ -1795,7 +1776,7 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
         message = f"Removed {channel.mention}. Commands remain restricted to the other {remaining} configured channel(s)."
     else:
         message = f"Removed {channel.mention}. This server no longer has a command-channel restriction."
-    await interaction.response.send_message(message, ephemeral=True)
+    await interaction.response.send_message(view=info_view("Command channel updated", message, color=0x57F287), ephemeral=True)
 
 
 remove_group.add_command(remove_set_group)
