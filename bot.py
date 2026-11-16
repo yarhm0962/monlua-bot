@@ -471,6 +471,76 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     return view
 
 
+async def _deliver_deobf_output(
+    ctx,
+    status,
+    filename: str,
+    label: str,
+    output_path: Path,
+    output_size: int,
+    out_text: Optional[str],
+    elapsed: str,
+) -> bool:
+    upload_limit = int(getattr(getattr(ctx, "guild", None), "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
+    modes = []
+    if output_size <= 1600 and out_text is not None and chr(96) * 3 not in out_text:
+        modes.append("inline")
+    if output_size <= upload_limit:
+        modes.append("attachment")
+    modes.append("pastefy")
+    failures = []
+    pastefy_url = ""
+
+    for mode in modes:
+        try:
+            if mode == "inline":
+                await ctx.reply(
+                    view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed),
+                    mention_author=False,
+                )
+            elif mode == "attachment":
+                await ctx.reply(
+                    view=result_view(filename, label, output_size, None, output_path.name, elapsed),
+                    file=discord.File(str(output_path), filename=output_path.name),
+                    mention_author=False,
+                )
+            else:
+                if out_text is None:
+                    out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                pastefy_url = await asyncio.to_thread(_pastefy_upload, out_text.rstrip(), Path(filename).stem)
+                if not pastefy_url:
+                    raise RuntimeError("The online output service did not return a complete output link.")
+                await ctx.reply(
+                    view=result_view(filename, label, output_size, None, None, elapsed, pastefy_url=pastefy_url),
+                    mention_author=False,
+                )
+            break
+        except Exception as exc:
+            failures.append(f"{type(exc).__name__}: {str(exc)[:240]}")
+    else:
+        details = "\n".join(failures[-3:]) or "Discord and online delivery methods failed."
+        if pastefy_url:
+            details += f"\nOnline copy: {pastefy_url}"
+        try:
+            await status.edit(content=None, view=error_view("Output delivery failed", details[:850]))
+        except discord.HTTPException:
+            pass
+        return False
+
+    try:
+        await status.delete()
+    except discord.HTTPException:
+        try:
+            await status.edit(
+                content=None,
+                view=info_view("Output delivered", f"**Engine** · {label}\n**Size** · {_human_size(output_size)}\nThe completed output was sent above.", color=0x57F287),
+            )
+        except discord.HTTPException:
+            pass
+    return True
+
+
+
 def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0xED4245)
@@ -1460,57 +1530,20 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     output_size = output_path.stat().st_size
                 elapsed_seconds = max(1, int(time.monotonic() - start_time))
                 elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
-                try:
-                    await status.delete()
-                except discord.HTTPException:
-                    pass
-                upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
-                if output_size <= 1600:
-                    if out_text is None:
-                        out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                    if "```" not in out_text:
-                        try:
-                            await status.delete()
-                        except discord.HTTPException:
-                            pass
-                        await ctx.reply(view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed), mention_author=False)
-                    else:
-                        try:
-                            await status.delete()
-                        except discord.HTTPException:
-                            pass
-                        await ctx.reply(
-                            view=result_view(filename, label, output_size, None, output_path.name, elapsed),
-                            file=discord.File(str(output_path), filename=output_path.name),
-                            mention_author=False,
-                        )
-                elif output_size > upload_limit:
-                    if out_text is None:
-                        out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                    try:
-                        pastefy_url = await asyncio.to_thread(_pastefy_upload, out_text.rstrip(), Path(filename).stem)
-                    except Exception as exc:
-                        pastefy_url = ""
-                        print(f"Pastefy upload error: {type(exc).__name__}: {exc}", flush=True)
-                    if pastefy_url:
-                        try:
-                            await status.delete()
-                        except discord.HTTPException:
-                            pass
-                        await ctx.reply(view=result_view(filename, label, output_size, None, None, elapsed, pastefy_url=pastefy_url), mention_author=False)
-                    else:
-                        await status.edit(content=None, view=error_view("Output exceeds the upload limit", "The recovered file is larger than this server can attach, and the online upload service did not accept it."))
-                        return
-                else:
-                    try:
-                        await status.delete()
-                    except discord.HTTPException:
-                        pass
-                    await ctx.reply(
-                        view=result_view(filename, label, output_size, None, output_path.name, elapsed),
-                        file=discord.File(str(output_path), filename=output_path.name),
-                        mention_author=False,
-                    )
+                if output_size <= 1600 and out_text is None:
+                    out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                delivered = await _deliver_deobf_output(
+                    ctx,
+                    status,
+                    filename,
+                    label,
+                    output_path,
+                    output_size,
+                    out_text,
+                    elapsed,
+                )
+                if not delivered:
+                    return
             except ValueError as exc:
                 message = str(exc)
                 if status:
