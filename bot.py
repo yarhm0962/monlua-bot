@@ -1282,10 +1282,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         attachment = None
         source_url = ""
     elif attachments and url.strip():
-        await ctx.reply(view=info_view("Choose one input", "Attach a source file or provide a raw-file URL, not both."), mention_author=False)
+        await ctx.reply(view=info_view("Choose one source", "Attach a single source file or provide a raw-file URL. Use one input method per request."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply(view=info_view("One file at a time", "Please send exactly one source file per command."), mention_author=False)
+        await ctx.reply(view=info_view("Single-file processing", "Please attach one source file per command. You can run another request after this one."), mention_author=False)
         return
     if preset is None:
         attachment = attachments[0] if attachments else None
@@ -1304,10 +1304,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
     elif attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=info_view("Unsupported file", "Only .lua, .luau, and .txt files are accepted."), mention_author=False)
+            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are `.lua`, `.luau`, and `.txt`."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=info_view("File is too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
@@ -1603,20 +1603,20 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
         await ctx.reply(view=info_view("Choose one input", "Attach one source file or provide a raw-file URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply(view=info_view("One file at a time", "Please send exactly one source file per command."), mention_author=False)
+        await ctx.reply(view=info_view("Single-file processing", "Please attach one source file per command. You can run another request after this one."), mention_author=False)
         return
     attachment = attachments[0] if attachments else None
     source_url = url.strip().strip("<>")
     if attachment is None and not source_url:
-        await ctx.reply(view=info_view("Input required", "Use .detect with one .lua, .luau, or .txt attachment, or a direct raw-file URL.\nExample: .detect https://example.com/raw/script.lua"), mention_author=False)
+        await ctx.reply(view=info_view("Source file required", "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n\nExample\n`.detect https://example.com/raw/script.lua`"), mention_author=False)
         return
     if attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=info_view("Unsupported file", "Only .lua, .luau, and .txt files are accepted."), mention_author=False)
+            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are `.lua`, `.luau`, and `.txt`."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=info_view("File is too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
@@ -1672,28 +1672,14 @@ async def deobfs(ctx: commands.Context) -> None:
 @bot.command(name="help")
 async def help_command(ctx: commands.Context) -> None:
     body = (
-        "**SUPPORTED ENGINES**\n"
-        "• **Luraph v15.1**  ·  `.lrph15.1`\n"
-        "• **Luraph v15**  ·  `.lrph15`\n"
-        "• **IronBrew 1**  ·  `.iron`\n"
-        "• **MoonSec V3**  ·  `.moon`\n"
-        "• **Centurion**  ·  `.cent`\n"
-        "• **MoonVeil v1.4.5**  ·  `.mv`\n\n"
-        "**INPUT**\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file, or pass a direct raw-file URL.\n\n"
-        "**EXAMPLES**\n"
-        "• `.detect` with a file attached\n"
-        "• `.lrph15.1 https://example.com/raw/script.lua`\n"
-        "• `.moon` with a MoonSec file attached\n"
-        "• `.mv` with a MoonVeil v1.4.5 file attached\n\n"
-        "**OTHER COMMANDS**\n"
-        "• `.engines` — list supported engines\n"
-        "• `.get <url>` — fetch raw text\n"
-        "• `/set channel` — restrict commands to selected channel(s) (Manage Server)\n"
-        "• `/remove set channel` — remove a configured channel (Manage Server)"
+        engines_body()
+        + "\n\n**INPUT EXAMPLES**\n"
+        + "• `.detect` with a file attached\n"
+        + "• `.lrph15.1 https://example.com/raw/script.lua`\n"
+        + "• `.moon` with a MoonSec V3 file attached\n"
+        + "• `.mv` with a MoonVeil v1.4.5 file attached"
     )
-    await ctx.reply(view=info_view("MonLua · Quick Guide", body), mention_author=False)
-
+    await ctx.reply(view=info_view("MonLua · Command Guide", body), mention_author=False)
 
 _tree_synced = False
 
