@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -26,10 +30,11 @@ jobs:
           node-version: "20"
       - name: Install bot dependencies
         run: python -m pip install -r requirements.txt
-      - name: Build portable Luraph v15.1 Luau runtime
+      - name: Prepare portable Luraph v15.1 Luau runtime
         run: |
-          rm -f deobf/v151/bin/luau deobf/v151/bin/luau-ast
-          python deobf/v151/build_luau.py --portable --jobs 2
+          if [ ! -x deobf/v151/bin/luau ] || [ ! -x deobf/v151/bin/luau-ast ]; then
+            python deobf/v151/build_luau.py --portable --jobs 2
+          fi
           chmod +x deobf/v151/bin/luau deobf/v151/bin/luau-ast
           chmod +x deobf/bin/luau deobf/bin/luau-ast
       - name: Compile Python modules
