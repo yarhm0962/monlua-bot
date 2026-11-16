@@ -24,6 +24,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             payload = {
                 "service": "monlua-bot",
                 "system_node": bool(shutil.which("node")),
+                "ironveil_v1": os.path.isfile(".runtime/vendor/ironveil/index.js") and bool(shutil.which("node")),
+                "77fuscator": os.path.isfile(".runtime/77fuscator/deobfuscator.dll") and os.path.isfile(".runtime/dotnet/dotnet"),
+                "ironbrew2": os.path.isfile(".runtime/vendor/ironbrew2/LuaAnalysis.Ironbrew2.dll") and os.path.isfile(".runtime/dotnet/dotnet"),
+                "dotnet_8": os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App/8.0.0") or any(name.startswith("8.") for name in os.listdir(".runtime/dotnet/shared/Microsoft.NETCore.App")) if os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App") else False,
+                "dotnet_9": any(name.startswith("9.") for name in os.listdir(".runtime/dotnet/shared/Microsoft.NETCore.App")) if os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App") else False,
+                "oracle_configured": bool(os.environ.get("ORACLE") or os.environ.get("IRONBREW2_ORACLE_KEY")),
                 "v151_tool": os.path.isfile("deobf/v151/deob.js"),
                 "v151_luau": os.path.isfile("deobf/v151/bin/luau") and os.access("deobf/v151/bin/luau", os.X_OK),
                 "v151_luau_ast": os.path.isfile("deobf/v151/bin/luau-ast") and os.access("deobf/v151/bin/luau-ast", os.X_OK),
