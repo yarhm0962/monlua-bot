@@ -10,4 +10,4 @@ jobs:
     timeout-minutes: 3
     steps:
       - name: Ping the bot
-        run: curl -s -o /dev/null -m 55 https://monlua-bot.onrender.com/status || true
+        run: curl -s -o /dev/null -m 55 https://monlua-bot-zswa.onrender.com/status || true
