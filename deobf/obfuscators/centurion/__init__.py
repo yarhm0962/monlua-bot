@@ -38,8 +38,8 @@ class Centurion(Obfuscator):
             return 1.0
         structure = analysis.structure
         domain_hint = "centurion.best" in leading_comments.lower()
-        c3 = len(re.findall(r"\bc3\[", structure))
-        fz = len(re.findall(r"function\(Z\)", structure))
+        c3 = sum(1 for _ in re.finditer(r"\\bc3\\[", structure))
+        fz = sum(1 for _ in re.finditer(r"function\\(Z\\)", structure))
         evidence = []
         if c3 >= 50 and fz >= 20:
             evidence.append("%d c3[N] refs + %d function(Z) factories" % (c3, fz))
