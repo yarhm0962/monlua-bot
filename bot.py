@@ -264,11 +264,20 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 
 def engines_body() -> str:
-    engines = "\n".join(f"• **{spec['label']}**" for spec in SUPPORTED.values())
+    engine_names = [
+        f"• **{spec['label']}**"
+        for engine, spec in SUPPORTED.items()
+        if engine != "moonveil_v145"
+    ]
+    engine_names.append("• **MoonVeil** (choose a version)")
+    engines = "\n".join(engine_names)
     return (
         "**DEOBFUSCATION ENGINES**\n"
         + engines
-        + "\n\n**UNIFIED COMMANDS**\n"
+        + "\n\n**MOONVEIL VERSIONS**\n"
+        + "• v1.4.5 — fully supported\n"
+        + "• v2.1.1 — recognized, but its deobfuscation engine is not included yet\n"
+        + "\n**UNIFIED COMMANDS**\n"
         + "• .do — shortcut command\n"
         + "• .deobf — full command name\n"
         + "Both commands open the same engine selector and processing flow.\n\n"
@@ -1041,16 +1050,110 @@ class _EnginePickerView(discord.ui.LayoutView):
                 self.message = None
 
 
+class _MoonVeilVersionView(discord.ui.LayoutView):
+    def __init__(self, ctx, source: tuple, owner_id: int):
+        super().__init__(timeout=300)
+        self.ctx = ctx
+        self.source = source
+        self.owner_id = owner_id
+        self.message = None
+        self.claimed = False
+        container = discord.ui.Container(accent_color=0x5865F2)
+        container.add_item(discord.ui.TextDisplay("## MoonLua · MoonVeil version"))
+        container.add_item(discord.ui.TextDisplay(
+            "Choose the MoonVeil version that matches the source file.\n"
+            "**v1.4.5** is fully integrated. **v2.1.1** is recognized, but its "
+            "deobfuscator engine is not present in this project."
+        ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(
+            _MoonVeilVersionButton("1.4.5", engine="moonveil_v145"),
+            _MoonVeilVersionButton("2.1.1"),
+        ))
+        self.add_item(container)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Only the person who started this request can select a MoonVeil version.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        if self.message is not None:
+            try:
+                await self.message.delete()
+            except discord.HTTPException as exc:
+                print(f"Expired MoonVeil version selector could not be deleted: {type(exc).__name__}: {exc}", flush=True)
+            finally:
+                self.message = None
+
+
+class _MoonVeilVersionButton(discord.ui.Button):
+    def __init__(self, version: str, engine: Optional[str] = None):
+        available = engine is not None
+        label = f"v{version}" if available else f"v{version} · not ready"
+        super().__init__(
+            label=label,
+            style=discord.ButtonStyle.success if available else discord.ButtonStyle.secondary,
+            custom_id=f"moonveil_version_{version.replace('.', '_')}",
+        )
+        self.engine = engine
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if not isinstance(parent, _MoonVeilVersionView):
+            await interaction.response.send_message(
+                "This MoonVeil version selector is no longer active.",
+                ephemeral=True,
+            )
+            return
+        if parent.claimed:
+            await interaction.response.send_message(
+                "A MoonVeil version has already been selected for this request.",
+                ephemeral=True,
+            )
+            return
+        parent.claimed = True
+        parent.stop()
+        if self.engine is None:
+            await interaction.response.edit_message(
+                content=None,
+                view=info_view(
+                    "MoonVeil v2.1.1 is not available yet",
+                    "The uploaded archive contains 71 MoonVeil v2.1.1 sample files, but no deobfuscator source code or executable. The public v2.1.0 toolkit we reviewed is analysis-only and does not generate recovered source, so it cannot be used as a working replacement. No deobfuscation job was started.\n\nMoonVeil v1.4.5 remains available for matching v1.4.5 inputs.",
+                    color=0xFAA61A,
+                ),
+            )
+            return
+        confirm = _ConfirmDeobfView(
+            self.engine,
+            parent.source,
+            ctx=parent.ctx,
+            owner_id=parent.owner_id,
+        )
+        confirm.message = interaction.message
+        await interaction.response.edit_message(content=None, view=confirm)
+
+
 class _EngineSelect(discord.ui.Select):
     def __init__(self):
-        options = [
-            discord.SelectOption(
-                label=spec["label"],
-                value=engine,
-                description=f"Use the existing {spec['label']} engine.",
-            )
-            for engine, spec in SUPPORTED.items()
-        ]
+        options = []
+        for engine, spec in SUPPORTED.items():
+            if engine == "moonveil_v145":
+                options.append(discord.SelectOption(
+                    label="MoonVeil",
+                    value="moonveil",
+                    description="Open the MoonVeil version selector.",
+                ))
+            else:
+                options.append(discord.SelectOption(
+                    label=spec["label"],
+                    value=engine,
+                    description=f"Use the existing {spec['label']} engine.",
+                ))
         super().__init__(
             placeholder="Choose a deobfuscation engine",
             min_values=1,
@@ -1079,6 +1182,37 @@ class _EngineSelect(discord.ui.Select):
                     color=0xFAA61A,
                 ),
             )
+            return
+        if engine == "moonveil":
+            version_view = _MoonVeilVersionView(
+                parent.ctx,
+                parent.source,
+                parent.owner_id,
+            )
+            await interaction.response.edit_message(
+                content=None,
+                view=info_view(
+                    "MoonVeil version selector",
+                    "Choose a version from the separate Components V2 message below.",
+                ),
+            )
+            try:
+                version_view.message = await interaction.followup.send(
+                    view=version_view,
+                    wait=True,
+                )
+            except discord.HTTPException as exc:
+                print(f"MoonVeil version selector delivery failed: {type(exc).__name__}: {exc}", flush=True)
+                try:
+                    await interaction.followup.send(
+                        view=error_view(
+                            "Version selector unavailable",
+                            "Discord could not deliver the separate MoonVeil version message. Run .do again to retry.",
+                        ),
+                        ephemeral=True,
+                    )
+                except discord.HTTPException:
+                    pass
             return
         confirm = _ConfirmDeobfView(
             engine,

@@ -50,7 +50,13 @@ class BotPerformanceRegressionTests(unittest.TestCase):
         self.assertIsNotNone(shortcut)
         self.assertIs(shortcut, bot.bot.get_command("deobf"))
         self.assertEqual(len(bot.SUPPORTED), 6)
-        self.assertEqual(set(option.value for option in bot._EngineSelect().options), set(bot.SUPPORTED))
+        expected_engine_options = set(bot.SUPPORTED)
+        expected_engine_options.discard("moonveil_v145")
+        expected_engine_options.add("moonveil")
+        self.assertEqual(
+            set(option.value for option in bot._EngineSelect().options),
+            expected_engine_options,
+        )
         for engine in bot.SUPPORTED:
             self.assertEqual(bot.SUPPORTED[engine]["command"], ".do")
 
