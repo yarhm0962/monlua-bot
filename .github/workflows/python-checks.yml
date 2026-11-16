@@ -40,7 +40,9 @@ jobs:
         run: |
           .runtime/dotnet/dotnet .runtime/77fuscator/deobfuscator.dll .runtime/vendor/77fuscator/tests/hello-obfuscated.lua -o "$RUNNER_TEMP/77fuscator-output.luac" --strings
           test -s "$RUNNER_TEMP/77fuscator-output.luac"
-          .runtime/java/bin/java -jar deobf/bin/unluac.jar "$RUNNER_TEMP/77fuscator-output.luac" > "$RUNNER_TEMP/77fuscator-output.lua"
+          JAVA_BIN=".runtime/java/bin/java"
+          if [[ ! -x "$JAVA_BIN" ]]; then JAVA_BIN="$(command -v java)"; fi
+          "$JAVA_BIN" -jar deobf/bin/unluac.jar "$RUNNER_TEMP/77fuscator-output.luac" > "$RUNNER_TEMP/77fuscator-output.lua"
           test -s "$RUNNER_TEMP/77fuscator-output.lua"
       - name: Check IronBrew2 Linux runtime and bytecode generation
         run: |
