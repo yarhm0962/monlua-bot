@@ -69,6 +69,37 @@ class MoonVeilV211Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(buttons[0].style, bot.discord.ButtonStyle.success)
         self.assertEqual(buttons[1].style, bot.discord.ButtonStyle.secondary)
 
+
+    async def test_engine_select_sends_a_separate_moonveil_version_message(self):
+        source = ("url", "https://example.com/script.lua")
+        context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
+        picker = bot._EnginePickerView(context, source)
+        select = next(
+            item for item in picker.walk_children()
+            if isinstance(item, bot.discord.ui.Select)
+        )
+        select._values = ["moonveil"]
+        followup_message = type("Message", (), {})()
+        interaction = type("Interaction", (), {
+            "user": type("User", (), {"id": 123})(),
+            "message": type("Message", (), {})(),
+            "response": type("Response", (), {"edit_message": unittest.mock.AsyncMock()})(),
+            "followup": type("Followup", (), {
+                "send": unittest.mock.AsyncMock(return_value=followup_message)
+            })(),
+        })()
+
+        await select.callback(interaction)
+
+        interaction.response.edit_message.assert_awaited_once()
+        interaction.followup.send.assert_awaited_once()
+        sent_view = interaction.followup.send.call_args.kwargs["view"]
+        self.assertIsInstance(sent_view, bot._MoonVeilVersionView)
+        self.assertTrue(interaction.followup.send.call_args.kwargs["wait"])
+        self.assertIs(sent_view.message, followup_message)
+        self.assertTrue(picker.claimed)
+        self.assertTrue(picker.is_finished())
+
     async def test_pending_version_button_explains_missing_engine_without_starting_job(self):
         context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
         view = bot._MoonVeilVersionView(
