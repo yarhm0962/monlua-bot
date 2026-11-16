@@ -2246,7 +2246,7 @@ def _nodes_equal(left, right):
             continue
         if a is None or b is None or len(a.stmts) != len(b.stmts):
             return False
-        if any(fmt_stmt(x) != fmt_stmt(y) for x, y in zip(a.stmts, b.stmts)):
+        if any(ir.fmt_stmt(x) != ir.fmt_stmt(y) for x, y in zip(a.stmts, b.stmts)):
             return False
         if (a.cond is None) != (b.cond is None):
             return False
