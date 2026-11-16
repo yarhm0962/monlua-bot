@@ -1346,7 +1346,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
-                status = await ctx.reply(f"Checking `{filename}`…", mention_author=False)
+                status = await ctx.reply(view=info_view("Job queued", f"**Engine** · {label}\nPreparing the source file."), mention_author=False)
                 print(f"selected engine={label}; automatic pre-scan skipped for faster large-file processing", flush=True)
 
                 wait_note = ""
@@ -1356,7 +1356,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     wait_note = " MoonVeil recovery includes isolated probing and may take several minutes."
                 elif input_path.stat().st_size > 1024 * 1024:
                     wait_note = " Large file: this can take a few minutes."
-                await status.edit(content=f"⚙️ Detected **{label}**. Devirtualizing `{filename}`…{wait_note}")
+                await status.edit(content=None, view=info_view("Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}"))
                 start_time = time.monotonic()
                 # result cache: an identical file + engine re-run is instant
                 cache_key = _cache_key(engine, input_path)
@@ -1368,21 +1368,21 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     go_cloud = engine != "moonveil_v145" and ((size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES))
                     if go_cloud and cloud_runner_configured():
                         try:
-                            await status.edit(content=f"☁️ `{filename}` is a big file: running it on the free cloud runner…")
+                            await status.edit(content=None, view=info_view("Cloud processing", f"`{filename[:120]}` is being processed on the remote runner."))
                             async with cloud_slots:
                                 cloud_out = await asyncio.to_thread(
                                     _cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS)
                             output_path.write_bytes(cloud_out)
                         except Exception as exc:
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
-                            await status.edit(content=f"☁️ Cloud runner unavailable ({str(exc)[:120]}). Running locally instead…")
+                            await status.edit(content=None, view=info_view("Using local engine", f"The cloud runner could not complete this job.\n{str(exc)[:180]}\nTrying the local engine instead.", color=0xFAA61A))
                     if not output_path.is_file():
                         process_env = None
                         if engine == "luraph_v151":
                             try:
                                 node_bin = await asyncio.to_thread(resolve_node)
                             except Exception as exc:
-                                await status.edit(content=f"⚠️ The v15.1 runtime is not ready on the server: {exc}")
+                                await status.edit(content=None, view=error_view("Luraph v15.1 runtime unavailable", str(exc)))
                                 return
                             node_input = workdir / f"{Path(filename).stem}.lua"
                             if input_path != node_input:
@@ -1400,15 +1400,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         try:
                             returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15, env=process_env)
                         except asyncio.TimeoutError:
-                            await status.edit(content=f"⏱️ Timed out processing `{filename}` after {JOB_TIMEOUT} seconds.")
+                            await status.edit(content=None, view=error_view("Processing timed out", f"The engine reached its {JOB_TIMEOUT}-second execution limit. Try a smaller input or retry later."))
                             return
                         except JobMemoryExceeded as exc:
                             print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
-                            await status.edit(content=(
-                                f"🧠 `{filename}` needed more memory than the free server has ({exc}). "
-                                "The job was stopped early so the bot stays online.\n"
-                                "Try a smaller file, or run this engine on a bigger Render plan."
-                            ))
+                            await status.edit(content=None, view=error_view("Memory limit reached", f"This job exceeded the available memory budget ({exc}). The process was stopped to keep the bot online."))
                             return
 
                         if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
