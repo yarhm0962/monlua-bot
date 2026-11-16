@@ -32,9 +32,9 @@ jobs:
         run: python -m compileall -q bot.py run.py deobf/obfuscators deobf/moonveil deobf/v151/core
       - name: Check Ironveil v1 and its known-good sample
         run: |
-          node --check .runtime/vendor/ironveil/deobfuscator/index.js
-          for file in .runtime/vendor/ironveil/deobfuscator/utils/*.js; do node --check "$file"; done
-          node .runtime/vendor/ironveil/deobfuscator/index.js .runtime/vendor/ironveil/Samples/obf.lua "$RUNNER_TEMP/ironveil-output.lua"
+          .runtime/node/bin/node --check .runtime/vendor/ironveil/deobfuscator/index.js
+          for file in .runtime/vendor/ironveil/deobfuscator/utils/*.js; do .runtime/node/bin/node --check "$file"; done
+          .runtime/node/bin/node .runtime/vendor/ironveil/deobfuscator/index.js .runtime/vendor/ironveil/Samples/obf.lua "$RUNNER_TEMP/ironveil-output.lua"
           cmp "$RUNNER_TEMP/ironveil-output.lua" .runtime/vendor/ironveil/Samples/deobfuscated.lua
       - name: Check 77fuscator bytecode lifting and Lua 5.1 source conversion
         run: |
@@ -44,6 +44,7 @@ jobs:
           test -s "$RUNNER_TEMP/77fuscator-output.lua"
       - name: Check IronBrew2 Linux runtime and bytecode generation
         run: |
+          export LD_LIBRARY_PATH=".runtime/vendor/ironbrew2/runtimes/linux-x64/native:${LD_LIBRARY_PATH:-}"
           .runtime/dotnet/dotnet .runtime/vendor/ironbrew2/LuaAnalysis.Ironbrew2.dll .runtime/vendor/ironbrew2/input.lua "$RUNNER_TEMP/ironbrew2-output.luac"
           test -s "$RUNNER_TEMP/ironbrew2-output.luac"
       - name: Run bot regression tests
