@@ -1232,7 +1232,10 @@ def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> byte
         raise RuntimeError("the cloud runner did not publish this job's result before the deadline")
     finally:
         if uploaded:
-            _cloud_cleanup(job_id)
+            try:
+                _cloud_cleanup(job_id)
+            except Exception as exc:
+                print(f"Cloud job cleanup failed ({job_id}): {type(exc).__name__}: {exc}", flush=True)
 
 def _cache_key(engine: str, input_path: Path) -> tuple[str, str]:
     try:
@@ -1425,7 +1428,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         await status.edit(content=None, view=error_view("Output limit exceeded", f"The recovered file is {_human_size(output_size)}. The configured output limit is {_human_size(MAX_OUTPUT_BYTES)}."))
                         return
                     cached_output = await asyncio.to_thread(output_path.read_bytes)
-                    await asyncio.to_thread(_result_cache_store, cache_key, cached_output)
+                    _result_cache_store(cache_key, cached_output)
                 else:
                     out_text = None
                     output_size = output_path.stat().st_size
