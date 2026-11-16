@@ -15,10 +15,13 @@ class LuraphV151IntegrationTests(unittest.TestCase):
         self.assertTrue(os.access(luau, os.X_OK))
         self.assertTrue(os.access(luau_ast, os.X_OK))
 
-    def test_luraph_v151_command_remains_registered(self):
-        command = bot.bot.get_command("lrph15.1")
+    def test_luraph_v151_routes_through_unified_selector(self):
+        command = bot.bot.get_command("do")
         self.assertIsNotNone(command)
-        self.assertEqual(bot.SUPPORTED["luraph_v151"]["command"], ".lrph15.1")
+        self.assertIs(command, bot.bot.get_command("deobf"))
+        self.assertIn("luraph_v151", bot.SUPPORTED)
+        self.assertEqual(bot.SUPPORTED["luraph_v151"]["command"], ".do")
+        self.assertIn("luraph_v151", [option.value for option in bot._EngineSelect().options])
 
     def test_all_native_runtime_checks_include_luraph_binaries(self):
         ready, detail = bot.runtime_status("luraph_v151")
