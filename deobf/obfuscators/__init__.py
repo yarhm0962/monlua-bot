@@ -5,6 +5,7 @@ from obfuscators.luraph_v151 import LuraphV151
 from obfuscators.ironbrew1 import Ironbrew1
 from obfuscators.moonsec_v3 import MoonsecV3
 from obfuscators.centurion import Centurion
+from obfuscators.moonveil_v145 import MoonVeilV145
 from obfuscators.generic import Generic
 from obfuscators import extra_families
 
@@ -14,6 +15,7 @@ PLUGINS = [
     Ironbrew1(),
     MoonsecV3(),
     Centurion(),
+    MoonVeilV145(),
     Generic(),
 ]
 

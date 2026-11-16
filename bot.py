@@ -46,6 +46,7 @@ SUPPORTED = {
     "ironbrew1": {"label": "IronBrew1", "command": ".iron"},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".moon"},
     "centurion": {"label": "Centurion", "command": ".cent"},
+    "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".mv"},
 }
 
 V151_DIR = DEOB_DIR / "v151"
@@ -259,7 +260,8 @@ def engines_body() -> str:
         "• **Luraph v15** · `.lrph15`\n"
         "• **IronBrew 1** · `.iron`\n"
         "• **MoonSec V3** · `.moon`\n"
-        "• **Centurion** · `.cent`\n\n"
+        "• **Centurion** · `.cent`\n"
+        "• **MoonVeil v1.4.5** · `.mv`\n\n"
         "**HOW TO START**\n"
         "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n"
         "Run `.detect` first, then use the matching engine command.\n\n"
@@ -1324,6 +1326,8 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 wait_note = ""
                 if engine == "luraph_v151":
                     wait_note = " This engine can take a few minutes on bigger files."
+                elif engine == "moonveil_v145":
+                    wait_note = " MoonVeil recovery includes isolated probing and may take several minutes."
                 elif input_path.stat().st_size > 1024 * 1024:
                     wait_note = " Large file: this can take a few minutes."
                 await status.edit(content=f"⚙️ Detected **{label}**. Devirtualizing `{filename}`…{wait_note}")
@@ -1334,7 +1338,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 if cached is not None:
                     output_path.write_bytes(cached)
                 else:
-                    go_cloud = (size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES)
+                    go_cloud = engine != "moonveil_v145" and ((size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES))
                     if go_cloud and GH_DISPATCH_TOKEN:
                         try:
                             await status.edit(content=f"☁️ `{filename}` is a big file: running it on the free cloud runner…")
@@ -1515,6 +1519,11 @@ async def cent(ctx: commands.Context, *, url: str = "") -> None:
     await process_input(ctx, "centurion", url)
 
 
+@bot.command(name="mv")
+async def mv(ctx: commands.Context, *, url: str = "") -> None:
+    await process_input(ctx, "moonveil_v145", url)
+
+
 @bot.command(name="detect")
 async def detect(ctx: commands.Context, *, url: str = "") -> None:
     attachments = ctx.message.attachments
@@ -1597,13 +1606,15 @@ async def help_command(ctx: commands.Context) -> None:
         "• **Luraph v15**  ·  `.lrph15`\n"
         "• **IronBrew 1**  ·  `.iron`\n"
         "• **MoonSec V3**  ·  `.moon`\n"
-        "• **Centurion**  ·  `.cent`\n\n"
+        "• **Centurion**  ·  `.cent`\n"
+        "• **MoonVeil v1.4.5**  ·  `.mv`\n\n"
         "**INPUT**\n"
         "Attach one `.lua`, `.luau`, or `.txt` file, or pass a direct raw-file URL.\n\n"
         "**EXAMPLES**\n"
         "• `.detect` with a file attached\n"
         "• `.lrph15.1 https://example.com/raw/script.lua`\n"
-        "• `.moon` with a MoonSec file attached\n\n"
+        "• `.moon` with a MoonSec file attached\n"
+        "• `.mv` with a MoonVeil v1.4.5 file attached\n\n"
         "**OTHER COMMANDS**\n"
         "• `.engines` — list supported engines\n"
         "• `.get <url>` — fetch raw text\n"
