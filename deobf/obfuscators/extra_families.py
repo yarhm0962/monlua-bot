@@ -6,9 +6,9 @@ _BLOB_RX = re.compile(r'"[^"\\]{500,}"|\'[^\'\\]{500,}\'')
 _DECODER_RX = re.compile(r"\b(?:string\.(?:byte|char|sub)|bit32\.(?:bxor|band|bor|rshift|lshift))\b")
 _NUM_TABLE_RX = re.compile(r"\{\s*-?\d+\s*(?:,\s*-?\d+\s*){19,}")
 _DISPATCH_RX = re.compile(r"\[\s*[A-Za-z_]\w*\s*\]\s*\(")
-_FUNCTION_RX = re.compile(r"\\bfunction\\b")
-_LOOP_RX = re.compile(r"\\b(?:while|repeat|for)\\b")
-_BRANCH_RX = re.compile(r"\\b(?:if|elseif)\\b")
+_FUNCTION_RX = re.compile(r"\bfunction\b")
+_LOOP_RX = re.compile(r"\b(?:while|repeat|for)\b")
+_BRANCH_RX = re.compile(r"\b(?:if|elseif)\b")
 _KEYWORDS = {
     "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
     "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
