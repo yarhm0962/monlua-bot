@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 PORT = int(os.environ.get("PORT", "10000"))
 START_TIME = time.time()
@@ -21,14 +22,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/status":
+            runtime = Path(".runtime")
+            dotnet_shared = runtime / "dotnet" / "shared" / "Microsoft.NETCore.App"
+            dotnet_versions = [item.name for item in dotnet_shared.iterdir()] if dotnet_shared.is_dir() else []
             payload = {
                 "service": "monlua-bot",
                 "system_node": bool(shutil.which("node")),
-                "ironveil_v1": os.path.isfile(".runtime/vendor/ironveil/index.js") and bool(shutil.which("node")),
-                "77fuscator": os.path.isfile(".runtime/77fuscator/deobfuscator.dll") and os.path.isfile(".runtime/dotnet/dotnet"),
-                "ironbrew2": os.path.isfile(".runtime/vendor/ironbrew2/LuaAnalysis.Ironbrew2.dll") and os.path.isfile(".runtime/dotnet/dotnet"),
-                "dotnet_8": os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App/8.0.0") or any(name.startswith("8.") for name in os.listdir(".runtime/dotnet/shared/Microsoft.NETCore.App")) if os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App") else False,
-                "dotnet_9": any(name.startswith("9.") for name in os.listdir(".runtime/dotnet/shared/Microsoft.NETCore.App")) if os.path.isdir(".runtime/dotnet/shared/Microsoft.NETCore.App") else False,
+                "ironveil_v1": (runtime / "vendor/ironveil/deobfuscator/index.js").is_file() and (bool(shutil.which("node")) or (runtime / "node/bin/node").is_file()),
+                "77fuscator": (runtime / "77fuscator/deobfuscator.dll").is_file() and (runtime / "dotnet/dotnet").is_file() and any(version.startswith("8.") for version in dotnet_versions) and ((runtime / "java/bin/java").is_file() or bool(shutil.which("java"))) and Path("deobf/bin/unluac.jar").is_file(),
+                "ironbrew2": (runtime / "vendor/ironbrew2/LuaAnalysis.Ironbrew2.dll").is_file() and (runtime / "vendor/ironbrew2/runtimes/linux-x64/native/liblua54.so").is_file() and (runtime / "dotnet/dotnet").is_file() and any(version.startswith("9.") for version in dotnet_versions),
+                "dotnet_8": any(version.startswith("8.") for version in dotnet_versions),
+                "dotnet_9": any(version.startswith("9.") for version in dotnet_versions),
                 "oracle_configured": bool(os.environ.get("ORACLE") or os.environ.get("IRONBREW2_ORACLE_KEY")),
                 "v151_tool": os.path.isfile("deobf/v151/deob.js"),
                 "v151_luau": os.path.isfile("deobf/v151/bin/luau") and os.access("deobf/v151/bin/luau", os.X_OK),
