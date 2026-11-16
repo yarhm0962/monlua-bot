@@ -1,5 +1,6 @@
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,10 +36,6 @@ class MoonVeilDetectionTests(unittest.TestCase):
         self.assertIn("moonveil", engine_options)
         self.assertNotIn("moonveil_v145", engine_options)
         self.assertEqual(bot.SUPPORTED["moonveil_v145"]["label"], "MoonVeil v1.4.5")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class MoonVeilV211Tests(unittest.IsolatedAsyncioTestCase):
@@ -136,3 +133,6 @@ class MoonVeilV211Tests(unittest.IsolatedAsyncioTestCase):
 
         message.delete.assert_awaited_once_with()
         self.assertIsNone(view.message)
+
+if __name__ == "__main__":
+    unittest.main()
