@@ -261,25 +261,25 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 
 def engines_body() -> str:
+    engines = "\n".join(f"• **{spec['label']}**" for spec in SUPPORTED.values())
     return (
         "**DEOBFUSCATION ENGINES**\n"
-        "• **Luraph v15.1** · `.lrph15.1`\n"
-        "• **Luraph v15** · `.lrph15`\n"
-        "• **IronBrew 1** · `.iron`\n"
-        "• **MoonSec V3** · `.moon`\n"
-        "• **Centurion** · `.cent`\n"
-        "• **MoonVeil v1.4.5** · `.mv`\n\n"
-        "**SOURCE TOOLS**\n"
-        "• `.detect` — scan a file and identify its likely engine\n"
-        "• `.get <url>` — fetch raw source and resolve supported static loader links\n"
-        "• `.deobfs` — display this engine reference\n"
-        "• `.help` — display the command guide\n\n"
-        "**INPUT FORMAT**\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n"
-        "Use one source per command. Large jobs may take longer depending on VM complexity.\n\n"
-        "**SERVER SETTINGS**\n"
-        "• `/set channel` — allow commands in a selected channel (Manage Server)\n"
-        "• `/remove set channel` — remove a channel restriction (Manage Server)"
+        + engines
+        + "\n\n**UNIFIED COMMANDS**\n"
+        + "• .do — shortcut command\n"
+        + "• .deobf — full command name\n"
+        + "Both commands open the same engine selector and processing flow.\n\n"
+        + "**SOURCE TOOLS**\n"
+        + "• .detect — scan a file and identify its likely engine\n"
+        + "• .get <url> — fetch raw source and resolve supported static loader links\n"
+        + "• .deobfs — display this engine reference\n"
+        + "• .help — display the command guide\n\n"
+        + "**INPUT FORMAT**\n"
+        + "Attach one .lua, .luau, or .txt file to the command, or provide a direct raw-file URL.\n"
+        + "Use one source per command. Large jobs may take longer depending on VM complexity.\n\n"
+        + "**SERVER SETTINGS**\n"
+        + "• /set channel — allow commands in a selected channel (Manage Server)\n"
+        + "• /remove set channel — remove a channel restriction (Manage Server)"
     )
 
 def _human_size(n: int) -> str:
@@ -559,7 +559,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
 DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
 
 
-def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None) -> discord.ui.LayoutView:
+def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None, owner_id: Optional[int] = None) -> discord.ui.LayoutView:
     """Report card for `.detect`: every engine scored against the file, with
     the concrete signals each score came from. `source` enables the one-click
     Deobfuscate button when the best match is 100% on a supported engine."""
@@ -631,11 +631,11 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
         details.append(f"Evidence: {shown}")
     container.add_item(discord.ui.TextDisplay("\n".join(f"-# {d}" for d in details)))
     stats = ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
-             else "\U0001f4a1 `.detect` identifies only \u2014 run the engine's command to deobfuscate")
+             else "\U0001f4a1 `.detect` identifies only \u2014 use .do or .deobf to choose an engine")
     container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
     if one_click:
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click)))
+        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click, owner_id=owner_id)))
     view.add_item(container)
     return view
 
@@ -1832,7 +1832,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
                 else:
                     source = ("url", source_url)
             try:
-                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed, source=source))
+                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed, source=source, owner_id=ctx.author.id))
             except discord.HTTPException:
                 best_label = rows[0][2] if rows else "nothing"
                 best_pct = int(round(rows[0][1] * 100)) if rows else 0
@@ -1851,9 +1851,8 @@ async def help_command(ctx: commands.Context) -> None:
         engines_body()
         + "\n\n**INPUT EXAMPLES**\n"
         + "• `.detect` with a file attached\n"
-        + "• `.lrph15.1 https://example.com/raw/script.lua`\n"
-        + "• `.moon` with a MoonSec V3 file attached\n"
-        + "• `.mv` with a MoonVeil v1.4.5 file attached"
+        + "• `.deobf https://example.com/raw/script.lua`\n"
+        + "• `.do` with a Lua file attached"
     )
     await ctx.reply(view=info_view("MonLua · Command Guide", body), mention_author=False)
 
