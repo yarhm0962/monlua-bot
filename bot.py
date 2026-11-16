@@ -641,10 +641,10 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None)
 
 
 class _DetectInvoker:
-    """Stands in for commands.Context so the .detect button can reuse process_input."""
-
-    def __init__(self, channel):
+    def __init__(self, channel, owner_id: Optional[int] = None):
         self.channel = channel
+        self.guild = getattr(channel, "guild", None)
+        self.author = SimpleNamespace(id=owner_id)
         self.message = SimpleNamespace(attachments=[])
 
     async def reply(self, content=None, view=None, file=None, mention_author=False):
@@ -652,83 +652,126 @@ class _DetectInvoker:
 
 
 class _DeobfuscateButton(discord.ui.Button):
-    """The one-click run button on a 100%-confidence .detect report."""
-
-    def __init__(self, engine: str, source: tuple):
-        super().__init__(label="Deobfuscate", emoji="\u2699\ufe0f",
-                         style=discord.ButtonStyle.success, custom_id="deobf_run")
+    def __init__(self, engine: str, source: tuple, owner_id: Optional[int] = None):
+        super().__init__(label="Deobfuscate", emoji="⚙️", style=discord.ButtonStyle.success, custom_id="deobf_run")
         self._engine = engine
         self._source = source
+        self._owner_id = owner_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        try:
-            view = _ConfirmDeobfView(self._engine, self._source, interaction.message, self.view)
-        except Exception:
-            print(f"Deobfuscate button: confirm view failed:\n{traceback.format_exc()}", flush=True)
-            view = None
-        label = SUPPORTED[self._engine]["label"]
-        if view is None:
-            await interaction.response.send_message(
-                view=error_view("Confirmation unavailable", "Use the matching engine command from the help guide."),
-                ephemeral=True)
+        if self._owner_id is not None and interaction.user.id != self._owner_id:
+            await interaction.response.send_message("Only the person who ran the detection command can use this control.", ephemeral=True)
             return
-        await interaction.response.send_message(view=view, ephemeral=True)
+        if self.disabled:
+            await interaction.response.send_message("This deobfuscation request has already been opened.", ephemeral=True)
+            return
+        try:
+            view = _ConfirmDeobfView(
+                self._engine,
+                self._source,
+                interaction.message,
+                self.view,
+                owner_id=self._owner_id,
+            )
+        except Exception:
+            print(f"Deobfuscate button: confirm view failed: {traceback.format_exc()}", flush=True)
+            await interaction.response.send_message(
+                view=error_view("Confirmation unavailable", "Run .do or .deobf to start a new request."),
+                ephemeral=True,
+            )
+            return
+        self.disabled = True
+        await interaction.response.edit_message(view=self.view)
+        try:
+            message = await interaction.followup.send(view=view, ephemeral=True, wait=True)
+            view.message = message
+        except discord.HTTPException as exc:
+            print(f"Deobfuscate confirmation delivery failed: {type(exc).__name__}: {exc}", flush=True)
 
 
 class _ConfirmDeobfView(discord.ui.LayoutView):
-    def __init__(self, engine: str, source: tuple, detect_message=None, detect_layout=None):
-        super().__init__(timeout=None)
+    def __init__(self, engine: str, source: tuple, detect_message=None, detect_layout=None, ctx=None, owner_id: Optional[int] = None):
+        super().__init__(timeout=300)
         self._engine = engine
         self._source = source
         self._detect_message = detect_message
         self._detect_layout = detect_layout
+        self._ctx = ctx
+        self.owner_id = owner_id or getattr(getattr(ctx, "author", None), "id", None)
+        self.claimed = False
+        self.message = None
         label = SUPPORTED[engine]["label"]
-        source_name = source[1] if source[0] == "attachment" else "Linked source file"
+        source_name = source[1] if source and source[0] in ("attachment", "url") else "No source attached"
         container = discord.ui.Container(accent_color=0x5865F2)
         container.add_item(discord.ui.TextDisplay("## Confirm deobfuscation"))
-        container.add_item(discord.ui.TextDisplay(f"**Engine** · {label}\n**Source** · `{str(source_name)[:120]}`"))
+        container.add_item(discord.ui.TextDisplay(f"**Engine** · {label}\n**Source** · {str(source_name)[:120]}"))
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(engine, source), _CancelDeobfButton()))
+        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(), _CancelDeobfButton()))
         self.add_item(container)
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
-        print(f"Confirm view error for {item}: {error!r}\n{traceback.format_exc()}", flush=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.owner_id is not None and interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the person who started this request can use these controls.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        for item in self.walk_children():
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+                item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=info_view("Confirmation expired", "Run .do or .deobf to start a new request.", color=0xFAA61A))
+            except discord.HTTPException:
+                pass
 
 
 class _ConfirmDeobfButton(discord.ui.Button):
-    def __init__(self, engine: str, source: tuple):
+    def __init__(self):
         super().__init__(label="Continue", style=discord.ButtonStyle.success, custom_id="deobf_confirm")
-        self._engine = engine
-        self._source = source
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+        parent = self.view
+        if not isinstance(parent, _ConfirmDeobfView) or parent.claimed:
+            await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
+            return
+        parent.claimed = True
+        for item in parent.walk_children():
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+                item.disabled = True
         try:
-            await interaction.message.delete()
+            await interaction.response.edit_message(
+                content=None,
+                view=info_view("Request accepted", "The confirmation is locked. Your selected engine is starting."),
+            )
         except discord.HTTPException:
-            print(f"Confirm card delete failed:\n{traceback.format_exc()}", flush=True)
-        # the one-click run is spent: grey out the Deobfuscate button on the report card
-        detect_message = getattr(self.view, "_detect_message", None)
-        detect_layout = getattr(self.view, "_detect_layout", None)
-        if detect_message is not None and detect_layout is not None:
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.defer()
+                except discord.HTTPException:
+                    pass
+        if parent._detect_message is not None and parent._detect_layout is not None:
             try:
-                for item in detect_layout.walk_children():
+                for item in parent._detect_layout.walk_children():
                     if isinstance(item, discord.ui.Button) and item.custom_id == "deobf_run":
                         item.disabled = True
-                await detect_message.edit(view=detect_layout)
-            except Exception:
-                print(f"Detect button disable failed:\n{traceback.format_exc()}", flush=True)
-        engine, source = self._engine, self._source
-        url = source[1] if source[0] == "url" else ""
-        preset = (source[1], source[2]) if source[0] == "attachment" else None
-        invoker = _DetectInvoker(interaction.channel)
+                await parent._detect_message.edit(view=parent._detect_layout)
+            except discord.HTTPException:
+                pass
         try:
-            await process_input(invoker, engine, url=url, preset=preset)
+            if parent._ctx is not None:
+                source_url = parent._source[1] if parent._source and parent._source[0] == "url" else ""
+                await process_input(parent._ctx, parent._engine, url=source_url)
+            else:
+                source = parent._source
+                source_url = source[1] if source and source[0] == "url" else ""
+                preset = (source[1], source[2]) if source and source[0] == "attachment" else None
+                invoker = _DetectInvoker(interaction.channel, owner_id=parent.owner_id)
+                await process_input(invoker, parent._engine, url=source_url, preset=preset)
         except Exception as exc:
             print(f"Deobfuscate button job failed: {type(exc).__name__}: {exc}", flush=True)
             try:
-                await interaction.channel.send(
-                    view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
+                await interaction.channel.send(view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
             except discord.HTTPException:
                 pass
 
@@ -738,10 +781,87 @@ class _CancelDeobfButton(discord.ui.Button):
         super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="deobf_cancel")
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if isinstance(parent, _ConfirmDeobfView):
+            parent.claimed = True
         await interaction.response.edit_message(
             content=None,
-            view=info_view("Cancelled", "No deobfuscation job was started.")
+            view=info_view("Cancelled", "No deobfuscation job was started."),
         )
+
+
+class _EnginePickerView(discord.ui.LayoutView):
+    def __init__(self, ctx, source: Optional[tuple]):
+        super().__init__(timeout=300)
+        self.ctx = ctx
+        self.source = source
+        self.owner_id = ctx.author.id
+        self.message = None
+        source_name = source[1] if source else "Attach a file or provide a raw URL"
+        container = discord.ui.Container(accent_color=0x5865F2)
+        container.add_item(discord.ui.TextDisplay("## MonLua · Select an engine"))
+        container.add_item(discord.ui.TextDisplay(f"Choose one of the available engines below.\nSource · {str(source_name)[:120]}"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(_EngineSelect()))
+        self.add_item(container)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the person who ran this command can select an engine.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        if self.message is not None:
+            try:
+                await self.message.edit(view=info_view("Engine selection expired", "Run .do or .deobf to start a new request.", color=0xFAA61A))
+            except discord.HTTPException:
+                pass
+
+
+class _EngineSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label=spec["label"],
+                value=engine,
+                description=f"Use the existing {spec['label']} engine.",
+            )
+            for engine, spec in SUPPORTED.items()
+        ]
+        super().__init__(
+            placeholder="Choose a deobfuscation engine",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="deobf_engine_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        parent = self.view
+        if not isinstance(parent, _EnginePickerView):
+            await interaction.response.send_message("This engine selector is no longer active.", ephemeral=True)
+            return
+        engine = self.values[0]
+        if parent.source is None:
+            await interaction.response.edit_message(
+                content=None,
+                view=info_view(
+                    "Source file required",
+                    "Run .do or .deobf again with one .lua, .luau, or .txt attachment, or include a direct raw-file URL.",
+                    color=0xFAA61A,
+                ),
+            )
+            return
+        confirm = _ConfirmDeobfView(
+            engine,
+            parent.source,
+            ctx=parent.ctx,
+            owner_id=parent.owner_id,
+        )
+        confirm.message = interaction.message
+        await interaction.response.edit_message(content=None, view=confirm)
+
 
 @bot.listen("on_interaction")
 async def _log_component_clicks(interaction: discord.Interaction) -> None:
