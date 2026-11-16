@@ -8,8 +8,21 @@ from obfuscators.base import Obfuscator
 
 DEOBF_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = DEOBF_ROOT.parent
-SCRIPT = REPO_ROOT / ".runtime" / "vendor" / "ironveil" / "index.js"
+SCRIPT = REPO_ROOT / ".runtime" / "vendor" / "ironveil" / "deobfuscator" / "index.js"
 HEADER = re.compile(r"obfuscated\s+using\s+ironveil\s+v?1\b", re.IGNORECASE)
+
+
+def _node():
+    found = shutil.which("node")
+    if found:
+        return found
+    bundled = REPO_ROOT / ".runtime" / "node" / "bin" / "node"
+    if bundled.is_file():
+        return str(bundled)
+    legacy = DEOBF_ROOT / "v151" / "vendor" / "node-v20.19.5-linux-x64" / "bin" / "node"
+    if legacy.is_file():
+        return str(legacy)
+    return None
 
 
 class IronveilV1(Obfuscator):
@@ -24,15 +37,11 @@ class IronveilV1(Obfuscator):
         return 0.0
 
     def deobfuscate(self, job):
-        node = shutil.which("node")
+        node = _node()
         if not node:
-            candidate = REPO_ROOT / ".runtime" / "node" / "bin" / "node"
-            if candidate.is_file():
-                node = str(candidate)
-        if not node:
-            raise RuntimeError("Node.js is unavailable. Set NODE_VERSION to 22.23.5 in the Render service environment.")
+            raise RuntimeError("The bundled Node.js runtime is missing. Rebuild the Render service.")
         if not SCRIPT.is_file():
-            raise RuntimeError("Ironveil v1 files are missing. Run scripts/setup_render_runtimes.sh.")
+            raise RuntimeError("Ironveil v1 files are missing. Rebuild the Render service.")
         destination = job.path("_ironveil_result.lua")
         timeout = max(30, min(1800, int(getattr(job.args, "timeout", 90) or 90)))
         try:
