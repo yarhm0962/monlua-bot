@@ -1,5 +1,9 @@
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import bot
 sys.path.insert(0, str(bot.DEOB_DIR))
@@ -16,6 +20,12 @@ class BotPerformanceRegressionTests(unittest.TestCase):
         self.assertIn('local c = "done"', output)
         self.assertNotIn("-- remove", output)
         self.assertNotIn("remove block", output)
+
+    def test_comment_cleanup_handles_large_comment_dense_sources(self):
+        source = "".join("-- removable comment\nlocal value = 1\n" for _ in range(5000))
+        output = bot._strip_lua_comments(source)
+        self.assertNotIn("-- removable comment", output)
+        self.assertEqual(output.count("local value = 1"), 5000)
 
     def test_lexer_handles_long_bracket_comments_and_strings(self):
         source = "--[=[hidden]=]\nlocal value = [==[kept -- text]==]"
@@ -35,11 +45,104 @@ class BotPerformanceRegressionTests(unittest.TestCase):
         self.assertGreater(len(source), bot.MAX_FORMAT_BYTES)
         self.assertEqual(bot._beautify_lua(source), source.strip())
 
+    def test_unified_commands_and_all_engine_options_are_registered(self):
+        shortcut = bot.bot.get_command("do")
+        self.assertIsNotNone(shortcut)
+        self.assertIs(shortcut, bot.bot.get_command("deobf"))
+        self.assertEqual(len(bot.SUPPORTED), 6)
+        self.assertEqual(set(option.value for option in bot._EngineSelect().options), set(bot.SUPPORTED))
+        for engine in bot.SUPPORTED:
+            self.assertEqual(bot.SUPPORTED[engine]["command"], ".do")
+
+    def test_detect_invoker_exposes_guild_file_limit(self):
+        guild = SimpleNamespace(filesize_limit=123456)
+        invoker = bot._DetectInvoker(SimpleNamespace(guild=guild), owner_id=42)
+        self.assertIs(invoker.guild, guild)
+        self.assertEqual(invoker.author.id, 42)
+
+    def test_confirmation_view_contains_single_use_controls(self):
+        view = bot._ConfirmDeobfView("luraph_v15", ("url", "https://example.com/test.lua"), owner_id=42)
+        self.assertFalse(view.claimed)
+        controls = [item.custom_id for item in view.walk_children() if isinstance(item, bot.discord.ui.Button)]
+        self.assertEqual(set(controls), {"deobf_confirm", "deobf_cancel"})
+
     def test_command_response_views_use_components_v2(self):
         self.assertIsInstance(bot.info_view("Status", "Ready"), bot.discord.ui.LayoutView)
         self.assertIsInstance(bot.error_view("Error", "Failed"), bot.discord.ui.LayoutView)
         self.assertIsInstance(bot.result_view("input.lua", "Engine", 128, "ok", None, "1s"), bot.discord.ui.LayoutView)
-        self.assertIsInstance(bot._ConfirmDeobfView("luraph_v15", ("url", "https://example.com")), bot.discord.ui.LayoutView)
+
+
+class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_attachment_uses_pastefy_before_removing_status(self):
+        class Context:
+            guild = SimpleNamespace(filesize_limit=8 * 1024 * 1024)
+
+            def __init__(self):
+                self.calls = 0
+
+            async def reply(self, **kwargs):
+                self.calls += 1
+                uploaded_file = kwargs.get("file")
+                if uploaded_file is not None:
+                    uploaded_file.close()
+                if self.calls == 1:
+                    raise RuntimeError("simulated Discord upload failure")
+                return True
+
+        class Status:
+            def __init__(self):
+                self.deleted = 0
+                self.edited = []
+
+            async def delete(self):
+                self.deleted += 1
+
+            async def edit(self, **kwargs):
+                self.edited.append(kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "recovered.luau"
+            output.write_text("local recovered = true\n", encoding="utf-8")
+            ctx = Context()
+            status = Status()
+            with patch.object(bot, "_pastefy_upload", return_value="https://pastefy.app/test"):
+                delivered = await bot._deliver_deobf_output(
+                    ctx, status, "input.lua", "Luraph v15", output, 2000, None, "2s"
+                )
+        self.assertTrue(delivered)
+        self.assertEqual(ctx.calls, 2)
+        self.assertEqual(status.deleted, 1)
+        self.assertEqual(status.edited, [])
+
+    async def test_failed_delivery_keeps_status_and_displays_error(self):
+        class Context:
+            guild = SimpleNamespace(filesize_limit=1)
+
+            async def reply(self, **kwargs):
+                raise RuntimeError("unexpected attachment attempt")
+
+        class Status:
+            def __init__(self):
+                self.deleted = 0
+                self.edited = []
+
+            async def delete(self):
+                self.deleted += 1
+
+            async def edit(self, **kwargs):
+                self.edited.append(kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "recovered.luau"
+            output.write_text("local recovered = true\n", encoding="utf-8")
+            status = Status()
+            with patch.object(bot, "_pastefy_upload", return_value=""):
+                delivered = await bot._deliver_deobf_output(
+                    Context(), status, "input.lua", "Luraph v15", output, 2000, None, "2s"
+                )
+        self.assertFalse(delivered)
+        self.assertEqual(status.deleted, 0)
+        self.assertEqual(len(status.edited), 1)
 
 
 if __name__ == "__main__":
