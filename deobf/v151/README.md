@@ -74,7 +74,8 @@ webs) see **[TECHNICAL.md](TECHNICAL.md)**.
   unlifted blocks). Optional bundled **PyPy** makes it ~2× faster.
 - **Fail-loud**: a block that cannot be lifted becomes an explicit
   `error("devirt: ...")` marker instead of silently emitting wrong code.
-- **Prebuilt Luau runtime**: the standalone upstream repository ships Windows and Linux binaries. In MonLua-bot, the v15.1 runner uses the shared Linux Luau binaries already bundled under `deobf/bin` through the `deobf/v151/bin` links.
+- **Self-contained & cross-platform**: Luau binaries for Windows *and* Linux are
+  bundled in `bin/`. Works out of the box on both.
 - **Fast trace mode** (`--no-devirt`): ~2 s dump of URLs fetched, remotes fired,
   webhooks and UI setup — enough to spot a malicious script immediately.
 
