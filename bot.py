@@ -262,24 +262,25 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     return (
-        "**SUPPORTED ENGINES**\n"
-        "• **Luraph v15.1** · `.lrph15.1`\n"
-        "• **Luraph v15** · `.lrph15`\n"
-        "• **IronBrew 1** · `.iron`\n"
-        "• **MoonSec V3** · `.moon`\n"
-        "• **Centurion** · `.cent`\n"
-        "• **MoonVeil v1.4.5** · `.mv`\n\n"
-        "**HOW TO START**\n"
-        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n"
-        "Run `.detect` first, then use the matching engine command.\n\n"
-        "**QUICK COMMANDS**\n"
-        "• `.detect` — identify an obfuscator\n"
-        "• `.get <url>` — fetch raw text\n"
-        "• `.help` — show this guide\n"
-        "• `/set channel` — add a command channel (Manage Server)\n"
-        "• `/remove set channel` — remove a command channel (Manage Server)"
+        "**DEOBFUSCATION ENGINES**\\n"
+        "• **Luraph v15.1** · `.lrph15.1`\\n"
+        "• **Luraph v15** · `.lrph15`\\n"
+        "• **IronBrew 1** · `.iron`\\n"
+        "• **MoonSec V3** · `.moon`\\n"
+        "• **Centurion** · `.cent`\\n"
+        "• **MoonVeil v1.4.5** · `.mv`\\n\\n"
+        "**SOURCE TOOLS**\\n"
+        "• `.detect` — scan a file and identify its likely engine\\n"
+        "• `.get <url>` — fetch raw source and resolve supported static loader links\\n"
+        "• `.deobfs` — display this engine reference\\n"
+        "• `.help` — display the command guide\\n\\n"
+        "**INPUT FORMAT**\\n"
+        "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\\n"
+        "Use one source per command. Large jobs may take longer depending on VM complexity.\\n\\n"
+        "**SERVER SETTINGS**\\n"
+        "• `/set channel` — allow commands in a selected channel (Manage Server)\\n"
+        "• `/remove set channel` — remove a channel restriction (Manage Server)"
     )
-
 
 def _human_size(n: int) -> str:
     if n < 1024:
