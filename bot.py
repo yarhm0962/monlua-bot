@@ -49,6 +49,8 @@ SUPPORTED = {
     "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
     "centurion": {"label": "Centurion", "command": ".do"},
     "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
+    "ironbrew1": {"label": "IronBrew1", "command": ".do"},
+    "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
@@ -931,7 +933,7 @@ class _ConfirmDeobfView(discord.ui.LayoutView):
         self.claimed = False
         self.message = None
         label = SUPPORTED[engine]["label"]
-        source_name = source[1] if source and source[0] in ("attachment", "url") else "No source attached"
+        source_name = _source_display_name(source)
         container = discord.ui.Container(accent_color=0x5865F2)
         container.add_item(discord.ui.TextDisplay("## Confirm deobfuscation"))
         container.add_item(discord.ui.TextDisplay(f"**Engine** · {label}\n**Source** · {str(source_name)[:120]}"))
@@ -989,15 +991,24 @@ class _ConfirmDeobfButton(discord.ui.Button):
             except discord.HTTPException:
                 pass
         try:
+            source = parent._source
+            source_url = source[1] if source and source[0] == "url" else ""
+            preset = _source_preset(source)
             if parent._ctx is not None:
-                source_url = parent._source[1] if parent._source and parent._source[0] == "url" else ""
-                await process_input(parent._ctx, parent._engine, url=source_url)
+                await process_input(
+                    parent._ctx,
+                    parent._engine,
+                    url=source_url if preset is None else "",
+                    preset=preset,
+                )
             else:
-                source = parent._source
-                source_url = source[1] if source and source[0] == "url" else ""
-                preset = (source[1], source[2]) if source and source[0] == "attachment" else None
                 invoker = _DetectInvoker(interaction.channel, owner_id=parent.owner_id)
-                await process_input(invoker, parent._engine, url=source_url, preset=preset)
+                await process_input(
+                    invoker,
+                    parent._engine,
+                    url=source_url if preset is None else "",
+                    preset=preset,
+                )
         except Exception as exc:
             print(f"Deobfuscate button job failed: {type(exc).__name__}: {exc}", flush=True)
             try:
@@ -1024,20 +1035,82 @@ class _CancelDeobfButton(discord.ui.Button):
         )
 
 
+def _source_display_name(source: Optional[tuple]) -> str:
+    if not source:
+        return "No source attached"
+    if source[0] == "attachment":
+        return str(source[1])
+    if source[0] == "url" and len(source) >= 3:
+        return str(source[2])
+    return str(source[1])
+
+
+def _source_preset(source: Optional[tuple]):
+    if not source:
+        return None
+    if source[0] == "attachment" and len(source) >= 3 and isinstance(source[2], (bytes, bytearray)):
+        return str(source[1]), bytes(source[2])
+    if source[0] == "url" and len(source) >= 4 and isinstance(source[3], (bytes, bytearray)):
+        return str(source[2]), bytes(source[3])
+    return None
+
+
+def _recommended_engine(rows) -> Optional[str]:
+    matches = [
+        (float(confidence), name)
+        for name, confidence, _label, _evidence in rows
+        if name in SUPPORTED and float(confidence) >= 0.75
+    ]
+    return max(matches, default=(0.0, None))[1]
+
+
+def _engine_select_options(recommended_engine: Optional[str] = None):
+    options = []
+    for engine, spec in SUPPORTED.items():
+        if engine == "moonveil_v145":
+            value = "moonveil"
+            label = "MoonVeil"
+            description = "Open the MoonVeil version selector."
+        else:
+            value = engine
+            label = spec["label"]
+            description = f"Use the existing {spec['label']} engine."
+        if engine == recommended_engine:
+            label = f"{label} (Recommended)"
+            description = f"Recommended for the detected {spec['label']} obfuscator."
+        options.append(discord.SelectOption(label=label, value=value, description=description))
+    recommended_value = "moonveil" if recommended_engine == "moonveil_v145" else recommended_engine
+    if recommended_value:
+        options.sort(key=lambda option: 0 if option.value == recommended_value else 1)
+    return options
+
+
 class _EnginePickerView(discord.ui.LayoutView):
-    def __init__(self, ctx, source: Optional[tuple]):
+    def __init__(
+        self,
+        ctx,
+        source: Optional[tuple],
+        recommended_engine: Optional[str] = None,
+        scan_note: str = "",
+    ):
         super().__init__(timeout=300)
         self.ctx = ctx
         self.source = source
+        self.recommended_engine = recommended_engine
         self.owner_id = ctx.author.id
         self.message = None
         self.claimed = False
-        source_name = source[1] if source else "Attach a file or provide a raw URL"
+        source_name = _source_display_name(source)
         container = discord.ui.Container(accent_color=0x5865F2)
         container.add_item(discord.ui.TextDisplay("## MonLua · Select an engine"))
-        container.add_item(discord.ui.TextDisplay(f"Choose one of the available engines below.\nSource · {str(source_name)[:120]}"))
+        details = [f"Source · {str(source_name)[:120]}"]
+        if scan_note:
+            details.append(scan_note)
+        container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.
+" + "
+".join(details)))
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_EngineSelect()))
+        container.add_item(discord.ui.ActionRow(_EngineSelect(recommended_engine)))
         self.add_item(container)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -1145,26 +1218,12 @@ class _MoonVeilVersionButton(discord.ui.Button):
 
 
 class _EngineSelect(discord.ui.Select):
-    def __init__(self):
-        options = []
-        for engine, spec in SUPPORTED.items():
-            if engine == "moonveil_v145":
-                options.append(discord.SelectOption(
-                    label="MoonVeil",
-                    value="moonveil",
-                    description="Open the MoonVeil version selector.",
-                ))
-            else:
-                options.append(discord.SelectOption(
-                    label=spec["label"],
-                    value=engine,
-                    description=f"Use the existing {spec['label']} engine.",
-                ))
+    def __init__(self, recommended_engine: Optional[str] = None):
         super().__init__(
-            placeholder="Choose a deobfuscation engine",
+            placeholder="Recommended engine appears first" if recommended_engine else "Choose a deobfuscation engine",
             min_values=1,
             max_values=1,
-            options=options,
+            options=_engine_select_options(recommended_engine),
             custom_id="deobf_engine_select",
         )
 
