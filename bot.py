@@ -228,6 +228,23 @@ job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 # concurrent jobs MAX_CONCURRENT_JOBS allows.
 JOB_MEM_BUDGET_MB = 330
 _active_jobs = 0
+_REQUEST_ACCEPTED_DELETE_TASKS: set[asyncio.Task] = set()
+
+
+async def _delete_request_accepted_message(interaction: discord.Interaction) -> None:
+    await asyncio.sleep(3)
+    try:
+        await interaction.delete_original_response()
+    except discord.NotFound:
+        pass
+    except discord.HTTPException as exc:
+        print(f"Request Accepted message cleanup failed: {type(exc).__name__}: {exc}", flush=True)
+
+
+def _schedule_request_accepted_delete(interaction: discord.Interaction) -> None:
+    task = asyncio.create_task(_delete_request_accepted_message(interaction))
+    _REQUEST_ACCEPTED_DELETE_TASKS.add(task)
+    task.add_done_callback(_REQUEST_ACCEPTED_DELETE_TASKS.discard)
 
 # Free cloud runner: big jobs are dispatched to the private GitHub Actions
 # repo in GH_JOBS_REPO (a runner has ~8 GB RAM and 2 dedicated cores), so big
@@ -973,17 +990,21 @@ class _ConfirmDeobfButton(discord.ui.Button):
         for item in parent.walk_children():
             if isinstance(item, (discord.ui.Button, discord.ui.Select)):
                 item.disabled = True
+        accepted_message_shown = False
         try:
             await interaction.response.edit_message(
                 content=None,
                 view=info_view("Request accepted", "The confirmation is locked. Your selected engine is starting."),
             )
+            accepted_message_shown = True
         except discord.HTTPException:
             if not interaction.response.is_done():
                 try:
                     await interaction.response.defer()
                 except discord.HTTPException:
                     pass
+        if accepted_message_shown:
+            _schedule_request_accepted_delete(interaction)
         if parent._detect_message is not None and parent._detect_layout is not None:
             try:
                 for item in parent._detect_layout.walk_children():
