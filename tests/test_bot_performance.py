@@ -11,7 +11,7 @@ from deobf.lexer import pretty, tokenize
 from obfuscators.extra_families import LuaAnalysis
 
 
-class BotPerformanceRegressionTests(unittest.TestCase):
+class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
     def test_comment_stripping_preserves_strings_and_removes_comments(self):
         source = 'local a = "-- keep"\nlocal b = [=[-- keep]=]\n-- remove\n--[=[ remove block ]=]\nlocal c = "done"'
         output = bot._strip_lua_comments(source)
