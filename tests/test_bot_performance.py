@@ -82,7 +82,7 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ironbrew1", {option.value for option in options})
         self.assertIn("ironbrew2", {option.value for option in options})
 
-    def test_scanned_source_bytes_are_reused_after_engine_selection(self):
+    async def test_scanned_source_bytes_are_reused_after_engine_selection(self):
         payload = b"-- IronBrew2\\nreturn function() end"
 
         class Attachment:
