@@ -53,7 +53,6 @@ SUPPORTED = {
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
-    "ironbrew2": {"label": "IronBrew2", "command": ".do"},
 }
 
 V151_DIR = DEOB_DIR / "v151"
@@ -275,14 +274,17 @@ def engines_body() -> str:
     engine_names = [
         f"• **{spec['label']}**"
         for engine, spec in SUPPORTED.items()
-        if engine != "moonveil_v145"
+        if engine not in ("moonveil_v145", "ironbrew1", "ironbrew2")
     ]
     engine_names.append("• **MoonVeil** (choose a version)")
     engines = "\n".join(engine_names)
     return (
         "**DEOBFUSCATION ENGINES**\n"
         + engines
-        + "\n\n**MOONVEIL VERSIONS**\n"
+        + "\n\n**IRONBREW VERSIONS**\n"
+        + "• IronBrew1 — version 1 recovery engine\n"
+        + "• IronBrew2 — version 2 recovery engine\n"
+        + "\n**MOONVEIL VERSIONS**\n"
         + "• v1.4.5 — fully supported\n"
         + "• v2.1.1 — recognized, but its deobfuscation engine is not included yet\n"
         + "\n**UNIFIED COMMANDS**\n"
@@ -2120,7 +2122,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
 
                 await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\nSource is ready. Starting the selected engine."))
-                print(f"selected engine={label}; automatic pre-scan skipped for faster large-file processing", flush=True)
+                print(f"selected engine={label}; source scan completed before engine selection", flush=True)
 
                 wait_note = ""
                 if engine == "luraph_v151":
