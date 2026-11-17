@@ -12,6 +12,12 @@ from obfuscators.extra_families import LuaAnalysis
 
 
 class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_request_accepted_message_is_deleted_after_three_seconds(self):
+        interaction = SimpleNamespace(delete_original_response=AsyncMock())
+        with patch.object(bot.asyncio, "sleep", new=AsyncMock()) as sleep:
+            await bot._delete_request_accepted_message(interaction)
+        sleep.assert_awaited_once_with(3)
+        interaction.delete_original_response.assert_awaited_once()
     def test_comment_stripping_preserves_strings_and_removes_comments(self):
         source = 'local a = "-- keep"\nlocal b = [=[-- keep]=]\n-- remove\n--[=[ remove block ]=]\nlocal c = "done"'
         output = bot._strip_lua_comments(source)
