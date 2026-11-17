@@ -2263,26 +2263,84 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
     if len(attachments) > 1:
         await ctx.reply(view=error_view("Single-file processing", "Attach one source file per request."), mention_author=False)
         return
-    source = None
-    if attachments:
-        filename = Path(attachments[0].filename).name
+    attachment = attachments[0] if attachments else None
+    if attachment is None and not source_url:
+        await ctx.reply(
+            view=info_view(
+                "Source file required",
+                "Attach one .lua, .luau, or .txt file, or provide a direct raw-file URL. The source is scanned before the engine selector appears.",
+                color=0xFAA61A,
+            ),
+            mention_author=False,
+        )
+        return
+    if attachment is not None:
+        filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
             await ctx.reply(view=error_view("Unsupported file type", "Supported formats are .lua, .luau, and .txt."), mention_author=False)
             return
-        if attachments[0].size > MAX_INPUT_BYTES:
+        if attachment.size > MAX_INPUT_BYTES:
             await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
-        source = ("attachment", filename)
-    elif source_url:
+    else:
         try:
             source_url, filename = _validate_public_url(source_url)
         except ValueError as exc:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
-        source = ("url", source_url)
-    view = _EnginePickerView(ctx, source)
-    message = await ctx.reply(view=view, mention_author=False)
-    view.message = message
+    status = await ctx.reply(
+        view=info_view("Scanning source", f"Checking `{filename[:120]}` against all registered obfuscator detectors."),
+        mention_author=False,
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="deobf_scan_") as directory:
+            input_path = Path(directory) / filename
+            if attachment is not None:
+                await attachment.save(input_path)
+                size = input_path.stat().st_size
+                if size == 0:
+                    raise ValueError("The supplied file contains no data.")
+                if size > MAX_INPUT_BYTES:
+                    raise ValueError(f"Input exceeds the {_human_size(MAX_INPUT_BYTES)} upload limit.")
+            else:
+                filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
+            rows, _basis = await _detect_scores(input_path)
+            detected_engine = _recommended_engine(rows)
+            source_bytes = await asyncio.to_thread(input_path.read_bytes)
+            if attachment is not None:
+                source = ("attachment", filename, source_bytes)
+            else:
+                source = ("url", source_url, filename, source_bytes)
+        if detected_engine:
+            confidence = max(float(row[1]) for row in rows if row[0] == detected_engine)
+            scan_note = (
+                f"Detected **{SUPPORTED[detected_engine]['label']}** · "
+                f"**{int(round(confidence * 100))}%** confidence. "
+                "The recommended engine is marked and placed first."
+            )
+        else:
+            scan_note = (
+                "Scan complete. No supported engine matched the 75% confidence threshold. "
+                "Choose an engine manually from the full list."
+            )
+        view = _EnginePickerView(ctx, source, detected_engine, scan_note)
+        view.message = status
+        await status.edit(content=None, view=view)
+    except (ValueError, OSError) as exc:
+        await status.edit(content=None, view=error_view("Source scan failed", str(exc)[:900]))
+    except asyncio.CancelledError:
+        raise
+    except discord.HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Automatic engine scan failed: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
+        await status.edit(
+            content=None,
+            view=error_view(
+                "Source scan failed",
+                "The bot could not complete automatic detection. Retry the command or use .detect to inspect the source.",
+            ),
+        )
 
 
 @bot.command(name="get")
