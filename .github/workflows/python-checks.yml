@@ -11,12 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -24,25 +24,31 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - name: Install bot dependencies
         run: python -m pip install -r requirements.txt
-      - name: Prepare portable Luraph v15.1 Luau runtime
-        run: |
-          if [ ! -x deobf/v151/bin/luau ] || [ ! -x deobf/v151/bin/luau-ast ]; then
-            python deobf/v151/build_luau.py --portable --jobs 2
-          fi
-          chmod +x deobf/v151/bin/luau deobf/v151/bin/luau-ast
-          chmod +x deobf/bin/luau deobf/bin/luau-ast
+      - name: Install and build deobfuscator runtimes
+        run: FORCE_BUNDLED_JAVA=1 bash scripts/setup_render_runtimes.sh
       - name: Compile Python modules
-        run: python -m compileall -q bot.py deobf/obfuscators deobf/moonveil deobf/v151/core
-      - name: Check Luraph Node.js modules
+        run: python -m compileall -q bot.py run.py deobf/obfuscators deobf/moonveil deobf/v151/core
+      - name: Check Ironveil v1 and its known-good sample
         run: |
-          node --check deobf/v151/deob.js
-          for file in deobf/v151/src/*.js; do node --check "$file"; done
+          .runtime/node/bin/node --check .runtime/vendor/ironveil/deobfuscator/index.js
+          for file in .runtime/vendor/ironveil/deobfuscator/utils/*.js; do .runtime/node/bin/node --check "$file"; done
+          .runtime/node/bin/node .runtime/vendor/ironveil/deobfuscator/index.js .runtime/vendor/ironveil/Samples/obf.lua "$RUNNER_TEMP/ironveil-output.lua"
+          cmp "$RUNNER_TEMP/ironveil-output.lua" .runtime/vendor/ironveil/Samples/deobfuscated.lua
+      - name: Check 77fuscator bytecode lifting and Lua 5.1 source conversion
+        run: |
+          .runtime/dotnet/dotnet .runtime/77fuscator/deobfuscator.dll .runtime/vendor/77fuscator/tests/hello-obfuscated.lua -o "$RUNNER_TEMP/77fuscator-output.luac" --strings
+          test -s "$RUNNER_TEMP/77fuscator-output.luac"
+          JAVA_BIN=".runtime/java/bin/java"
+          if [[ ! -x "$JAVA_BIN" ]]; then JAVA_BIN="$(command -v java)"; fi
+          "$JAVA_BIN" -jar deobf/bin/unluac.jar "$RUNNER_TEMP/77fuscator-output.luac" > "$RUNNER_TEMP/77fuscator-output.lua"
+          test -s "$RUNNER_TEMP/77fuscator-output.lua"
+      - name: Check IronBrew2 Linux runtime and bytecode generation
+        run: |
+          export LD_LIBRARY_PATH=".runtime/vendor/ironbrew2/runtimes/linux-x64/native:${LD_LIBRARY_PATH:-}"
+          .runtime/dotnet/dotnet .runtime/vendor/ironbrew2/LuaAnalysis.Ironbrew2.dll .runtime/vendor/ironbrew2/input.lua "$RUNNER_TEMP/ironbrew2-output.luac"
+          test -s "$RUNNER_TEMP/ironbrew2-output.luac"
       - name: Run bot regression tests
         run: python -m unittest discover -s tests -v
       - name: Validate Luraph runtime models
@@ -53,13 +59,3 @@ jobs:
           deobf/v151/bin/luau deobf/v151/tests/test_for_lowering.luau
       - name: Run Luraph v15.1 sample regression
         run: python deobf/v151/tests/run_samples.py
-      - name: Commit portable Luraph runtime binaries
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add deobf/v151/bin/luau deobf/v151/bin/luau-ast
-          if ! git diff --cached --quiet; then
-            git commit -m "Build portable Luraph v15.1 runtime binaries [skip ci]"
-            git push origin HEAD:main
-          fi

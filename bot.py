@@ -46,10 +46,12 @@ ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".do"},
     "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
-    "ironbrew1": {"label": "IronBrew1", "command": ".do"},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
     "centurion": {"label": "Centurion", "command": ".do"},
     "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
+    "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
+    "77fuscator": {"label": "77fuscator", "command": ".do"},
+    "ironbrew2": {"label": "IronBrew2", "command": ".do"},
 }
 
 V151_DIR = DEOB_DIR / "v151"
@@ -67,6 +69,10 @@ def resolve_node() -> str:
     found = shutil.which("node")
     if found:
         _node_bin = found
+        return _node_bin
+    local_node = ROOT / ".runtime" / "node" / "bin" / "node"
+    if local_node.is_file():
+        _node_bin = str(local_node)
         return _node_bin
     if not V151_NODE_ARCHIVE.is_file():
         raise RuntimeError("vendored node runtime archive is missing")
@@ -780,7 +786,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     return view
 
 
-DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew")
+DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator")
 
 
 def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None, owner_id: Optional[int] = None) -> discord.ui.LayoutView:
@@ -1235,6 +1241,49 @@ async def _log_component_clicks(interaction: discord.Interaction) -> None:
 
 
 def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
+    runtime_root = ROOT / ".runtime"
+    dotnet_root = runtime_root / "dotnet"
+    dotnet = dotnet_root / "dotnet"
+    if engine == "ironveil_v1":
+        script = runtime_root / "vendor" / "ironveil" / "deobfuscator" / "index.js"
+        node = shutil.which("node") or runtime_root / "node" / "bin" / "node"
+        missing = []
+        if not script.is_file():
+            missing.append("Ironveil v1 CLI")
+        if not Path(node).is_file() and not shutil.which("node"):
+            missing.append("Node.js runtime")
+        return (not missing, ", ".join(missing) if missing else "Ironveil v1 and Node.js are ready")
+    if engine == "77fuscator":
+        app = runtime_root / "77fuscator" / "deobfuscator.dll"
+        java = shutil.which("java") or runtime_root / "java" / "bin" / "java"
+        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
+        missing = []
+        for path in (dotnet, app, DEOB_DIR / "bin" / "unluac.jar"):
+            if not path.is_file():
+                missing.append(str(path))
+        if not Path(java).is_file() and not shutil.which("java"):
+            missing.append("Java runtime")
+        if not shared.is_dir() or not any(path.name.startswith("8.") for path in shared.iterdir()):
+            missing.append(".NET 8 runtime")
+        return (not missing, ", ".join(missing) if missing else "77fuscator, .NET 8, Java, and unluac are ready")
+    if engine == "ironbrew2":
+        app_dir = runtime_root / "vendor" / "ironbrew2"
+        native = app_dir / "runtimes" / "linux-x64" / "native" / "liblua54.so"
+        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
+        required = (
+            dotnet,
+            app_dir / "LuaAnalysis.Ironbrew2.dll",
+            app_dir / "LuaAnalysis.Ironbrew2.deps.json",
+            app_dir / "LuaAnalysis.Ironbrew2.runtimeconfig.json",
+            app_dir / "LuaAnalysis.Common.dll",
+            native,
+        )
+        missing = [str(path) for path in required if not path.is_file()]
+        if not shared.is_dir() or not any(path.name.startswith("9.") for path in shared.iterdir()):
+            missing.append(".NET 9 runtime")
+        if not (os.getenv("ORACLE") or os.getenv("IRONBREW2_ORACLE_KEY")):
+            missing.append("ORACLE environment variable")
+        return (not missing, ", ".join(missing) if missing else "IronBrew2, .NET 9, Oracle, and Linux native runtime are ready")
     suffix = ".exe" if os.name == "nt" else ""
     required = [
         DEOB_DIR / "bin" / f"luau{suffix}",
