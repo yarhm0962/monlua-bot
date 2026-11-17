@@ -1108,9 +1108,7 @@ class _EnginePickerView(discord.ui.LayoutView):
         details = [f"Source · {str(source_name)[:120]}"]
         if scan_note:
             details.append(scan_note)
-        container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.
-" + "
-".join(details)))
+        container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.\\n" + "\\n".join(details)))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.ActionRow(_EngineSelect(recommended_engine)))
         self.add_item(container)
