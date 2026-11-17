@@ -36,7 +36,7 @@ SPIN_PER_BYTES = 10000
 
 class Ironbrew1(Obfuscator):
     name = "ironbrew1"
-    label = "ironbrew1"
+    label = "IronBrew1"
     doc = "IRONBREW1.md"
 
     def detect(self, source, analysis=None):
