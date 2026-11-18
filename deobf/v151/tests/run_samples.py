@@ -43,13 +43,15 @@ def main():
             print("%s: SKIP (no ref)" % n)
             continue
         with tempfile.TemporaryDirectory() as td:
-            # deob.js makes an output/ dir next to the INPUT, so run from a
-            # writable temp copy (the samples dir may be read-only, e.g. on /opt)
             tin = os.path.join(td, n + "_obfuscated.lua")
             shutil.copyfile(inp, tin)
             out = os.path.join(td, n + ".lua")
+            env = os.environ.copy()
+            env.pop("DEOB_FAST", None)
+            env["DEOB_PY_CANDIDATES"] = "python:1,python:2,python:3"
+            env["DEOB_SEQUENTIAL_CANDIDATES"] = "1"
             r = subprocess.run(["node", DEOB, tin, "-o", out], cwd=td,
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, env=env)
             got = open(out, "rb").read() if os.path.exists(out) else b""
         want = open(ref, "rb").read()
         if got == want:

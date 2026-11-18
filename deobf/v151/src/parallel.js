@@ -51,10 +51,96 @@ function parseStats(text) {
 }
 
 // cfgData: the bridge input; returns once dpath holds the chosen result
+function sequentialEnabled() {
+  return process.env.DEOB_SEQUENTIAL_CANDIDATES === '1';
+}
+
+async function runSequentialCandidates(cands, cfgData, job, bridgePy, coreDir) {
+  const runs = [];
+
+  for (let i = 0; i < cands.length; i++) {
+    const c = cands[i];
+    const tag = `.c${i}`;
+    const own = Object.assign({}, cfgData, {
+      trace_path: cfgData.trace_path + tag,
+      ppath: cfgData.ppath + tag,
+      dpath: cfgData.dpath + tag,
+    });
+    fs.copyFileSync(cfgData.ppath, own.ppath);
+    const cfgPath = job.path(`.cfg${tag}.json`);
+    fs.writeFileSync(cfgPath, JSON.stringify(own), 'utf8');
+    const env = Object.assign({}, process.env, { PYTHONPATH: coreDir });
+    if (c.seed !== null) env.PYTHONHASHSEED = c.seed;
+    const started = Date.now();
+    const proc = spawn(c.exe, [bridgePy, 'pipeline', cfgPath], {
+      env,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let log = '';
+    proc.stderr.on('data', data => {
+      const chunk = data.toString();
+      log += chunk;
+      process.stderr.write(chunk);
+    });
+    const code = await new Promise(resolve => {
+      proc.on('error', error => {
+        log += `\\n[!] candidate process could not start: ${error.message}\\n`;
+      });
+      proc.on('close', resolve);
+    });
+    const run = {
+      c,
+      own,
+      cfgPath,
+      code,
+      log,
+      secs: (Date.now() - started) / 1000,
+      stats: fs.existsSync(own.dpath) ? parseStats(log) : null,
+    };
+    runs.push(run);
+    const result = run.stats
+      ? `${run.stats.functions} functions, ${run.stats.errors} unlifted`
+      : `failed (exit ${code})`;
+    process.stderr.write(`[*]   candidate ${c.label}: ${result} (${run.secs.toFixed(0)}s)\\n`);
+  }
+
+  const ranked = runs.filter(run => run.stats && fs.existsSync(run.own.dpath));
+  ranked.sort((a, b) =>
+    (a.stats.errors - b.stats.errors) ||
+    (b.stats.functions - a.stats.functions) ||
+    (runs.indexOf(a) - runs.indexOf(b))
+  );
+  const winner = ranked[0] || null;
+
+  if (!winner) {
+    for (const run of runs) process.stderr.write(run.log.slice(-1500));
+  } else {
+    process.stderr.write(
+      `[*] keeping best candidate ${winner.c.label} (${winner.stats.errors} unlifted blocks, ${winner.stats.functions} functions)\\n`
+    );
+    fs.copyFileSync(winner.own.dpath, cfgData.dpath);
+  }
+
+  for (const run of runs) {
+    for (const file of [run.own.dpath, run.own.ppath]) {
+      try { fs.unlinkSync(file); } catch {}
+    }
+    if (!process.env.DEOB_KEEP_CFG) {
+      try { fs.unlinkSync(run.cfgPath); } catch {}
+    }
+  }
+
+  if (!winner) throw new Error('every sequential devirtualization candidate failed');
+  return winner;
+}
+
 async function runCandidates(cfgData, job) {
   const cands = candidateList();
   const bridgePy = path.join(__dirname, 'devirt_bridge.py');
   const coreDir = path.join(ROOT, 'core');
+  if (sequentialEnabled() && cands.length > 1) {
+    return runSequentialCandidates(cands, cfgData, job, bridgePy, coreDir);
+  }
   if (cands.length > 1) {
     process.stderr.write(`[*] devirtualizing with ${cands.length} parallel candidates: ${cands.map(c => c.label).join(', ')}\n`);
   }
@@ -128,4 +214,4 @@ async function runCandidates(cfgData, job) {
   return winner;
 }
 
-module.exports = { runCandidates, candidateList, parseStats };
+module.exports = { runCandidates, candidateList, parseStats, sequentialEnabled };

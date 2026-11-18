@@ -98,6 +98,18 @@ def resolve_node() -> str:
     _node_bin = str(node_exe)
     return _node_bin
 
+
+def _v151_process_env() -> dict[str, str]:
+    process_env = dict(os.environ)
+    process_env.pop("DEOB_FAST", None)
+    process_env["DEOB_PY_CANDIDATES"] = "python:1,python:2,python:3"
+    process_env["DEOB_SEQUENTIAL_CANDIDATES"] = "1"
+    process_env["DEOB_REQUIRE_COMPLETE"] = "1"
+    process_env["DEOB_LUAU_MEM_KB"] = os.getenv("DEOB_LUAU_MEM_KB", "196608")
+    process_env["PYTHON_BIN"] = PYTHON
+    return process_env
+
+
 CHANNEL_CONFIG_PATH = Path(os.getenv("CHANNEL_CONFIG_PATH", str(ROOT / "channel_restrictions.json"))).expanduser()
 CHANNEL_CONFIG_LOAD_FAILED = False
 
@@ -2206,11 +2218,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             if input_path != node_input:
                                 await asyncio.to_thread(shutil.copyfile, input_path, node_input)
                             command = [node_bin, "--max-old-space-size=192", str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15"]
-                            process_env = dict(os.environ)
-                            process_env["DEOB_FAST"] = "1"
-                            process_env["DEOB_PY_CANDIDATES"] = "python:1"
-                            process_env["PYTHON_BIN"] = PYTHON
-                            process_env["DEOB_LUAU_MEM_KB"] = "98304"
+                            process_env = _v151_process_env()
                         else:
                             command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
                                        "--output", str(output_path), "--timeout", str(JOB_TIMEOUT)]

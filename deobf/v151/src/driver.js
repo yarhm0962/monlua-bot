@@ -140,6 +140,7 @@ async function run(job) {
   if (strings) job.write(job.path('.strings.txt'), strings);
 
   const dpath = job.path('.devirt.luau');
+  let candidateResult = null;
   if (protosJson) {
     const ppath = job.path('.protos.json');
     if (protosJson.startsWith('error:')) {
@@ -178,13 +179,25 @@ async function run(job) {
         };
         // Python stage: several candidates in parallel (PyPy + fixed hash seeds),
         // best result kept -- see src/parallel.js. DEOB_KEEP_CFG=1 keeps the inputs.
-        await require('./parallel').runCandidates(cfgData, job);
+        candidateResult = await require('./parallel').runCandidates(cfgData, job);
       }
     }
   }
 
   runner.finish();
   trace.statusLine(body);
+
+  if (devirtOn && process.env.DEOB_REQUIRE_COMPLETE === '1') {
+    const stats = candidateResult && candidateResult.stats;
+    if (!stats) {
+      throw new Error('Luraph recovery could not verify how many VM blocks were recovered; the output was withheld.');
+    }
+    if (stats.errors > 0) {
+      throw new Error(
+        `Luraph recovery is incomplete: ${stats.errors} VM blocks remain unrecovered across ${stats.functions} functions. The partial output was withheld rather than sent as working code.`
+      );
+    }
+  }
 
   if (devirtOn && fs.existsSync(dpath)) {
     const lifted = fs.readFileSync(dpath, 'utf8');
