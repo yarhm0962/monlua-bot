@@ -30,6 +30,10 @@ jobs:
         run: FORCE_BUNDLED_JAVA=1 bash scripts/setup_render_runtimes.sh
       - name: Compile Python modules
         run: python -m compileall -q bot.py run.py deobf/obfuscators deobf/moonveil deobf/v151/core
+      - name: Check Jayfuscator analysis runtime syntax
+        run: |
+          .runtime/node/bin/node --check deobf/jayfuscator/deobf.js
+          for file in deobf/jayfuscator/utils/*.js; do .runtime/node/bin/node --check "$file"; done
       - name: Check Ironveil v1 and its known-good sample
         run: |
           .runtime/node/bin/node --check .runtime/vendor/ironveil/deobfuscator/index.js

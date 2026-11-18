@@ -42,3 +42,21 @@ class NewEngineRegistryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EngineAvailabilityTests(unittest.TestCase):
+    def test_jayfuscator_is_registered_but_disabled_until_validated(self):
+        import bot as bot_module
+
+        self.assertIn("jayfuscator", bot_module.SUPPORTED)
+        self.assertFalse(bot_module._engine_is_available("jayfuscator"))
+        option = next(option for option in bot_module._engine_select_options() if option.value == "jayfuscator")
+        self.assertTrue(option.disabled)
+        self.assertIn("unavailable", option.label.lower())
+
+    def test_unavailable_engines_are_not_recommended(self):
+        import bot as bot_module
+
+        self.assertIsNone(bot_module._recommended_engine([
+            ("jayfuscator", 0.99, "Jayfuscator", ["signature matched"])
+        ]))

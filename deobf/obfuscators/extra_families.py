@@ -53,13 +53,25 @@ def _count(rx, text, cap=200000):
     return total
 
 
+def _shannon_entropy(value):
+    if not value:
+        return 0.0
+    frequencies = {}
+    for character in value:
+        frequencies[character] = frequencies.get(character, 0) + 1
+    length = len(value)
+    import math
+    return -sum((count / length) * math.log2(count / length) for count in frequencies.values())
+
+
 class LuaAnalysis:
     __slots__ = (
         "source", "code", "structure", "comments", "header", "identifier_count",
         "short_identifier_count", "unique_identifier_count", "function_count",
         "loop_count", "branch_count", "string_count", "string_bytes",
         "max_string_length", "nonspace_size", "line_count", "escape_count",
-        "numeric_table_count", "dispatch_call_count"
+        "numeric_table_count", "dispatch_call_count", "high_entropy_string_count",
+        "long_string_count"
     )
 
     def __init__(self, source):
@@ -72,6 +84,8 @@ class LuaAnalysis:
         string_count = 0
         string_bytes = 0
         max_string_length = 0
+        high_entropy_string_count = 0
+        long_string_count = 0
         i = 0
         n = len(source)
 
@@ -106,6 +120,10 @@ class LuaAnalysis:
                 string_count += 1
                 string_bytes += len(literal)
                 max_string_length = max(max_string_length, len(literal))
+                if len(literal) >= 160:
+                    long_string_count += 1
+                    if len(set(literal)) >= 24 and _shannon_entropy(literal) >= 4.0:
+                        high_entropy_string_count += 1
                 leading = False
                 i = end
                 continue
@@ -123,6 +141,10 @@ class LuaAnalysis:
                     string_count += 1
                     string_bytes += len(literal)
                     max_string_length = max(max_string_length, len(literal))
+                    if len(literal) >= 160:
+                        long_string_count += 1
+                        if len(set(literal)) >= 24 and _shannon_entropy(literal) >= 4.0:
+                            high_entropy_string_count += 1
                     leading = False
                     i = end
                     continue
@@ -145,6 +167,8 @@ class LuaAnalysis:
         self.string_count = string_count
         self.string_bytes = string_bytes
         self.max_string_length = max_string_length
+        self.high_entropy_string_count = high_entropy_string_count
+        self.long_string_count = long_string_count
         self.line_count = source.count("\n") + 1
         self.nonspace_size = sum(not c.isspace() for c in self.code)
         identifiers = set()
@@ -252,6 +276,23 @@ def family_scores(source, analysis=None):
             out.append((name, conf, label, ["%d code-pattern hits (need %d)" % (hits, min_hits * 3)]))
         elif min_hits and hits >= min_hits:
             out.append((name, weak, label, ["%d code-pattern hits (need %d for a strong match)" % (hits, min_hits * 3)]))
+
+    jay_header = bool(re.search(r"\bjayfuscator\b", header, re.I))
+    jay_base64 = bool(re.search(r"\bbi\s*=\s*Dc\s*\(", structure))
+    jay_hex = bool(re.search(r"\bbw\s*=\s*cs\s*\(", structure))
+    jay_serializer = bool(re.search(
+        r"\breturn\s+(?:bj\s*\(\s*bv\s*\(\s*bg\s*\(|by\s*\(\s*cw\s*\(\s*cg\s*\(\s*\))",
+        structure,
+    ))
+    jay_transport = jay_base64 or jay_hex
+    if jay_header and jay_transport and jay_serializer:
+        out.append(("jayfuscator", 0.99, "Jayfuscator", ["leading Jayfuscator header", "recognized encoded VM transport", "known serializer entry point"]))
+    elif jay_header and jay_transport:
+        out.append(("jayfuscator", 0.94, "Jayfuscator", ["leading Jayfuscator header", "recognized encoded VM transport"]))
+    elif jay_transport and jay_serializer:
+        out.append(("jayfuscator", 0.91, "Jayfuscator", ["recognized encoded VM transport and serializer entry point"]))
+    elif jay_header:
+        out.append(("jayfuscator", 0.82, "Jayfuscator", ["leading Jayfuscator header comment"]))
     return out
 
 
@@ -284,9 +325,9 @@ def obfuscation_score(source, analysis=None):
         score += 0.2
         evidence.append("large numeric constant tables (VM bytecode)")
 
-    if re.search(r"\bwhile\s+true\s+do\b", structure) and analysis.dispatch_call_count:
+    if re.search(r"\bwhile\s+true\s+do\b", structure) and analysis.dispatch_call_count >= 3:
         score += 0.15
-        evidence.append("while-true dispatcher with table-index calls")
+        evidence.append("while-true dispatcher with repeated table-index calls")
 
     blobs = _count(_BLOB_RX, code, cap=50)
     if blobs:
@@ -302,5 +343,9 @@ def obfuscation_score(source, analysis=None):
     if decoder_ops >= 12 and analysis.string_bytes >= size * 0.15:
         score += 0.1
         evidence.append("%d string/bitwise decoder operations around encoded data" % decoder_ops)
+
+    if analysis.high_entropy_string_count and (decoder_ops >= 6 or analysis.numeric_table_count or analysis.dispatch_call_count >= 3):
+        score += 0.12
+        evidence.append("%d high-entropy encoded string payload(s)" % analysis.high_entropy_string_count)
 
     return min(1.0, score), evidence
