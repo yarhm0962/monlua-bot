@@ -1102,12 +1102,11 @@ def _engine_select_options(recommended_engine: Optional[str] = None):
             label = spec["label"]
             description = f"Use the existing {spec['label']} engine."
         if not available:
-            label = f"{label} · unavailable"
-            description = spec.get("status", "This deobfuscation engine is not available yet.")[:100]
-        elif engine == recommended_engine:
+            continue
+        if engine == recommended_engine:
             label = f"{label} (Recommended)"
             description = f"Recommended for the detected {spec['label']} obfuscator."
-        options.append(discord.SelectOption(label=label, value=value, description=description, disabled=not available))
+        options.append(discord.SelectOption(label=label, value=value, description=description))
     recommended_value = "moonveil" if recommended_engine == "moonveil_v145" else recommended_engine
     if recommended_value:
         options.sort(key=lambda option: 0 if option.value == recommended_value else 1)
@@ -1138,6 +1137,21 @@ class _EnginePickerView(discord.ui.LayoutView):
         container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.\n" + "\n".join(details)))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.ActionRow(_EngineSelect(recommended_engine)))
+        unavailable_engines = [
+            (engine, spec) for engine, spec in SUPPORTED.items()
+            if not _engine_is_available(engine)
+        ]
+        for start in range(0, len(unavailable_engines), 5):
+            unavailable_buttons = [
+                discord.ui.Button(
+                    label=f"{spec['label']} · unavailable",
+                    style=discord.ButtonStyle.secondary,
+                    custom_id=f"engine_unavailable_{engine}",
+                    disabled=True,
+                )
+                for engine, spec in unavailable_engines[start:start + 5]
+            ]
+            container.add_item(discord.ui.ActionRow(*unavailable_buttons))
         self.add_item(container)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

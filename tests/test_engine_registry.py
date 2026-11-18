@@ -50,9 +50,16 @@ class EngineAvailabilityTests(unittest.TestCase):
 
         self.assertIn("jayfuscator", bot_module.SUPPORTED)
         self.assertFalse(bot_module._engine_is_available("jayfuscator"))
-        option = next(option for option in bot_module._engine_select_options() if option.value == "jayfuscator")
-        self.assertTrue(option.disabled)
-        self.assertIn("unavailable", option.label.lower())
+        self.assertFalse(any(option.value == "jayfuscator" for option in bot_module._engine_select_options()))
+        context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
+        view = bot_module._EnginePickerView(context, ("url", "https://example.com/sample.lua"))
+        unavailable = [
+            item for item in view.walk_children()
+            if isinstance(item, bot_module.discord.ui.Button) and "Jayfuscator" in item.label
+        ]
+        self.assertEqual(len(unavailable), 1)
+        self.assertTrue(unavailable[0].disabled)
+        self.assertIn("unavailable", unavailable[0].label.lower())
 
     def test_unavailable_engines_are_not_recommended(self):
         import bot as bot_module
