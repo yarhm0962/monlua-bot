@@ -218,3 +218,40 @@ class JayfuscatorDetectionTests(unittest.TestCase):
     def test_jayfuscator_name_inside_lua_string_is_not_a_signature(self):
         rows = all_scores('local marker = "Jayfuscator"\nreturn marker')
         self.assertFalse(any(row[0] == "jayfuscator" for row in rows))
+
+
+class LuraphVersionDetectionTests(unittest.TestCase):
+    def test_official_v151_header_selects_the_v151_engine(self):
+        source = "-- This file was protected using Luraph Obfuscator v15.1 [https://lura.ph/]\\nreturn 1"
+        rows = all_scores(source)
+        self.assertEqual(rows[0][0], "luraph_v151")
+        self.assertEqual(rows[0][1], 1.0)
+        self.assertEqual(bot_module._recommended_engine(rows), "luraph_v151")
+
+    def test_v14_header_is_not_misidentified_as_v151(self):
+        source = "-- This file was protected using Luraph Obfuscator v14.2 [https://lura.ph/]\\nreturn 1"
+        rows = all_scores(source)
+        scores = {row[0]: row[1] for row in rows}
+        self.assertEqual(scores["luraph_v151"], 0.0)
+        self.assertLess(scores["luraph_v15"], 0.75)
+        self.assertIsNone(bot_module._recommended_engine(rows))
+
+    def test_v150_header_is_routed_to_the_v15_engine(self):
+        source = "-- This file was protected using Luraph Obfuscator v15.0 [https://lura.ph/]\\nreturn 1"
+        rows = all_scores(source)
+        self.assertEqual(rows[0][0], "luraph_v15")
+        self.assertEqual(bot_module._recommended_engine(rows), "luraph_v15")
+
+    def test_luraph_vm_after_loader_stub_is_detected(self):
+        source = (
+            "local loaderState = true\\n"
+            "local encoded = 42\\n"
+            "]]]]return setmetatable({[75]=bit32.rrotate,[84]=table.concat,"
+            "[91]=string.byte,[102]=math.floor}, function() end)\\n"
+            "LPH_ENCSTR = function() end\\n"
+            "LPH_ENCFUNC = function() end\\n"
+            "LPH_NO_VIRTUALIZE = function() end"
+        )
+        rows = all_scores(source)
+        self.assertEqual(rows[0][0], "luraph_v151")
+        self.assertGreaterEqual(rows[0][1], 0.80)
