@@ -55,13 +55,14 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         shortcut = bot.bot.get_command("do")
         self.assertIsNotNone(shortcut)
         self.assertIs(shortcut, bot.bot.get_command("deobf"))
-        self.assertEqual(len(bot.SUPPORTED), 9)
+        self.assertEqual(len(bot.SUPPORTED), 10)
         self.assertIn("ironveil_v1", bot.SUPPORTED)
         self.assertIn("77fuscator", bot.SUPPORTED)
         self.assertIn("ironbrew1", bot.SUPPORTED)
         self.assertIn("ironbrew2", bot.SUPPORTED)
         expected_engine_options = set(bot.SUPPORTED)
         expected_engine_options.discard("moonveil_v145")
+        expected_engine_options.discard("jayfuscator")
         expected_engine_options.add("moonveil")
         self.assertEqual(
             set(option.value for option in bot._EngineSelect().options),
@@ -69,6 +70,8 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("IronBrew1", bot.engines_body())
         self.assertIn("IronBrew2", bot.engines_body())
+        self.assertIn("Jayfuscator", bot.engines_body())
+        self.assertNotIn("SERVER SETTINGS", bot.engines_body())
         for engine in bot.SUPPORTED:
             self.assertEqual(bot.SUPPORTED[engine]["command"], ".do")
 
