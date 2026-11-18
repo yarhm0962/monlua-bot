@@ -35,14 +35,14 @@ class LuraphV15(Obfuscator):
         # Only trust a claimed version when it is present in a leading comment.
         m = HEADER.search(comments[:4000])
         if m:
-            minor = m.group(2)
-            if minor is not None and minor != "0":
-                # an official v15.1+ header belongs to the v15.1 engine; this
-                # engine stays as a close relative one point below
-                self.last_evidence = ["official Luraph header comment (v15.%s; reported by the v15.1 engine)" % minor]
+            major, minor = m.group(1), m.group(2)
+            if major == "15" and minor is not None and minor != "0":
+                self.last_evidence = ["official Luraph header comment (v15.%s; v15.1-family engine)" % minor]
                 return 0.9
-            self.last_evidence = ["official Luraph header comment (v%s)" % m.group(1)]
-            return 1.0 if m.group(1) == "15" else 0.3     # other versions: probably close, not verified
+            self.last_evidence = ["official Luraph header comment (v%s%s)" % (
+                major, "." + minor if minor is not None else ""
+            )]
+            return 1.0 if major == "15" else 0.3
         if HEADER_ANY.search(comments[:4000]):
             vm = re.search(r"v?(1[3-6])\.(\d+)", comments[:4000], re.I)
             if vm and vm.group(1) != "15":

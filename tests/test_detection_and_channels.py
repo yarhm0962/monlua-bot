@@ -233,7 +233,7 @@ class LuraphVersionDetectionTests(unittest.TestCase):
         rows = all_scores(source)
         scores = {row[0]: row[1] for row in rows}
         self.assertEqual(scores["luraph_v151"], 0.0)
-        self.assertLess(scores["luraph_v15"], 0.75)
+        self.assertEqual(scores["luraph_v15"], 0.3)
         self.assertIsNone(bot_module._recommended_engine(rows))
 
     def test_v150_header_is_routed_to_the_v15_engine(self):
