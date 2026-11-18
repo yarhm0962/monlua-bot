@@ -42,3 +42,28 @@ class NewEngineRegistryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EngineAvailabilityTests(unittest.TestCase):
+    def test_jayfuscator_is_registered_but_disabled_until_validated(self):
+        import bot as bot_module
+
+        self.assertIn("jayfuscator", bot_module.SUPPORTED)
+        self.assertFalse(bot_module._engine_is_available("jayfuscator"))
+        self.assertFalse(any(option.value == "jayfuscator" for option in bot_module._engine_select_options()))
+        context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
+        view = bot_module._EnginePickerView(context, ("url", "https://example.com/sample.lua"))
+        unavailable = [
+            item for item in view.walk_children()
+            if isinstance(item, bot_module.discord.ui.Button) and "Jayfuscator" in item.label
+        ]
+        self.assertEqual(len(unavailable), 1)
+        self.assertTrue(unavailable[0].disabled)
+        self.assertIn("unavailable", unavailable[0].label.lower())
+
+    def test_unavailable_engines_are_not_recommended(self):
+        import bot as bot_module
+
+        self.assertIsNone(bot_module._recommended_engine([
+            ("jayfuscator", 0.99, "Jayfuscator", ["signature matched"])
+        ]))

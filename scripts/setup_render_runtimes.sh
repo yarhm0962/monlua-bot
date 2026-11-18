@@ -12,6 +12,7 @@ TEMP="$RUNTIME/setup-tmp"
 
 IRONVEIL_COMMIT="64b27cfd0cb80919ccefdc8a2e61d6f7d742fb5a"
 SEVENTYSEVEN_COMMIT="57042ff5f134f44a162b6b60570b4815b70ef8d2"
+JAY_DIR="$ROOT/deobf/jayfuscator"
 
 mkdir -p "$RUNTIME" "$DOTNET" "$SDK" "$NUGET" "$TEMP"
 export DOTNET_ROOT="$DOTNET"
@@ -43,6 +44,15 @@ mv "$TEMP/77fuscator" "$RUNTIME/vendor/77fuscator"
 
 bash "$ROOT/scripts/materialize_engine_assets.sh"
 
+rm -rf "$JAY_DIR"
+mkdir -p "$JAY_DIR"
+tar -xzf "$ROOT/deobf/jayfuscator-assets.tar.gz" -C "$JAY_DIR"
+test -s "$JAY_DIR/deobf.js"
+test -s "$JAY_DIR/utils/decoder.lua"
+test -s "$JAY_DIR/utils/lifter.js"
+test -s "$JAY_DIR/utils/optimizer.js"
+test -s "$JAY_DIR/utils/renamer.js"
+
 export PATH="$SDK:$DOTNET:$PATH"
 "$SDK/dotnet" publish "$RUNTIME/vendor/77fuscator/deobfuscator.csproj" -c Release --no-self-contained -o "$RUNTIME/77fuscator"
 
@@ -58,6 +68,9 @@ if [[ ! -x "$NODE/bin/node" ]]; then
     cp -a "$TEMP/node/." "$NODE/"
     chmod +x "$NODE/bin/node"
 fi
+
+"$NODE/bin/node" --check "$JAY_DIR/deobf.js"
+for file in "$JAY_DIR/utils"/*.js; do "$NODE/bin/node" --check "$file"; done
 
 if [[ "${FORCE_BUNDLED_JAVA:-0}" == "1" ]] || { ! command -v java >/dev/null 2>&1 && [[ ! -x "$JAVA/bin/java" ]]; }; then
     JAVA_ARCHIVE="$ROOT/deobf/bin/jre17.tar.gz"

@@ -53,7 +53,12 @@ SUPPORTED = {
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
+    "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
+
+
+def _engine_is_available(engine: str) -> bool:
+    return bool(SUPPORTED.get(engine, {}).get("available", True))
 
 V151_DIR = DEOB_DIR / "v151"
 V151_SCRIPT = V151_DIR / "deob.js"
@@ -289,7 +294,7 @@ def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.Layout
 
 def engines_body() -> str:
     engine_names = [
-        f"• **{spec['label']}**"
+        f"• **{spec['label']}**" + (" — detection only; deobfuscation unavailable" if not _engine_is_available(engine) else "")
         for engine, spec in SUPPORTED.items()
         if engine not in ("moonveil_v145", "ironbrew1", "ironbrew2")
     ]
@@ -316,10 +321,7 @@ def engines_body() -> str:
         + "• .help — display the command guide\n\n"
         + "**INPUT FORMAT**\n"
         + "Attach one .lua, .luau, or .txt file to the command, or provide a direct raw-file URL.\n"
-        + "Use one source per command. Large jobs may take longer depending on VM complexity.\n\n"
-        + "**SERVER SETTINGS**\n"
-        + "• /set channel — allow commands in a selected channel (Manage Server)\n"
-        + "• /remove set channel — remove a channel restriction (Manage Server)"
+        + "Use one source per command. Large jobs may take longer depending on VM complexity."
     )
 
 def _human_size(n: int) -> str:
@@ -832,7 +834,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     else:
         color, title = 0xED4245, "## \u2753 Unknown obfuscator"
     one_click = None
-    if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED:
+    if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED and _engine_is_available(best_name):
         one_click = (best_name, source)
     view = _LoggedLayoutView()
     if one_click:
@@ -846,7 +848,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     container.add_item(discord.ui.Separator())
     if matched or partial:
         verdict = "Identified" if matched else "Likely"
-        detection_only = best_name not in SUPPORTED
+        detection_only = best_name not in SUPPORTED or not _engine_is_available(best_name)
         note = " \u00b7 detection only" if detection_only else ""
         container.add_item(discord.ui.TextDisplay(
             f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}"
@@ -1082,7 +1084,7 @@ def _recommended_engine(rows) -> Optional[str]:
     matches = [
         (float(confidence), name)
         for name, confidence, _label, _evidence in rows
-        if name in SUPPORTED and float(confidence) >= 0.75
+        if name in SUPPORTED and _engine_is_available(name) and float(confidence) >= 0.75
     ]
     return max(matches, default=(0.0, None))[1]
 
@@ -1090,6 +1092,7 @@ def _recommended_engine(rows) -> Optional[str]:
 def _engine_select_options(recommended_engine: Optional[str] = None):
     options = []
     for engine, spec in SUPPORTED.items():
+        available = _engine_is_available(engine)
         if engine == "moonveil_v145":
             value = "moonveil"
             label = "MoonVeil"
@@ -1098,6 +1101,8 @@ def _engine_select_options(recommended_engine: Optional[str] = None):
             value = engine
             label = spec["label"]
             description = f"Use the existing {spec['label']} engine."
+        if not available:
+            continue
         if engine == recommended_engine:
             label = f"{label} (Recommended)"
             description = f"Recommended for the detected {spec['label']} obfuscator."
@@ -1132,6 +1137,21 @@ class _EnginePickerView(discord.ui.LayoutView):
         container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.\n" + "\n".join(details)))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.ActionRow(_EngineSelect(recommended_engine)))
+        unavailable_engines = [
+            (engine, spec) for engine, spec in SUPPORTED.items()
+            if not _engine_is_available(engine)
+        ]
+        for start in range(0, len(unavailable_engines), 5):
+            unavailable_buttons = [
+                discord.ui.Button(
+                    label=f"{spec['label']} · unavailable",
+                    style=discord.ButtonStyle.secondary,
+                    custom_id=f"engine_unavailable_{engine}",
+                    disabled=True,
+                )
+                for engine, spec in unavailable_engines[start:start + 5]
+            ]
+            container.add_item(discord.ui.ActionRow(*unavailable_buttons))
         self.add_item(container)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -1199,6 +1219,7 @@ class _MoonVeilVersionButton(discord.ui.Button):
             label=label,
             style=discord.ButtonStyle.success if available else discord.ButtonStyle.secondary,
             custom_id=f"moonveil_version_{version.replace('.', '_')}",
+            disabled=not available,
         )
         self.engine = engine
 
@@ -2055,6 +2076,9 @@ def result_embed(filename: str, label: str, size: int, desc: str, file_note: boo
 
 
 async def process_input(ctx: commands.Context, engine: str, url: str = "", preset=None) -> None:
+    if engine not in SUPPORTED or not _engine_is_available(engine):
+        await ctx.reply(view=info_view("Engine unavailable", SUPPORTED.get(engine, {}).get("status", "This deobfuscation engine is not available yet.")), mention_author=False)
+        return
     spec = SUPPORTED[engine]
     label = spec["label"]
     attachments = ctx.message.attachments
@@ -2332,6 +2356,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 source = ("attachment", filename, source_bytes)
             else:
                 source = ("url", source_url, filename, source_bytes)
+        jay_match = next(((name, float(confidence)) for name, confidence, _label, _evidence in rows if name == "jayfuscator" and float(confidence) >= 0.75), None)
         if detected_engine:
             confidence = max(float(row[1]) for row in rows if row[0] == detected_engine)
             scan_note = (
@@ -2339,10 +2364,15 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 f"**{int(round(confidence * 100))}%** confidence. "
                 "The recommended engine is marked and placed first."
             )
+        elif jay_match:
+            scan_note = (
+                f"Detected **Jayfuscator** · **{int(round(jay_match[1] * 100))}%** confidence. "
+                "Its recovery engine is not validated yet, so its selector option is disabled."
+            )
         else:
             scan_note = (
                 "Scan complete. No supported engine matched the 75% confidence threshold. "
-                "Choose an engine manually from the full list."
+                "Choose an available engine manually from the list."
             )
         view = _EnginePickerView(ctx, source, detected_engine, scan_note)
         view.message = status
@@ -2582,7 +2612,7 @@ async def help_command(ctx: commands.Context) -> None:
         + "• `.deobf https://example.com/raw/script.lua`\n"
         + "• `.do` with a Lua file attached"
     )
-    await ctx.reply(view=info_view("MonLua · Command Guide", body), mention_author=False)
+    await ctx.reply(view=info_view("COMMAND GUIDE", body), mention_author=False)
 
 _tree_synced = False
 

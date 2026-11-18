@@ -202,3 +202,19 @@ class CodeAwareDetectionTests(unittest.TestCase):
         self.assertEqual(LuraphV15().detect(source), 0.0)
 
 
+
+
+class JayfuscatorDetectionTests(unittest.TestCase):
+    def test_jayfuscator_header_transport_and_serializer_are_detected(self):
+        source = (
+            "-- Jayfuscator V1.2.1\n"
+            'local bi = Dc("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")\n'
+            "return bj(bv(bg()), {}, bg())()"
+        )
+        row = next(row for row in all_scores(source) if row[0] == "jayfuscator")
+        self.assertGreaterEqual(row[1], 0.99)
+        self.assertEqual(row[2], "Jayfuscator")
+
+    def test_jayfuscator_name_inside_lua_string_is_not_a_signature(self):
+        rows = all_scores('local marker = "Jayfuscator"\nreturn marker')
+        self.assertFalse(any(row[0] == "jayfuscator" for row in rows))
