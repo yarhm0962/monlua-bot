@@ -75,6 +75,29 @@ class FulcrumDetectionTests(unittest.TestCase):
                 f"Fulcrum detector falsely matched existing sample: {path.relative_to(ROOT)}",
             )
 
+    def test_all_existing_detector_signature_samples_remain_distinct(self):
+        encoded = '"' + ("x" * 80) + '"'
+        params = [chr(97 + i // 26) + chr(97 + i % 26) for i in range(20)]
+        cases = [
+            ("luraph v15.1 vm", "return setmetatable({[75]=bit32.rrotate,[84]=table.concat}, function() end)\nlocal marker = LPH_ENCSTR\nreturn marker"),
+            ("luraph v15.1 official header", "-- This file was protected using Luraph Obfuscator v15.1 [https://lura.ph/]\nreturn 1"),
+            ("luraph v15.0 official header", "-- This file was protected using Luraph Obfuscator v15.0 [https://lura.ph/]\nreturn 1"),
+            ("ironbrew1 wrapper", "return(function(" + ",".join(params) + ",...) local bh={1,2,3} end)"),
+            ("moonsec v3 decoder", "\n".join("r(1," + encoded + ")" for _ in range(6))),
+            ("centurion factory", "local c3 = {}\n" + "\n".join("c3[%d] = function(Z) return Z end" % index for index in range(1, 22))),
+            ("synapse xen identifiers", "\n".join("local SynapseXen_signal_%d = true" % index for index in range(18))),
+            ("jayfuscator transport", "-- Jayfuscator V1.2.1\nlocal bi = Dc(\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\")\nreturn bj(bv(bg()), {}, bg())()"),
+            ("ironveil header", "-- Obfuscated using ironveil v1\nreturn 1"),
+            ("77fuscator marker", "do local a=[[77fuscator 0.6.1 EARLY BUILD]] end"),
+            ("ironbrew2 header", "-- IronBrew2\nreturn function() end"),
+        ]
+        for label, source in cases:
+            self.assertLess(
+                self.engine.detect(source),
+                0.75,
+                f"Fulcrum detector misclassified the existing {label} fixture",
+            )
+
     def test_reference_luraph_report_is_not_a_fulcrum_match(self):
         report_path = ROOT / "tests" / "fixtures" / "fulcrum_luraph_reference_report.json"
         report = json.loads(report_path.read_text(encoding="utf-8"))
