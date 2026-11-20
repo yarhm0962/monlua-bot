@@ -2231,22 +2231,69 @@ def handle_def(d, store):
     return out
 
 
+def _find_vm_entry(src):
+    """Locate the VM entry function for a Fulcrum-obfuscated file.
+
+    Supports the known sample build (aY marker) and, generically, any build
+    whose program is one giant `NAME=function(...)local ...` wrapper invoked
+    through an alias at the end. Returns (name, offset) or (None, None)."""
+    try:
+        return 'aY', src.index('aY=function(...)local bb')
+    except ValueError:
+        pass
+    # generic: the wrapper is invoked through an alias near the end (aJ = FN; return aJ(...))
+    tail = src[-4000:]
+    rm = re.search(r'return\s+([A-Za-z_]\w*)\(', tail)
+    if rm:
+        alias = rm.group(1)
+        for am in re.finditer(r'(?<![\w.])%s\s*=\s*([A-Za-z_]\w*)\s*(?:$|\bend\b)' % alias, src):
+            target = am.group(1)
+            fm = re.search(r'(?<![\w.])%s=function\(...\)local\s+[A-Za-z_]\w*' % target, src)
+            if not fm:
+                continue
+            try:
+                params, (b0, b1) = fn_body_span(src[fm.start():])
+            except Exception:
+                continue
+            if b1 - b0 > 2000:
+                return target, fm.start()
+    # fallback: the largest wrapper; skip nested defs inside an already-found span
+    best = None
+    for m in re.finditer(r'([A-Za-z_]\w*)=function\(...\)local\s+([A-Za-z_]\w*)', src):
+        if best and m.start() < best[3]:
+            continue
+        try:
+            params, (b0, b1) = fn_body_span(src[m.start():])
+        except Exception:
+            continue
+        size = b1 - b0
+        if best is None or size > best[0]:
+            best = (size, m.group(1), m.start(), b1)
+    if best and best[0] > 2000:
+        return best[1], best[2]
+    return None, None
+
+
 def main_deobf(path, outpath, storepath='init_store.json'):
     """Staged deobfuscation: load the init store from JSON (low memory)."""
     src = open(path, encoding='utf-8', errors='replace').read()
     store = {}
     for k, (kind, val) in json.load(open(storepath)).items():
         store[k] = sym_const(val)
-    # extract the aY function body directly
-    i = src.index('aY=function(...)local bb')
+    vm_name, i = _find_vm_entry(src)
+    if vm_name is None:
+        raise RuntimeError('unsupported Fulcrum build: no VM entry function found (engine is derived from one known build)')
     seg = src[i:i + 708100]
     params, (b0, b1) = fn_body_span(seg)
     body = seg[b0:b1]
     out = ['-- deobfuscated by fulcrum_tool (using the fulcrum deobfuscation package:',
            '-- O/Q/U/V LCG string ciphers + affine constant folding)',
            '-- Fulcrum [polsec.net] loader (Polsec runtime)', '']
-    out.append('local function aY(...)')
-    lines = decompile_fn(body, store, params, 'aY')
+    out.append('local function %s(...)' % vm_name)
+    lines = decompile_fn(body, store, params, vm_name)
+    junk = sum(1 for l in lines if 'ERROR' in l or l.startswith('--'))
+    if not lines or len(lines) < 30 or junk > max(2, len(lines) // 2):
+        raise RuntimeError('unsupported Fulcrum build: this engine only covers the known Fulcrum build and this file uses a different variant')
     for l in lines:
         if l.startswith('\t'):
             out.append(l)
@@ -2254,7 +2301,7 @@ def main_deobf(path, outpath, storepath='init_store.json'):
             out.append('\t' + l if l else l)
     out.append('end')
     out.append('')
-    out.append('local aX = aY')
+    out.append('local aX = %s' % vm_name)
     out.append('return aX(...)')
     open(outpath, 'w').write('\n'.join(out) + '\n')
     print('lines:', len(out))

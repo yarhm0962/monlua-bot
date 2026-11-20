@@ -298,6 +298,12 @@ class P:
         # expression statement: call or assignment
         self.suffixedexp()
         t2 = self.tok()
+        if t2[0] == 'op' and t2[1] == ',':
+            # multiple assignment targets: a, b, c = ...
+            while t2[0] == 'op' and t2[1] == ',':
+                self.next()
+                self.suffixedexp()
+                t2 = self.tok()
         if t2[0] == 'op' and (t2[1] == '=' or t2[1] in
                               ('+=', '-=', '*=', '/=', '%=', '^=', '..=')):
             self.next()

@@ -2082,9 +2082,12 @@ def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> byte
     try:
         _cloud_upload_input(job_id, input_path.read_bytes())
         uploaded = True
+        dispatch_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         _cloud_dispatch(engine, job_id)
         deadline = time.monotonic() + wait_seconds
         result_ref = f"/repos/{GH_JOBS_REPO}/git/ref/heads/result/{job_id}"
+        runs_ref = f"/repos/{GH_JOBS_REPO}/actions/runs?event=workflow_dispatch&per_page=5"
+        run_checked = False
         while time.monotonic() < deadline:
             code, response = _gh_api("GET", result_ref)
             if code == 200:
@@ -2095,6 +2098,22 @@ def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> byte
             if code not in (404, 409):
                 detail = response.decode("utf-8", errors="replace")[:240]
                 raise RuntimeError(f"could not check cloud result status: HTTP {code}: {detail}")
+            if not run_checked:
+                rcode, rresp = _gh_api("GET", runs_ref)
+                if rcode == 200:
+                    try:
+                        runs = json.loads(rresp.decode("utf-8", errors="replace")).get("workflow_runs", [])
+                        for run in runs:
+                            if run.get("created_at", "") >= dispatch_at:
+                                if run.get("status") == "completed":
+                                    run_checked = True
+                                    if run.get("conclusion") != "success":
+                                        raise RuntimeError(
+                                            "the cloud runner failed for this job ("
+                                            f"{run.get('conclusion')}); see {run.get('html_url')}"
+                                        )
+                    except ValueError:
+                        pass
             time.sleep(CLOUD_POLL_SECONDS)
         raise RuntimeError("the cloud runner did not publish this job's result before the deadline")
     finally:

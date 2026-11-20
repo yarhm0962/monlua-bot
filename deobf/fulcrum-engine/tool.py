@@ -298,3 +298,45 @@ def split_top_commas(text):
 def parse_arglist(text):
     """Split a call argument list on top-level commas; returns raw texts."""
     return [p.strip() for p in split_top_commas(text) if p.strip()]
+
+
+_KW = ('and', 'or', 'not', 'true', 'false', 'nil')
+_IDENT_RE = __import__('re').compile(r'[A-Za-z_][A-Za-z_0-9]*')
+
+
+def bool_cond(cond, ba):
+    """Evaluate a Lua if-condition over a known numeric loop value.
+
+    Returns True/False, or None when the condition cannot be decided
+    (unknown names, tables, calls). `ba` is the loop value, or a mapping
+    of name -> value."""
+    cond = (cond or '').strip()
+    if not cond:
+        return None
+    if '[' in cond or ']' in cond or '.' in cond or ':' in cond:
+        return None
+    names = {m for m in _IDENT_RE.findall(cond) if m not in _KW}
+    if len(names) > 1:
+        return None
+    py = cond.replace('~=', '!=')
+    py = __import__('re').sub(r'\btrue\b', 'True', py)
+    py = __import__('re').sub(r'\bfalse\b', 'False', py)
+    py = __import__('re').sub(r'\bnil\b', 'None', py)
+    env = {}
+    if isinstance(ba, dict):
+        if len(names) == 1:
+            name = next(iter(names))
+            if name not in ba:
+                return None
+            env[name] = ba[name]
+        elif names:
+            return None
+    elif names:
+        name = next(iter(names))
+        if not isinstance(ba, (int, float)):
+            return None
+        env[name] = ba
+    try:
+        return bool(eval(py, {'__builtins__': {}}, env))
+    except Exception:
+        return None
