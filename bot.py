@@ -1102,6 +1102,18 @@ def _recommended_engine(rows) -> Optional[str]:
     return max(matches, default=(0.0, None))[1]
 
 
+def _unavailable_engine_match(rows) -> Optional[tuple[str, float]]:
+    matches = [
+        (float(confidence), name)
+        for name, confidence, _label, _evidence in rows
+        if name in SUPPORTED and not _engine_is_available(name) and float(confidence) >= 0.75
+    ]
+    if not matches:
+        return None
+    confidence, engine = max(matches)
+    return engine, confidence
+
+
 def _engine_select_options(recommended_engine: Optional[str] = None):
     options = []
     for engine, spec in SUPPORTED.items():
@@ -2365,7 +2377,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 source = ("attachment", filename, source_bytes)
             else:
                 source = ("url", source_url, filename, source_bytes)
-        jay_match = next(((name, float(confidence)) for name, confidence, _label, _evidence in rows if name == "jayfuscator" and float(confidence) >= 0.75), None)
+        unavailable_match = _unavailable_engine_match(rows)
         if detected_engine:
             confidence = max(float(row[1]) for row in rows if row[0] == detected_engine)
             scan_note = (
@@ -2373,10 +2385,13 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 f"**{int(round(confidence * 100))}%** confidence. "
                 "The recommended engine is marked and placed first."
             )
-        elif jay_match:
+        elif unavailable_match:
+            unavailable_engine, confidence = unavailable_match
             scan_note = (
-                f"Detected **Jayfuscator** · **{int(round(jay_match[1] * 100))}%** confidence. "
-                "Its recovery engine is not validated yet, so its selector option is disabled."
+                f"Detected **{SUPPORTED[unavailable_engine]['label']}** · "
+                f"**{int(round(confidence * 100))}%** confidence. "
+                f"{SUPPORTED[unavailable_engine].get('status', 'Recovery is not available yet')} "
+                "The engine remains disabled in the selector."
             )
         else:
             scan_note = (
