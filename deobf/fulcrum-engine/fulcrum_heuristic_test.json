@@ -1,0 +1,5742 @@
+{
+  "input": "../uploads/km_e184_ls_1ee.txt",
+  "sha256": "351e2801ddfcdfb34fb9aa4874cd2125593c1d11ccb1736005d65b9bd07dde48",
+  "fulcrum_header": true,
+  "note": "This is a static analysis report, not devirtualized code. Known-sample strings are heuristic candidates, not verified substitutions.",
+  "known_sample": true,
+  "string_candidates": [
+    {
+      "character_offset": 3741,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 4412,
+      "alg": "O",
+      "text": "game"
+    },
+    {
+      "character_offset": 6029,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 6750,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 11278,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 12584,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 13258,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 13949,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 16775,
+      "alg": "Q",
+      "text": "Polsec is a Lua whitelisting service, and attempting to deobfuscate, reverse-engineer, or otherwise bypass its protections is against the serviceâs Terms of Service. Continuing to do so could potentially get the owner or other involved parties in trouble, including account or service consequences. Stop attempting to deobfuscate or bypass Polsec and leave the protected code alone."
+    },
+    {
+      "character_offset": 17519,
+      "alg": "V",
+      "text": "trial"
+    },
+    {
+      "character_offset": 18498,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 19232,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 21053,
+      "alg": "O",
+      "text": "Loaded"
+    },
+    {
+      "character_offset": 26984,
+      "alg": "U",
+      "text": "Wait"
+    },
+    {
+      "character_offset": 32856,
+      "alg": "U",
+      "text": "gone"
+    },
+    {
+      "character_offset": 33954,
+      "alg": "O",
+      "text": "http_request"
+    },
+    {
+      "character_offset": 35608,
+      "alg": "Q",
+      "text": "`y $"
+    },
+    {
+      "character_offset": 36303,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37079,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37745,
+      "alg": "V",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 38559,
+      "alg": "U",
+      "text": "H*2R"
+    },
+    {
+      "character_offset": 45757,
+      "alg": "Q",
+      "text": "C"
+    },
+    {
+      "character_offset": 46529,
+      "alg": "O",
+      "text": "connect"
+    },
+    {
+      "character_offset": 51709,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 55617,
+      "alg": "V",
+      "text": "g"
+    },
+    {
+      "character_offset": 58878,
+      "alg": "O",
+      "text": "|"
+    },
+    {
+      "character_offset": 59722,
+      "alg": "V",
+      "text": "Content-Type"
+    },
+    {
+      "character_offset": 61193,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 61883,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 62466,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63254,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63912,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 65756,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 67494,
+      "alg": "V",
+      "text": "mQ"
+    },
+    {
+      "character_offset": 68212,
+      "alg": "Q",
+      "text": "h"
+    },
+    {
+      "character_offset": 70859,
+      "alg": "O",
+      "text": "min"
+    },
+    {
+      "character_offset": 71111,
+      "alg": "U",
+      "text": "'c<"
+    },
+    {
+      "character_offset": 71926,
+      "alg": "V",
+      "text": "1*v"
+    },
+    {
+      "character_offset": 72601,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 73344,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74105,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74843,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 76187,
+      "alg": "O",
+      "text": "o"
+    },
+    {
+      "character_offset": 76783,
+      "alg": "O",
+      "text": "J"
+    },
+    {
+      "character_offset": 77085,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 77793,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 80115,
+      "alg": "V",
+      "text": "t"
+    },
+    {
+      "character_offset": 81089,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 81373,
+      "alg": "U",
+      "text": "Body"
+    },
+    {
+      "character_offset": 81657,
+      "alg": "Q",
+      "text": ","
+    },
+    {
+      "character_offset": 82342,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 83097,
+      "alg": "O",
+      "text": "O"
+    },
+    {
+      "character_offset": 83879,
+      "alg": "Q",
+      "text": "POST"
+    },
+    {
+      "character_offset": 84671,
+      "alg": "U",
+      "text": "f"
+    },
+    {
+      "character_offset": 86091,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 96028,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 96583,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 99909,
+      "alg": "O",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 102238,
+      "alg": "U",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 107714,
+      "alg": "U",
+      "text": "\nT(Ya"
+    },
+    {
+      "character_offset": 113441,
+      "alg": "O",
+      "text": "task"
+    },
+    {
+      "character_offset": 128823,
+      "alg": "U",
+      "text": "RobloxPromptGui"
+    },
+    {
+      "character_offset": 131665,
+      "alg": "V",
+      "text": "TitleFrame"
+    },
+    {
+      "character_offset": 132319,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 133033,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 133763,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 135735,
+      "alg": "O",
+      "text": "CoreGui"
+    },
+    {
+      "character_offset": 137475,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 138229,
+      "alg": "O",
+      "text": "ErrorTitle"
+    },
+    {
+      "character_offset": 138924,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 139580,
+      "alg": "Q",
+      "text": "MessageArea"
+    },
+    {
+      "character_offset": 142705,
+      "alg": "V",
+      "text": "wait"
+    },
+    {
+      "character_offset": 143374,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 148688,
+      "alg": "Q",
+      "text": "K37\r"
+    },
+    {
+      "character_offset": 149273,
+      "alg": "O",
+      "text": "Players"
+    },
+    {
+      "character_offset": 149934,
+      "alg": "V",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 150815,
+      "alg": "U",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 153054,
+      "alg": "V",
+      "text": "o`1:"
+    },
+    {
+      "character_offset": 158364,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 159766,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 160367,
+      "alg": "U",
+      "text": ".c7]"
+    },
+    {
+      "character_offset": 168077,
+      "alg": "O",
+      "text": "application/json"
+    },
+    {
+      "character_offset": 170340,
+      "alg": "V",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 172070,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 172792,
+      "alg": "O",
+      "text": "HH."
+    },
+    {
+      "character_offset": 175549,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 184948,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 185561,
+      "alg": "U",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 187631,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 190860,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 191575,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 192281,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 203288,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/heartbeat"
+    },
+    {
+      "character_offset": 204304,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206042,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206788,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 207034,
+      "alg": "O",
+      "text": "'(\ty"
+    },
+    {
+      "character_offset": 207638,
+      "alg": "Q",
+      "text": "\nE%T"
+    },
+    {
+      "character_offset": 208360,
+      "alg": "V",
+      "text": "math"
+    },
+    {
+      "character_offset": 210601,
+      "alg": "U",
+      "text": "{.Uw"
+    },
+    {
+      "character_offset": 211232,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 211957,
+      "alg": "U",
+      "text": "F"
+    },
+    {
+      "character_offset": 212619,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 212998,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 213660,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 214301,
+      "alg": "U",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 215153,
+      "alg": "O",
+      "text": "Invalid token"
+    },
+    {
+      "character_offset": 219503,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 223436,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 226000,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 234480,
+      "alg": "U",
+      "text": "a"
+    },
+    {
+      "character_offset": 235179,
+      "alg": "Q",
+      "text": "a"
+    },
+    {
+      "character_offset": 235529,
+      "alg": "O",
+      "text": "x"
+    },
+    {
+      "character_offset": 236155,
+      "alg": "V",
+      "text": "["
+    },
+    {
+      "character_offset": 239319,
+      "alg": "O",
+      "text": "type"
+    },
+    {
+      "character_offset": 240368,
+      "alg": "Q",
+      "text": "\\v!"
+    },
+    {
+      "character_offset": 246785,
+      "alg": "O",
+      "text": "gui"
+    },
+    {
+      "character_offset": 247595,
+      "alg": "Q",
+      "text": "SESSION_END:"
+    },
+    {
+      "character_offset": 255577,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 258610,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 259303,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 260962,
+      "alg": "U",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 261728,
+      "alg": "V",
+      "text": "Invalid key"
+    },
+    {
+      "character_offset": 264525,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 265324,
+      "alg": "O",
+      "text": "r-N$"
+    },
+    {
+      "character_offset": 266540,
+      "alg": "Q",
+      "text": "Invalid sessionId"
+    },
+    {
+      "character_offset": 272060,
+      "alg": "V",
+      "text": "d"
+    },
+    {
+      "character_offset": 272358,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 272941,
+      "alg": "Q",
+      "text": "<"
+    },
+    {
+      "character_offset": 296138,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 296821,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 298117,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 298813,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 299107,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 300943,
+      "alg": "O",
+      "text": "s"
+    },
+    {
+      "character_offset": 301585,
+      "alg": "V",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 304959,
+      "alg": "V",
+      "text": "https://api.polsec.net/runtime/socket/http"
+    },
+    {
+      "character_offset": 305610,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 318979,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 322595,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 323253,
+      "alg": "V",
+      "text": "5'"
+    },
+    {
+      "character_offset": 323848,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 324568,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 325393,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 326028,
+      "alg": "U",
+      "text": "mx"
+    },
+    {
+      "character_offset": 326390,
+      "alg": "V",
+      "text": "}"
+    },
+    {
+      "character_offset": 328898,
+      "alg": "U",
+      "text": "n"
+    },
+    {
+      "character_offset": 329527,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 330691,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 335208,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 335494,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336148,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336802,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 340258,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 340887,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 345889,
+      "alg": "Q",
+      "text": "connect"
+    },
+    {
+      "character_offset": 353474,
+      "alg": "Q",
+      "text": "rejected"
+    },
+    {
+      "character_offset": 354102,
+      "alg": "U",
+      "text": "clock"
+    },
+    {
+      "character_offset": 357673,
+      "alg": "V",
+      "text": "JSONDecode"
+    },
+    {
+      "character_offset": 364234,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 371071,
+      "alg": "O",
+      "text": "d"
+    },
+    {
+      "character_offset": 375274,
+      "alg": "V",
+      "text": "string"
+    },
+    {
+      "character_offset": 378741,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379315,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379854,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 381824,
+      "alg": "Q",
+      "text": "0QJ"
+    },
+    {
+      "character_offset": 385032,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 385699,
+      "alg": "V",
+      "text": "a"
+    },
+    {
+      "character_offset": 386403,
+      "alg": "U",
+      "text": "s"
+    },
+    {
+      "character_offset": 388830,
+      "alg": "V",
+      "text": "&gns"
+    },
+    {
+      "character_offset": 390244,
+      "alg": "O",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 390865,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 391136,
+      "alg": "U",
+      "text": "og9>"
+    },
+    {
+      "character_offset": 392688,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 393295,
+      "alg": "V",
+      "text": "StatusCode"
+    },
+    {
+      "character_offset": 397095,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 397851,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 398123,
+      "alg": "U",
+      "text": "-"
+    },
+    {
+      "character_offset": 401847,
+      "alg": "Q",
+      "text": "s"
+    },
+    {
+      "character_offset": 404742,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406203,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406826,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 408760,
+      "alg": "U",
+      "text": "0Af"
+    },
+    {
+      "character_offset": 409378,
+      "alg": "U",
+      "text": "M"
+    },
+    {
+      "character_offset": 410502,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 419790,
+      "alg": "V",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 428979,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 429894,
+      "alg": "V",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 430216,
+      "alg": "O",
+      "text": "Z"
+    },
+    {
+      "character_offset": 431038,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 431670,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 434846,
+      "alg": "V",
+      "text": "*ka"
+    },
+    {
+      "character_offset": 446256,
+      "alg": "Q",
+      "text": "b"
+    },
+    {
+      "character_offset": 460811,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 461994,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 463503,
+      "alg": "Q",
+      "text": "warn"
+    },
+    {
+      "character_offset": 468829,
+      "alg": "Q",
+      "text": "\\"
+    },
+    {
+      "character_offset": 471648,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 472877,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 473556,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 475474,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 475705,
+      "alg": "V",
+      "text": "mWd@"
+    },
+    {
+      "character_offset": 491179,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 498937,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 499670,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 500380,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 503213,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 505591,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 506335,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 524160,
+      "alg": "Q",
+      "text": "clock"
+    },
+    {
+      "character_offset": 524848,
+      "alg": "O",
+      "text": "\n@> e"
+    },
+    {
+      "character_offset": 525609,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526333,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526963,
+      "alg": "O",
+      "text": "s 9[t"
+    },
+    {
+      "character_offset": 527649,
+      "alg": "Q",
+      "text": "xP?zb"
+    },
+    {
+      "character_offset": 528356,
+      "alg": "O",
+      "text": "Y{-}"
+    },
+    {
+      "character_offset": 528993,
+      "alg": "O",
+      "text": "!z\r~"
+    },
+    {
+      "character_offset": 531162,
+      "alg": "V",
+      "text": "5b#"
+    },
+    {
+      "character_offset": 533003,
+      "alg": "O",
+      "text": "a"
+    },
+    {
+      "character_offset": 533715,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 535823,
+      "alg": "Q",
+      "text": "%"
+    },
+    {
+      "character_offset": 536967,
+      "alg": "U",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 537620,
+      "alg": "Q",
+      "text": "delay"
+    },
+    {
+      "character_offset": 538279,
+      "alg": "O",
+      "text": "`!qY9"
+    },
+    {
+      "character_offset": 543919,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 547825,
+      "alg": "O",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 549406,
+      "alg": "U",
+      "text": "~"
+    },
+    {
+      "character_offset": 551283,
+      "alg": "Q",
+      "text": "u"
+    },
+    {
+      "character_offset": 551953,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 553594,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554247,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554623,
+      "alg": "O",
+      "text": "hv"
+    },
+    {
+      "character_offset": 554938,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 555496,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 556204,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 562135,
+      "alg": "Q",
+      "text": "HttpService"
+    },
+    {
+      "character_offset": 562872,
+      "alg": "U",
+      "text": "Velocity"
+    },
+    {
+      "character_offset": 570476,
+      "alg": "V",
+      "text": "__index"
+    },
+    {
+      "character_offset": 583111,
+      "alg": "V",
+      "text": "l4"
+    },
+    {
+      "character_offset": 583710,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 584496,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 584962,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 586684,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 587367,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 595339,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 595612,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 596317,
+      "alg": "V",
+      "text": "getfenv"
+    },
+    {
+      "character_offset": 599198,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 599562,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 621779,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 622583,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 625276,
+      "alg": "U",
+      "text": "\t"
+    },
+    {
+      "character_offset": 626023,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 626787,
+      "alg": "U",
+      "text": "1"
+    },
+    {
+      "character_offset": 627446,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 628639,
+      "alg": "V",
+      "text": "/"
+    },
+    {
+      "character_offset": 629223,
+      "alg": "Q",
+      "text": "r"
+    },
+    {
+      "character_offset": 631750,
+      "alg": "O",
+      "text": "F"
+    },
+    {
+      "character_offset": 641886,
+      "alg": "V",
+      "text": "!"
+    },
+    {
+      "character_offset": 642571,
+      "alg": "Q",
+      "text": "d"
+    },
+    {
+      "character_offset": 645171,
+      "alg": "Q",
+      "text": "Basalt"
+    },
+    {
+      "character_offset": 645834,
+      "alg": "U",
+      "text": "955789dbe862b654"
+    },
+    {
+      "character_offset": 655488,
+      "alg": "O",
+      "text": "new"
+    },
+    {
+      "character_offset": 656138,
+      "alg": "U",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 661327,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662006,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662723,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 663898,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 664605,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 665440,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 666215,
+      "alg": "U",
+      "text": "]5#=+~n"
+    },
+    {
+      "character_offset": 667066,
+      "alg": "Q",
+      "text": "i7}H"
+    },
+    {
+      "character_offset": 667737,
+      "alg": "O",
+      "text": "X\\J'"
+    },
+    {
+      "character_offset": 668488,
+      "alg": "Q",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 669731,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 673865,
+      "alg": "V",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 678012,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 681170,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 681905,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 687972,
+      "alg": "Q",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 689235,
+      "alg": "O",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 692393,
+      "alg": "O",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 696196,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 696821,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 699195,
+      "alg": "V",
+      "text": "restart"
+    },
+    {
+      "character_offset": 702803,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 703470,
+      "alg": "V",
+      "text": "R2"
+    },
+    {
+      "character_offset": 703810,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 704606,
+      "alg": "O",
+      "text": "W#"
+    },
+    {
+      "character_offset": 705320,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 706043,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 706728,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 707416,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 708179,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 708885,
+      "alg": "U",
+      "text": "-tcI"
+    },
+    {
+      "character_offset": 713358,
+      "alg": "Q",
+      "text": "rawset"
+    },
+    {
+      "character_offset": 714011,
+      "alg": "O",
+      "text": "consts"
+    },
+    {
+      "character_offset": 721630,
+      "alg": "O",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 722346,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 725186,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 733467,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 733729,
+      "alg": "V",
+      "text": "l2"
+    },
+    {
+      "character_offset": 734376,
+      "alg": "O",
+      "text": "#."
+    },
+    {
+      "character_offset": 738426,
+      "alg": "U",
+      "text": "requestBound"
+    }
+  ],
+  "unresolved_count": 79,
+  "nearby_literal_candidates": [
+    {
+      "character_offset": 3741,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "6a7b532e",
+          "text": "j{S.",
+          "printable_ratio": 1.0,
+          "key": [
+            3721385,
+            2501549,
+            77,
+            127,
+            139
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 397955
+        }
+      ]
+    },
+    {
+      "character_offset": 4412,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "7e275f6e",
+          "text": "~'_n",
+          "printable_ratio": 1.0,
+          "key": [
+            298453,
+            2229773,
+            171,
+            53,
+            141
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 5244,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "57367948",
+          "text": "W6yH",
+          "printable_ratio": 1.0,
+          "key": [
+            3721385,
+            2501549,
+            77,
+            127,
+            139
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 549
+        }
+      ]
+    },
+    {
+      "character_offset": 6029,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "49566c446a567e",
+          "text": "IVlDjV~",
+          "printable_ratio": 1.0,
+          "key": [
+            2355853,
+            3650485,
+            47,
+            235,
+            153
+          ],
+          "data": [
+            14,
+            185,
+            147,
+            61,
+            174,
+            48,
+            198
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "7e275f6e",
+          "text": "~'_n",
+          "printable_ratio": 1.0,
+          "key": [
+            298453,
+            2229773,
+            171,
+            53,
+            141
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 6750,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "49566c446a567e",
+          "text": "IVlDjV~",
+          "printable_ratio": 1.0,
+          "key": [
+            2355853,
+            3650485,
+            47,
+            235,
+            153
+          ],
+          "data": [
+            14,
+            185,
+            147,
+            61,
+            174,
+            48,
+            198
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "7e275f6e",
+          "text": "~'_n",
+          "printable_ratio": 1.0,
+          "key": [
+            298453,
+            2229773,
+            171,
+            53,
+            141
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 9506,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "72307d22",
+          "text": "r0}\"",
+          "printable_ratio": 1.0,
+          "key": [
+            3016545,
+            3282931,
+            11,
+            175,
+            241
+          ],
+          "data": [
+            235,
+            133,
+            201,
+            84
+          ],
+          "seed": 594
+        }
+      ]
+    },
+    {
+      "character_offset": 11278,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "213a7953",
+          "text": "!:yS",
+          "printable_ratio": 1.0,
+          "key": [
+            1883201,
+            2849917,
+            3,
+            141,
+            163
+          ],
+          "data": [
+            185,
+            17,
+            51,
+            154
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 17519,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "5546716725",
+          "text": "UFqg%",
+          "printable_ratio": 1.0,
+          "key": [
+            3229997,
+            3065479,
+            85,
+            153,
+            55
+          ],
+          "data": [
+            55,
+            208,
+            144,
+            21,
+            91
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 18498,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "3d22292968",
+          "text": "=\"))h",
+          "printable_ratio": 1.0,
+          "key": [
+            55,
+            208,
+            144,
+            21,
+            91
+          ],
+          "data": [
+            60,
+            46,
+            12,
+            121,
+            211
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 19232,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "3d22292968",
+          "text": "=\"))h",
+          "printable_ratio": 1.0,
+          "key": [
+            55,
+            208,
+            144,
+            21,
+            91
+          ],
+          "data": [
+            60,
+            46,
+            12,
+            121,
+            211
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 32856,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "09347d76",
+          "text": "\t4}v",
+          "printable_ratio": 1.0,
+          "key": [
+            979433,
+            3193735,
+            233,
+            185,
+            17
+          ],
+          "data": [
+            104,
+            233,
+            221,
+            96
+          ],
+          "seed": 874
+        }
+      ]
+    },
+    {
+      "character_offset": 33954,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "2a6b6528",
+          "text": "*ke(",
+          "printable_ratio": 1.0,
+          "key": [
+            148097,
+            3339493,
+            33,
+            133,
+            27
+          ],
+          "data": [
+            177,
+            71,
+            80,
+            41
+          ],
+          "seed": 688
+        },
+        {
+          "hex": "476d5b55",
+          "text": "Gm[U",
+          "printable_ratio": 1.0,
+          "key": [
+            2211825,
+            3006697,
+            23,
+            141,
+            171
+          ],
+          "data": [
+            104,
+            233,
+            221,
+            96
+          ],
+          "seed": 868
+        }
+      ]
+    },
+    {
+      "character_offset": 35608,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "517e3041",
+          "text": "Q~0A",
+          "printable_ratio": 1.0,
+          "key": [
+            148097,
+            3339493,
+            33,
+            133,
+            27
+          ],
+          "data": [
+            177,
+            71,
+            80,
+            41
+          ],
+          "seed": 868
+        }
+      ]
+    },
+    {
+      "character_offset": 36303,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "517e3041",
+          "text": "Q~0A",
+          "printable_ratio": 1.0,
+          "key": [
+            148097,
+            3339493,
+            33,
+            133,
+            27
+          ],
+          "data": [
+            177,
+            71,
+            80,
+            41
+          ],
+          "seed": 868
+        },
+        {
+          "hex": "5f32723e",
+          "text": "_2r>",
+          "printable_ratio": 1.0,
+          "key": [
+            1127281,
+            3555959,
+            181,
+            207,
+            109
+          ],
+          "data": [
+            177,
+            71,
+            80,
+            41
+          ],
+          "seed": 688
+        }
+      ]
+    },
+    {
+      "character_offset": 37079,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "5f32723e",
+          "text": "_2r>",
+          "printable_ratio": 1.0,
+          "key": [
+            1127281,
+            3555959,
+            181,
+            207,
+            109
+          ],
+          "data": [
+            177,
+            71,
+            80,
+            41
+          ],
+          "seed": 688
+        },
+        {
+          "hex": "6058465e",
+          "text": "`XF^",
+          "printable_ratio": 1.0,
+          "key": [
+            779981,
+            1933093,
+            207,
+            165,
+            237
+          ],
+          "data": [
+            187,
+            103,
+            170,
+            83
+          ],
+          "seed": 868
+        }
+      ]
+    },
+    {
+      "character_offset": 51155,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "6e354968",
+          "text": "n5Ih",
+          "printable_ratio": 1.0,
+          "key": [
+            2554673,
+            946095,
+            91,
+            15,
+            27
+          ],
+          "data": [
+            200,
+            166,
+            79,
+            165
+          ],
+          "seed": 828
+        }
+      ]
+    },
+    {
+      "character_offset": 51709,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "2c5f78347b",
+          "text": ",_x4{",
+          "printable_ratio": 1.0,
+          "key": [
+            2164085,
+            243215,
+            157,
+            73,
+            173
+          ],
+          "data": [
+            16,
+            70,
+            254,
+            194,
+            94
+          ],
+          "seed": 828
+        }
+      ]
+    },
+    {
+      "character_offset": 55617,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "3e545e3e",
+          "text": ">T^>",
+          "printable_ratio": 1.0,
+          "key": [
+            16,
+            70,
+            254,
+            194,
+            94
+          ],
+          "data": [
+            200,
+            166,
+            79,
+            165
+          ],
+          "seed": 444
+        },
+        {
+          "hex": "406d0a7a",
+          "text": "@m\nz",
+          "printable_ratio": 1.0,
+          "key": [
+            2164085,
+            243215,
+            157,
+            73,
+            173
+          ],
+          "data": [
+            200,
+            166,
+            79,
+            165
+          ],
+          "seed": 507
+        }
+      ]
+    },
+    {
+      "character_offset": 61193,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "27714f",
+          "text": "'qO",
+          "printable_ratio": 1.0,
+          "key": [
+            653201,
+            637915,
+            61,
+            215,
+            227
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 498
+        },
+        {
+          "hex": "294429",
+          "text": ")D)",
+          "printable_ratio": 1.0,
+          "key": [
+            653201,
+            637915,
+            61,
+            215,
+            227
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 597
+        }
+      ]
+    },
+    {
+      "character_offset": 61883,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "27714f",
+          "text": "'qO",
+          "printable_ratio": 1.0,
+          "key": [
+            653201,
+            637915,
+            61,
+            215,
+            227
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 498
+        },
+        {
+          "hex": "294429",
+          "text": ")D)",
+          "printable_ratio": 1.0,
+          "key": [
+            653201,
+            637915,
+            61,
+            215,
+            227
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 597
+        }
+      ]
+    },
+    {
+      "character_offset": 62466,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "294429",
+          "text": ")D)",
+          "printable_ratio": 1.0,
+          "key": [
+            653201,
+            637915,
+            61,
+            215,
+            227
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 597
+        }
+      ]
+    },
+    {
+      "character_offset": 63912,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "714f7d",
+          "text": "qO}",
+          "printable_ratio": 1.0,
+          "key": [
+            21,
+            187,
+            225,
+            241,
+            116
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 65756,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "714f7d",
+          "text": "qO}",
+          "printable_ratio": 1.0,
+          "key": [
+            21,
+            187,
+            225,
+            241,
+            116
+          ],
+          "data": [
+            124,
+            57,
+            33
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 70147,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2e493633",
+          "text": ".I63",
+          "printable_ratio": 1.0,
+          "key": [
+            703349,
+            126213,
+            171,
+            7,
+            89
+          ],
+          "data": [
+            176,
+            92,
+            9,
+            88
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 71111,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2e493633",
+          "text": ".I63",
+          "printable_ratio": 1.0,
+          "key": [
+            703349,
+            126213,
+            171,
+            7,
+            89
+          ],
+          "data": [
+            176,
+            92,
+            9,
+            88
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "29476a",
+          "text": ")Gj",
+          "printable_ratio": 1.0,
+          "key": [
+            703349,
+            126213,
+            171,
+            7,
+            89
+          ],
+          "data": [
+            161,
+            86,
+            165
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 71926,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "496d4d",
+          "text": "ImM",
+          "printable_ratio": 1.0,
+          "key": [
+            488905,
+            1331099,
+            131,
+            181,
+            159
+          ],
+          "data": [
+            17,
+            173,
+            217
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "6a6f2b",
+          "text": "jo+",
+          "printable_ratio": 1.0,
+          "key": [
+            3295109,
+            114921,
+            7,
+            91,
+            161
+          ],
+          "data": [
+            17,
+            173,
+            217
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 72601,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2a7162",
+          "text": "*qb",
+          "printable_ratio": 1.0,
+          "key": [
+            1784209,
+            546741,
+            81,
+            103,
+            43
+          ],
+          "data": [
+            161,
+            86,
+            165
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 73344,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2a7162",
+          "text": "*qb",
+          "printable_ratio": 1.0,
+          "key": [
+            1784209,
+            546741,
+            81,
+            103,
+            43
+          ],
+          "data": [
+            161,
+            86,
+            165
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 74105,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2a7162",
+          "text": "*qb",
+          "printable_ratio": 1.0,
+          "key": [
+            1784209,
+            546741,
+            81,
+            103,
+            43
+          ],
+          "data": [
+            161,
+            86,
+            165
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 74843,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "496d4d",
+          "text": "ImM",
+          "printable_ratio": 1.0,
+          "key": [
+            488905,
+            1331099,
+            131,
+            181,
+            159
+          ],
+          "data": [
+            17,
+            173,
+            217
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 96895,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "292a5543",
+          "text": ")*UC",
+          "printable_ratio": 1.0,
+          "key": [
+            1347685,
+            2857035,
+            205,
+            227,
+            207
+          ],
+          "data": [
+            201,
+            115,
+            215,
+            20
+          ],
+          "seed": 754
+        }
+      ]
+    },
+    {
+      "character_offset": 105910,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "2c3d635b",
+          "text": ",=c[",
+          "printable_ratio": 1.0,
+          "key": [
+            1387241,
+            599673,
+            223,
+            75,
+            187
+          ],
+          "data": [
+            220,
+            145,
+            141,
+            69
+          ],
+          "seed": 797957
+        }
+      ]
+    },
+    {
+      "character_offset": 106549,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "32253023",
+          "text": "2%0#",
+          "printable_ratio": 1.0,
+          "key": [
+            2967285,
+            748969,
+            161,
+            247,
+            221
+          ],
+          "data": [
+            220,
+            145,
+            141,
+            69
+          ],
+          "seed": 273039
+        },
+        {
+          "hex": "4d5c533c",
+          "text": "M\\S<",
+          "printable_ratio": 1.0,
+          "key": [
+            1087997,
+            2141549,
+            107,
+            111,
+            177
+          ],
+          "data": [
+            220,
+            145,
+            141,
+            69
+          ],
+          "seed": 750
+        },
+        {
+          "hex": "5e634234",
+          "text": "^cB4",
+          "printable_ratio": 1.0,
+          "key": [
+            229989,
+            386283,
+            35,
+            207,
+            153
+          ],
+          "data": [
+            220,
+            145,
+            141,
+            69
+          ],
+          "seed": 750
+        }
+      ]
+    },
+    {
+      "character_offset": 107714,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "096976376d",
+          "text": "\tiv7m",
+          "printable_ratio": 1.0,
+          "key": [
+            229989,
+            386283,
+            35,
+            207,
+            153
+          ],
+          "data": [
+            34,
+            39,
+            77,
+            89,
+            247
+          ],
+          "seed": 672
+        },
+        {
+          "hex": "255b437329",
+          "text": "%[Cs)",
+          "printable_ratio": 1.0,
+          "key": [
+            2967285,
+            748969,
+            161,
+            247,
+            221
+          ],
+          "data": [
+            34,
+            39,
+            77,
+            89,
+            247
+          ],
+          "seed": 768
+        },
+        {
+          "hex": "2d4a6a3a73",
+          "text": "-Jj:s",
+          "printable_ratio": 1.0,
+          "key": [
+            229989,
+            386283,
+            35,
+            207,
+            153
+          ],
+          "data": [
+            34,
+            39,
+            77,
+            89,
+            247
+          ],
+          "seed": 606
+        }
+      ]
+    },
+    {
+      "character_offset": 109439,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3e2e4b5467",
+          "text": ">.KTg",
+          "printable_ratio": 1.0,
+          "key": [
+            612409,
+            2964517,
+            35,
+            167,
+            89
+          ],
+          "data": [
+            90,
+            243,
+            184,
+            58,
+            107
+          ],
+          "seed": 672
+        },
+        {
+          "hex": "0a2a50",
+          "text": "\n*P",
+          "printable_ratio": 1.0,
+          "key": [
+            2593865,
+            513287,
+            171,
+            129,
+            123
+          ],
+          "data": [
+            1,
+            216,
+            33
+          ],
+          "seed": 768
+        }
+      ]
+    },
+    {
+      "character_offset": 117732,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "3b595a2232",
+          "text": ";YZ\"2",
+          "printable_ratio": 1.0,
+          "key": [
+            642117,
+            2077257,
+            203,
+            19,
+            229
+          ],
+          "data": [
+            64,
+            17,
+            84,
+            191,
+            119
+          ],
+          "seed": 906
+        }
+      ]
+    },
+    {
+      "character_offset": 121142,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "4764297462",
+          "text": "Gd)tb",
+          "printable_ratio": 1.0,
+          "key": [
+            642117,
+            2077257,
+            203,
+            19,
+            229
+          ],
+          "data": [
+            64,
+            17,
+            84,
+            191,
+            119
+          ],
+          "seed": 321
+        },
+        {
+          "hex": "4c50666a46",
+          "text": "LPfjF",
+          "printable_ratio": 1.0,
+          "key": [
+            400489,
+            46237,
+            201,
+            21,
+            35
+          ],
+          "data": [
+            43,
+            35,
+            90,
+            12,
+            48
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 128125,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "362c0a60",
+          "text": "6,\n`",
+          "printable_ratio": 1.0,
+          "key": [
+            43,
+            35,
+            90,
+            12,
+            48
+          ],
+          "data": [
+            192,
+            184,
+            22,
+            122
+          ],
+          "seed": 786
+        }
+      ]
+    },
+    {
+      "character_offset": 128823,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "650a554450",
+          "text": "e\nUDP",
+          "printable_ratio": 1.0,
+          "key": [
+            3840353,
+            2201873,
+            141,
+            205,
+            141
+          ],
+          "data": [
+            43,
+            35,
+            90,
+            12,
+            48
+          ],
+          "seed": 808
+        },
+        {
+          "hex": "4f305520",
+          "text": "O0U ",
+          "printable_ratio": 1.0,
+          "key": [
+            3887997,
+            2800123,
+            49,
+            99,
+            137
+          ],
+          "data": [
+            192,
+            184,
+            22,
+            122
+          ],
+          "seed": 165685
+        },
+        {
+          "hex": "71765727",
+          "text": "qvW'",
+          "printable_ratio": 1.0,
+          "key": [
+            3887997,
+            2800123,
+            49,
+            99,
+            137
+          ],
+          "data": [
+            192,
+            184,
+            22,
+            122
+          ],
+          "seed": 756
+        }
+      ]
+    },
+    {
+      "character_offset": 148688,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "2125777b",
+          "text": "!%w{",
+          "printable_ratio": 1.0,
+          "key": [
+            48,
+            174,
+            96,
+            109,
+            99
+          ],
+          "data": [
+            199,
+            31,
+            91,
+            27
+          ],
+          "seed": 828
+        },
+        {
+          "hex": "3f782c5d",
+          "text": "?x,]",
+          "printable_ratio": 1.0,
+          "key": [
+            217597,
+            3586579,
+            157,
+            51,
+            235
+          ],
+          "data": [
+            199,
+            31,
+            91,
+            27
+          ],
+          "seed": 884
+        }
+      ]
+    },
+    {
+      "character_offset": 149273,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "4a2d583b3a",
+          "text": "J-X;:",
+          "printable_ratio": 1.0,
+          "key": [
+            1440953,
+            749921,
+            239,
+            93,
+            107
+          ],
+          "data": [
+            48,
+            174,
+            96,
+            109,
+            99
+          ],
+          "seed": 788
+        },
+        {
+          "hex": "20204020",
+          "text": "  @ ",
+          "printable_ratio": 1.0,
+          "key": [
+            48,
+            174,
+            96,
+            109,
+            99
+          ],
+          "data": [
+            186,
+            246,
+            182,
+            225
+          ],
+          "seed": 796
+        },
+        {
+          "hex": "66487348",
+          "text": "fHsH",
+          "printable_ratio": 1.0,
+          "key": [
+            1440953,
+            749921,
+            239,
+            93,
+            107
+          ],
+          "data": [
+            186,
+            246,
+            182,
+            225
+          ],
+          "seed": 796
+        }
+      ]
+    },
+    {
+      "character_offset": 149934,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2b237927",
+          "text": "+#y'",
+          "printable_ratio": 1.0,
+          "key": [
+            3586853,
+            3453117,
+            121,
+            121,
+            15
+          ],
+          "data": [
+            186,
+            246,
+            182,
+            225
+          ],
+          "seed": 876
+        },
+        {
+          "hex": "2f365b66",
+          "text": "/6[f",
+          "printable_ratio": 1.0,
+          "key": [
+            3586853,
+            3453117,
+            121,
+            121,
+            15
+          ],
+          "data": [
+            44,
+            42,
+            111,
+            153
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "5432753d",
+          "text": "T2u=",
+          "printable_ratio": 1.0,
+          "key": [
+            1547453,
+            3657959,
+            19,
+            209,
+            15
+          ],
+          "data": [
+            44,
+            42,
+            111,
+            153
+          ],
+          "seed": 876
+        },
+        {
+          "hex": "6f2e7642",
+          "text": "o.vB",
+          "printable_ratio": 1.0,
+          "key": [
+            3586853,
+            3453117,
+            121,
+            121,
+            15
+          ],
+          "data": [
+            186,
+            246,
+            182,
+            225
+          ],
+          "seed": 828
+        }
+      ]
+    },
+    {
+      "character_offset": 153054,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2f365b66",
+          "text": "/6[f",
+          "printable_ratio": 1.0,
+          "key": [
+            3586853,
+            3453117,
+            121,
+            121,
+            15
+          ],
+          "data": [
+            44,
+            42,
+            111,
+            153
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "55694e78",
+          "text": "UiNx",
+          "printable_ratio": 1.0,
+          "key": [
+            2656645,
+            3399911,
+            201,
+            157,
+            25
+          ],
+          "data": [
+            44,
+            42,
+            111,
+            153
+          ],
+          "seed": 980
+        }
+      ]
+    },
+    {
+      "character_offset": 157633,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "7d736967",
+          "text": "}sig",
+          "printable_ratio": 1.0,
+          "key": [
+            2656645,
+            3399911,
+            201,
+            157,
+            25
+          ],
+          "data": [
+            44,
+            42,
+            111,
+            153
+          ],
+          "seed": 646
+        }
+      ]
+    },
+    {
+      "character_offset": 158364,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "453e3536",
+          "text": "E>56",
+          "printable_ratio": 1.0,
+          "key": [
+            2656645,
+            3399911,
+            201,
+            157,
+            25
+          ],
+          "data": [
+            250,
+            228,
+            11,
+            33
+          ],
+          "seed": 613
+        }
+      ]
+    },
+    {
+      "character_offset": 159766,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "3346623b",
+          "text": "3Fb;",
+          "printable_ratio": 1.0,
+          "key": [
+            3770673,
+            3645069,
+            63,
+            197,
+            121
+          ],
+          "data": [
+            250,
+            228,
+            11,
+            33
+          ],
+          "seed": 628
+        },
+        {
+          "hex": "6a564e3d",
+          "text": "jVN=",
+          "printable_ratio": 1.0,
+          "key": [
+            567713,
+            1469011,
+            37,
+            121,
+            245
+          ],
+          "data": [
+            53,
+            100,
+            191,
+            147
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 160367,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "0a4d2c26",
+          "text": "\nM,&",
+          "printable_ratio": 1.0,
+          "key": [
+            3802893,
+            1084603,
+            99,
+            247,
+            61
+          ],
+          "data": [
+            171,
+            36,
+            165,
+            54
+          ],
+          "seed": 613
+        },
+        {
+          "hex": "385b5f2b",
+          "text": "8[_+",
+          "printable_ratio": 1.0,
+          "key": [
+            1157629,
+            3203645,
+            215,
+            199,
+            135
+          ],
+          "data": [
+            171,
+            36,
+            165,
+            54
+          ],
+          "seed": 646
+        },
+        {
+          "hex": "4a594545",
+          "text": "JYEE",
+          "printable_ratio": 1.0,
+          "key": [
+            1157629,
+            3203645,
+            215,
+            199,
+            135
+          ],
+          "data": [
+            53,
+            100,
+            191,
+            147
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 170340,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "4b664e21",
+          "text": "KfN!",
+          "printable_ratio": 1.0,
+          "key": [
+            2065317,
+            1218959,
+            95,
+            109,
+            197
+          ],
+          "data": [
+            209,
+            108,
+            183,
+            234
+          ],
+          "seed": 503
+        }
+      ]
+    },
+    {
+      "character_offset": 172070,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "5178236a3e2a",
+          "text": "Qx#j>*",
+          "printable_ratio": 1.0,
+          "key": [
+            2065317,
+            1218959,
+            95,
+            109,
+            197
+          ],
+          "data": [
+            149,
+            215,
+            139,
+            106,
+            154,
+            73
+          ],
+          "seed": 670
+        },
+        {
+          "hex": "3e5e6928",
+          "text": ">^i(",
+          "printable_ratio": 1.0,
+          "key": [
+            1013269,
+            1323925,
+            61,
+            253,
+            247
+          ],
+          "data": [
+            172,
+            194,
+            171,
+            8
+          ],
+          "seed": 670
+        },
+        {
+          "hex": "515b673a",
+          "text": "Q[g:",
+          "printable_ratio": 1.0,
+          "key": [
+            559433,
+            3351675,
+            227,
+            25,
+            157
+          ],
+          "data": [
+            172,
+            194,
+            171,
+            8
+          ],
+          "seed": 670
+        }
+      ]
+    },
+    {
+      "character_offset": 172792,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "53244f79",
+          "text": "S$Oy",
+          "printable_ratio": 1.0,
+          "key": [
+            996385,
+            1321359,
+            157,
+            139,
+            241
+          ],
+          "data": [
+            209,
+            108,
+            183,
+            234
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 175549,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "50686b7054",
+          "text": "PhkpT",
+          "printable_ratio": 1.0,
+          "key": [
+            3073893,
+            3280793,
+            165,
+            117,
+            109
+          ],
+          "data": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "233a54",
+          "text": "#:T",
+          "printable_ratio": 1.0,
+          "key": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "data": [
+            192,
+            187,
+            183
+          ],
+          "seed": 635
+        }
+      ]
+    },
+    {
+      "character_offset": 180111,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "5b0d7e5d49",
+          "text": "[\r~]I",
+          "printable_ratio": 1.0,
+          "key": [
+            3073893,
+            3280793,
+            165,
+            117,
+            109
+          ],
+          "data": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "seed": 367
+        },
+        {
+          "hex": "3c595b",
+          "text": "<Y[",
+          "printable_ratio": 1.0,
+          "key": [
+            3073893,
+            3280793,
+            165,
+            117,
+            109
+          ],
+          "data": [
+            192,
+            187,
+            183
+          ],
+          "seed": 359
+        },
+        {
+          "hex": "573a30",
+          "text": "W:0",
+          "printable_ratio": 1.0,
+          "key": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "data": [
+            192,
+            187,
+            183
+          ],
+          "seed": 319
+        },
+        {
+          "hex": "60315c",
+          "text": "`1\\",
+          "printable_ratio": 1.0,
+          "key": [
+            2035049,
+            919547,
+            3,
+            247,
+            159
+          ],
+          "data": [
+            192,
+            187,
+            183
+          ],
+          "seed": 495
+        }
+      ]
+    },
+    {
+      "character_offset": 180846,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "50686b7054",
+          "text": "PhkpT",
+          "printable_ratio": 1.0,
+          "key": [
+            3073893,
+            3280793,
+            165,
+            117,
+            109
+          ],
+          "data": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "376d4370",
+          "text": "7mCp",
+          "printable_ratio": 1.0,
+          "key": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "data": [
+            26,
+            42,
+            102,
+            159
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "605a6479",
+          "text": "`Zdy",
+          "printable_ratio": 1.0,
+          "key": [
+            181,
+            98,
+            179,
+            4,
+            124
+          ],
+          "data": [
+            26,
+            42,
+            102,
+            159
+          ],
+          "seed": 300
+        }
+      ]
+    },
+    {
+      "character_offset": 184948,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "0d335d26",
+          "text": "\r3]&",
+          "printable_ratio": 1.0,
+          "key": [
+            207,
+            160,
+            111,
+            36,
+            108
+          ],
+          "data": [
+            26,
+            42,
+            102,
+            159
+          ],
+          "seed": 383
+        },
+        {
+          "hex": "706e7875",
+          "text": "pnxu",
+          "printable_ratio": 1.0,
+          "key": [
+            880065,
+            3863163,
+            123,
+            103,
+            233
+          ],
+          "data": [
+            26,
+            42,
+            102,
+            159
+          ],
+          "seed": 383
+        }
+      ]
+    },
+    {
+      "character_offset": 191575,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "226c587c",
+          "text": "\"lX|",
+          "printable_ratio": 1.0,
+          "key": [
+            186,
+            102,
+            102,
+            163,
+            229
+          ],
+          "data": [
+            55,
+            10,
+            164,
+            141
+          ],
+          "seed": 597
+        }
+      ]
+    },
+    {
+      "character_offset": 192281,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "3c235e453c",
+          "text": "<#^E<",
+          "printable_ratio": 1.0,
+          "key": [
+            971245,
+            3637157,
+            115,
+            229,
+            185
+          ],
+          "data": [
+            186,
+            102,
+            102,
+            163,
+            229
+          ],
+          "seed": 597
+        }
+      ]
+    },
+    {
+      "character_offset": 196036,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "463d2e30",
+          "text": "F=.0",
+          "printable_ratio": 1.0,
+          "key": [
+            2872333,
+            560405,
+            221,
+            107,
+            111
+          ],
+          "data": [
+            55,
+            10,
+            164,
+            141
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 218691,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "474357",
+          "text": "GCW",
+          "printable_ratio": 1.0,
+          "key": [
+            2120305,
+            1303525,
+            145,
+            95,
+            15
+          ],
+          "data": [
+            77,
+            188,
+            106
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 219503,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "49687d",
+          "text": "Ih}",
+          "printable_ratio": 1.0,
+          "key": [
+            453641,
+            2418383,
+            157,
+            229,
+            133
+          ],
+          "data": [
+            77,
+            188,
+            106
+          ],
+          "seed": 7
+        }
+      ]
+    },
+    {
+      "character_offset": 220645,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "20554c",
+          "text": " UL",
+          "printable_ratio": 1.0,
+          "key": [
+            3490425,
+            2839613,
+            215,
+            61,
+            45
+          ],
+          "data": [
+            77,
+            188,
+            106
+          ],
+          "seed": 7
+        }
+      ]
+    },
+    {
+      "character_offset": 246785,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3b4270",
+          "text": ";Bp",
+          "printable_ratio": 1.0,
+          "key": [
+            569749,
+            3095831,
+            167,
+            95,
+            193
+          ],
+          "data": [
+            236,
+            115,
+            42
+          ],
+          "seed": 200
+        },
+        {
+          "hex": "6b6567",
+          "text": "keg",
+          "printable_ratio": 1.0,
+          "key": [
+            2850057,
+            2567241,
+            99,
+            69,
+            193
+          ],
+          "data": [
+            10,
+            22,
+            193
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "767b34",
+          "text": "v{4",
+          "printable_ratio": 1.0,
+          "key": [
+            2850057,
+            2567241,
+            99,
+            69,
+            193
+          ],
+          "data": [
+            10,
+            22,
+            193
+          ],
+          "seed": 200
+        }
+      ]
+    },
+    {
+      "character_offset": 247595,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "3c7b4c",
+          "text": "<{L",
+          "printable_ratio": 1.0,
+          "key": [
+            569749,
+            3095831,
+            167,
+            95,
+            193
+          ],
+          "data": [
+            236,
+            115,
+            42
+          ],
+          "seed": 200
+        }
+      ]
+    },
+    {
+      "character_offset": 259303,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "2e244d",
+          "text": ".$M",
+          "printable_ratio": 1.0,
+          "key": [
+            2202901,
+            2060173,
+            203,
+            119,
+            79
+          ],
+          "data": [
+            163,
+            249,
+            98
+          ],
+          "seed": 13
+        }
+      ]
+    },
+    {
+      "character_offset": 261728,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2d3771",
+          "text": "-7q",
+          "printable_ratio": 1.0,
+          "key": [
+            2202901,
+            2060173,
+            203,
+            119,
+            79
+          ],
+          "data": [
+            163,
+            249,
+            98
+          ],
+          "seed": 13
+        }
+      ]
+    },
+    {
+      "character_offset": 265324,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "386b7a50",
+          "text": "8kzP",
+          "printable_ratio": 1.0,
+          "key": [
+            2533385,
+            3069419,
+            127,
+            177,
+            65
+          ],
+          "data": [
+            190,
+            23,
+            44,
+            147
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "74607220",
+          "text": "t`r ",
+          "printable_ratio": 1.0,
+          "key": [
+            1515425,
+            3608815,
+            237,
+            51,
+            75
+          ],
+          "data": [
+            190,
+            23,
+            44,
+            147
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 272060,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "373f4462",
+          "text": "7?Db",
+          "printable_ratio": 1.0,
+          "key": [
+            3026129,
+            219087,
+            145,
+            97,
+            163
+          ],
+          "data": [
+            190,
+            23,
+            44,
+            147
+          ],
+          "seed": 504
+        }
+      ]
+    },
+    {
+      "character_offset": 294195,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "395709",
+          "text": "9W\t",
+          "printable_ratio": 1.0,
+          "key": [
+            875857,
+            1060563,
+            63,
+            155,
+            63
+          ],
+          "data": [
+            143,
+            145,
+            59
+          ],
+          "seed": 0
+        }
+      ]
+    },
+    {
+      "character_offset": 294911,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "2a4c3b",
+          "text": "*L;",
+          "printable_ratio": 1.0,
+          "key": [
+            875857,
+            1060563,
+            63,
+            155,
+            63
+          ],
+          "data": [
+            143,
+            145,
+            59
+          ],
+          "seed": 300
+        }
+      ]
+    },
+    {
+      "character_offset": 296138,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "28344249",
+          "text": "(4BI",
+          "printable_ratio": 1.0,
+          "key": [
+            3995501,
+            3315183,
+            195,
+            125,
+            9
+          ],
+          "data": [
+            69,
+            30,
+            76,
+            38
+          ],
+          "seed": 404
+        },
+        {
+          "hex": "3c493548",
+          "text": "<I5H",
+          "printable_ratio": 1.0,
+          "key": [
+            107645,
+            3055035,
+            199,
+            197,
+            215
+          ],
+          "data": [
+            201,
+            229,
+            205,
+            40
+          ],
+          "seed": 404
+        },
+        {
+          "hex": "483d7779",
+          "text": "H=wy",
+          "printable_ratio": 1.0,
+          "key": [
+            875857,
+            1060563,
+            63,
+            155,
+            63
+          ],
+          "data": [
+            69,
+            30,
+            76,
+            38
+          ],
+          "seed": 405
+        }
+      ]
+    },
+    {
+      "character_offset": 296821,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "28344249",
+          "text": "(4BI",
+          "printable_ratio": 1.0,
+          "key": [
+            3995501,
+            3315183,
+            195,
+            125,
+            9
+          ],
+          "data": [
+            69,
+            30,
+            76,
+            38
+          ],
+          "seed": 404
+        },
+        {
+          "hex": "3c493548",
+          "text": "<I5H",
+          "printable_ratio": 1.0,
+          "key": [
+            107645,
+            3055035,
+            199,
+            197,
+            215
+          ],
+          "data": [
+            201,
+            229,
+            205,
+            40
+          ],
+          "seed": 404
+        },
+        {
+          "hex": "41464557",
+          "text": "AFEW",
+          "printable_ratio": 1.0,
+          "key": [
+            1315653,
+            834333,
+            147,
+            185,
+            211
+          ],
+          "data": [
+            69,
+            30,
+            76,
+            38
+          ],
+          "seed": 500
+        },
+        {
+          "hex": "483d7779",
+          "text": "H=wy",
+          "printable_ratio": 1.0,
+          "key": [
+            875857,
+            1060563,
+            63,
+            155,
+            63
+          ],
+          "data": [
+            69,
+            30,
+            76,
+            38
+          ],
+          "seed": 405
+        }
+      ]
+    },
+    {
+      "character_offset": 323848,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "7044682064",
+          "text": "pDh d",
+          "printable_ratio": 1.0,
+          "key": [
+            2841801,
+            1405979,
+            113,
+            139,
+            73
+          ],
+          "data": [
+            132,
+            95,
+            0,
+            75,
+            161
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 335494,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "560a7b66",
+          "text": "V\n{f",
+          "printable_ratio": 1.0,
+          "key": [
+            1844749,
+            1931547,
+            153,
+            171,
+            87
+          ],
+          "data": [
+            130,
+            77,
+            112,
+            159
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 336148,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "560a7b66",
+          "text": "V\n{f",
+          "printable_ratio": 1.0,
+          "key": [
+            1844749,
+            1931547,
+            153,
+            171,
+            87
+          ],
+          "data": [
+            130,
+            77,
+            112,
+            159
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 353474,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "627b59",
+          "text": "b{Y",
+          "printable_ratio": 1.0,
+          "key": [
+            2094885,
+            2093533,
+            101,
+            159,
+            225
+          ],
+          "data": [
+            211,
+            156,
+            102
+          ],
+          "seed": 30
+        }
+      ]
+    },
+    {
+      "character_offset": 354102,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "435135",
+          "text": "CQ5",
+          "printable_ratio": 1.0,
+          "key": [
+            2094885,
+            2093533,
+            101,
+            159,
+            225
+          ],
+          "data": [
+            211,
+            156,
+            102
+          ],
+          "seed": 30
+        }
+      ]
+    },
+    {
+      "character_offset": 385032,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "30667a",
+          "text": "0fz",
+          "printable_ratio": 1.0,
+          "key": [
+            3904001,
+            3288721,
+            85,
+            253,
+            35
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 208
+        },
+        {
+          "hex": "702078",
+          "text": "p x",
+          "printable_ratio": 1.0,
+          "key": [
+            3904001,
+            3288721,
+            85,
+            253,
+            35
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 361748
+        }
+      ]
+    },
+    {
+      "character_offset": 385699,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "472a32",
+          "text": "G*2",
+          "printable_ratio": 1.0,
+          "key": [
+            1912249,
+            3042839,
+            61,
+            101,
+            183
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 361748
+        }
+      ]
+    },
+    {
+      "character_offset": 386403,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "434820",
+          "text": "CH ",
+          "printable_ratio": 1.0,
+          "key": [
+            790877,
+            2574719,
+            139,
+            233,
+            165
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 226
+        },
+        {
+          "hex": "573d58",
+          "text": "W=X",
+          "printable_ratio": 1.0,
+          "key": [
+            790877,
+            2574719,
+            139,
+            233,
+            165
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "5a5220",
+          "text": "ZR ",
+          "printable_ratio": 1.0,
+          "key": [
+            790877,
+            2574719,
+            139,
+            233,
+            165
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 253
+        },
+        {
+          "hex": "5c6159",
+          "text": "\\aY",
+          "printable_ratio": 1.0,
+          "key": [
+            3834561,
+            2858413,
+            15,
+            243,
+            241
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 226
+        },
+        {
+          "hex": "6d0a2f",
+          "text": "m\n/",
+          "printable_ratio": 1.0,
+          "key": [
+            3904001,
+            3288721,
+            85,
+            253,
+            35
+          ],
+          "data": [
+            244,
+            145,
+            205
+          ],
+          "seed": 361748
+        }
+      ]
+    },
+    {
+      "character_offset": 391136,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "4d6a3955",
+          "text": "Mj9U",
+          "printable_ratio": 1.0,
+          "key": [
+            1914969,
+            1909171,
+            237,
+            37,
+            125
+          ],
+          "data": [
+            226,
+            73,
+            96,
+            178
+          ],
+          "seed": 253
+        }
+      ]
+    },
+    {
+      "character_offset": 392688,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "50097e2f",
+          "text": "P\t~/",
+          "printable_ratio": 1.0,
+          "key": [
+            3136209,
+            2930141,
+            77,
+            155,
+            171
+          ],
+          "data": [
+            226,
+            73,
+            96,
+            178
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 401847,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "694e79",
+          "text": "iNy",
+          "printable_ratio": 1.0,
+          "key": [
+            1825545,
+            1886227,
+            27,
+            69,
+            1
+          ],
+          "data": [
+            219,
+            189,
+            191
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 406203,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "406b66",
+          "text": "@kf",
+          "printable_ratio": 1.0,
+          "key": [
+            230,
+            138,
+            77,
+            67,
+            154
+          ],
+          "data": [
+            128,
+            107,
+            117
+          ],
+          "seed": 537
+        },
+        {
+          "hex": "4a4e6e",
+          "text": "JNn",
+          "printable_ratio": 1.0,
+          "key": [
+            238,
+            135,
+            157,
+            251,
+            211
+          ],
+          "data": [
+            128,
+            107,
+            117
+          ],
+          "seed": 537
+        }
+      ]
+    },
+    {
+      "character_offset": 406826,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "406b66",
+          "text": "@kf",
+          "printable_ratio": 1.0,
+          "key": [
+            230,
+            138,
+            77,
+            67,
+            154
+          ],
+          "data": [
+            128,
+            107,
+            117
+          ],
+          "seed": 537
+        }
+      ]
+    },
+    {
+      "character_offset": 410502,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "41793b43",
+          "text": "Ay;C",
+          "printable_ratio": 1.0,
+          "key": [
+            2957329,
+            603969,
+            163,
+            101,
+            229
+          ],
+          "data": [
+            97,
+            111,
+            202,
+            252
+          ],
+          "seed": 537
+        },
+        {
+          "hex": "543a306e",
+          "text": "T:0n",
+          "printable_ratio": 1.0,
+          "key": [
+            2957329,
+            603969,
+            163,
+            101,
+            229
+          ],
+          "data": [
+            97,
+            111,
+            202,
+            252
+          ],
+          "seed": 489
+        },
+        {
+          "hex": "74750d",
+          "text": "tu\r",
+          "printable_ratio": 1.0,
+          "key": [
+            207213,
+            3561815,
+            107,
+            95,
+            177
+          ],
+          "data": [
+            128,
+            107,
+            117
+          ],
+          "seed": 489
+        }
+      ]
+    },
+    {
+      "character_offset": 428979,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "6747356533",
+          "text": "gG5e3",
+          "printable_ratio": 1.0,
+          "key": [
+            3298329,
+            1648855,
+            119,
+            167,
+            185
+          ],
+          "data": [
+            130,
+            214,
+            26,
+            8,
+            227
+          ],
+          "seed": 11
+        }
+      ]
+    },
+    {
+      "character_offset": 460811,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2877245a5839242a",
+          "text": "(w$ZX9$*",
+          "printable_ratio": 1.0,
+          "key": [
+            382081,
+            1403533,
+            199,
+            147,
+            117
+          ],
+          "data": [
+            171,
+            76,
+            86,
+            22,
+            218,
+            204,
+            239,
+            192
+          ],
+          "seed": 471
+        }
+      ]
+    },
+    {
+      "character_offset": 463503,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "4d625c2d",
+          "text": "Mb\\-",
+          "printable_ratio": 1.0,
+          "key": [
+            3430681,
+            2722511,
+            5,
+            63,
+            207
+          ],
+          "data": [
+            30,
+            248,
+            44,
+            40
+          ],
+          "seed": 3
+        },
+        {
+          "hex": "5e3c28",
+          "text": "^<(",
+          "printable_ratio": 1.0,
+          "key": [
+            3430681,
+            2722511,
+            5,
+            63,
+            207
+          ],
+          "data": [
+            192,
+            188,
+            252
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "77366c",
+          "text": "w6l",
+          "printable_ratio": 1.0,
+          "key": [
+            3430681,
+            2722511,
+            5,
+            63,
+            207
+          ],
+          "data": [
+            192,
+            188,
+            252
+          ],
+          "seed": 3
+        }
+      ]
+    },
+    {
+      "character_offset": 468829,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "795e5d0d",
+          "text": "y^]\r",
+          "printable_ratio": 1.0,
+          "key": [
+            689529,
+            2609761,
+            169,
+            49,
+            225
+          ],
+          "data": [
+            30,
+            248,
+            44,
+            40
+          ],
+          "seed": 0
+        }
+      ]
+    },
+    {
+      "character_offset": 475474,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "4a4f703a",
+          "text": "JOp:",
+          "printable_ratio": 1.0,
+          "key": [
+            95565,
+            1766859,
+            159,
+            117,
+            115
+          ],
+          "data": [
+            208,
+            218,
+            68,
+            110
+          ],
+          "seed": 0
+        },
+        {
+          "hex": "5a64765f",
+          "text": "Zdv_",
+          "printable_ratio": 1.0,
+          "key": [
+            1310269,
+            836343,
+            177,
+            61,
+            67
+          ],
+          "data": [
+            244,
+            71,
+            161,
+            210
+          ],
+          "seed": 500
+        }
+      ]
+    },
+    {
+      "character_offset": 476492,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "61617c69",
+          "text": "aa|i",
+          "printable_ratio": 1.0,
+          "key": [
+            109417,
+            1247025,
+            63,
+            109,
+            19
+          ],
+          "data": [
+            244,
+            71,
+            161,
+            210
+          ],
+          "seed": 0
+        }
+      ]
+    },
+    {
+      "character_offset": 527649,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "7070513648",
+          "text": "ppQ6H",
+          "printable_ratio": 1.0,
+          "key": [
+            1484961,
+            2418521,
+            37,
+            209,
+            237
+          ],
+          "data": [
+            29,
+            237,
+            189,
+            250,
+            204
+          ],
+          "seed": 500
+        },
+        {
+          "hex": "5a782d2f",
+          "text": "Zx-/",
+          "printable_ratio": 1.0,
+          "key": [
+            1000217,
+            1633619,
+            251,
+            41,
+            197
+          ],
+          "data": [
+            181,
+            100,
+            150,
+            38
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 528993,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3d4163",
+          "text": "=Ac",
+          "printable_ratio": 1.0,
+          "key": [
+            1484961,
+            2418521,
+            37,
+            209,
+            237
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 531162,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "3b374f",
+          "text": ";7O",
+          "printable_ratio": 1.0,
+          "key": [
+            1211849,
+            280013,
+            9,
+            17,
+            125
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 1
+        },
+        {
+          "hex": "76257c",
+          "text": "v%|",
+          "printable_ratio": 1.0,
+          "key": [
+            1484961,
+            2418521,
+            37,
+            209,
+            237
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 533003,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3d4163",
+          "text": "=Ac",
+          "printable_ratio": 1.0,
+          "key": [
+            1484961,
+            2418521,
+            37,
+            209,
+            237
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 533715,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "4d5d7d",
+          "text": "M]}",
+          "printable_ratio": 1.0,
+          "key": [
+            1320981,
+            854235,
+            69,
+            95,
+            187
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 535823,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "5d6b40",
+          "text": "]k@",
+          "printable_ratio": 1.0,
+          "key": [
+            1320981,
+            854235,
+            69,
+            95,
+            187
+          ],
+          "data": [
+            145,
+            157,
+            37
+          ],
+          "seed": 401
+        }
+      ]
+    },
+    {
+      "character_offset": 537620,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "39374060",
+          "text": "97@`",
+          "printable_ratio": 1.0,
+          "key": [
+            2039989,
+            298033,
+            21,
+            67,
+            3
+          ],
+          "data": [
+            239,
+            13,
+            170,
+            30
+          ],
+          "seed": 401
+        }
+      ]
+    },
+    {
+      "character_offset": 547825,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "38516c5f",
+          "text": "8Ql_",
+          "printable_ratio": 1.0,
+          "key": [
+            183869,
+            3115759,
+            43,
+            91,
+            123
+          ],
+          "data": [
+            170,
+            253,
+            170,
+            177
+          ],
+          "seed": 868504
+        }
+      ]
+    },
+    {
+      "character_offset": 549406,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "782b706d2034",
+          "text": "x+pm 4",
+          "printable_ratio": 1.0,
+          "key": [
+            3860173,
+            1636845,
+            123,
+            229,
+            255
+          ],
+          "data": [
+            57,
+            114,
+            90,
+            206,
+            249,
+            58
+          ],
+          "seed": 5
+        },
+        {
+          "hex": "4c256a70",
+          "text": "L%jp",
+          "printable_ratio": 1.0,
+          "key": [
+            3860173,
+            1636845,
+            123,
+            229,
+            255
+          ],
+          "data": [
+            170,
+            253,
+            170,
+            177
+          ],
+          "seed": 868504
+        }
+      ]
+    },
+    {
+      "character_offset": 554623,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "2c41393d",
+          "text": ",A9=",
+          "printable_ratio": 1.0,
+          "key": [
+            566889,
+            2639045,
+            185,
+            213,
+            223
+          ],
+          "data": [
+            127,
+            41,
+            5,
+            182
+          ],
+          "seed": 5
+        }
+      ]
+    },
+    {
+      "character_offset": 656138,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "585f5e",
+          "text": "X_^",
+          "printable_ratio": 1.0,
+          "key": [
+            2678477,
+            1513591,
+            75,
+            231,
+            185
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 446
+        }
+      ]
+    },
+    {
+      "character_offset": 660501,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "783135",
+          "text": "x15",
+          "printable_ratio": 1.0,
+          "key": [
+            936589,
+            3583245,
+            227,
+            133,
+            25
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 450
+        }
+      ]
+    },
+    {
+      "character_offset": 661327,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2a2432",
+          "text": "*$2",
+          "printable_ratio": 1.0,
+          "key": [
+            936589,
+            3583245,
+            227,
+            133,
+            25
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 481319
+        },
+        {
+          "hex": "723878",
+          "text": "r8x",
+          "printable_ratio": 1.0,
+          "key": [
+            3088349,
+            2295073,
+            229,
+            167,
+            137
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 398
+        }
+      ]
+    },
+    {
+      "character_offset": 662006,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "2a2432",
+          "text": "*$2",
+          "printable_ratio": 1.0,
+          "key": [
+            936589,
+            3583245,
+            227,
+            133,
+            25
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 481319
+        },
+        {
+          "hex": "723878",
+          "text": "r8x",
+          "printable_ratio": 1.0,
+          "key": [
+            3088349,
+            2295073,
+            229,
+            167,
+            137
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 398
+        }
+      ]
+    },
+    {
+      "character_offset": 662723,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "4e643c",
+          "text": "Nd<",
+          "printable_ratio": 1.0,
+          "key": [
+            89,
+            0,
+            178,
+            101,
+            123
+          ],
+          "data": [
+            244,
+            71,
+            76
+          ],
+          "seed": 482
+        }
+      ]
+    },
+    {
+      "character_offset": 663898,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3b5e2b6930",
+          "text": ";^+i0",
+          "printable_ratio": 1.0,
+          "key": [
+            3365849,
+            2822321,
+            163,
+            219,
+            107
+          ],
+          "data": [
+            89,
+            0,
+            178,
+            101,
+            123
+          ],
+          "seed": 378
+        }
+      ]
+    },
+    {
+      "character_offset": 664605,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3b5e2b6930",
+          "text": ";^+i0",
+          "printable_ratio": 1.0,
+          "key": [
+            3365849,
+            2822321,
+            163,
+            219,
+            107
+          ],
+          "data": [
+            89,
+            0,
+            178,
+            101,
+            123
+          ],
+          "seed": 378
+        }
+      ]
+    },
+    {
+      "character_offset": 666215,
+      "algorithm": "bU",
+      "candidates": [
+        {
+          "hex": "746f633c",
+          "text": "toc<",
+          "printable_ratio": 1.0,
+          "key": [
+            1787285,
+            854081,
+            91,
+            139,
+            11
+          ],
+          "data": [
+            143,
+            43,
+            255,
+            58
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 667737,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "504c2e74",
+          "text": "PL.t",
+          "printable_ratio": 1.0,
+          "key": [
+            3270573,
+            989093,
+            233,
+            211,
+            125
+          ],
+          "data": [
+            143,
+            43,
+            255,
+            58
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 668488,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "4c0d29597b",
+          "text": "L\r)Y{",
+          "printable_ratio": 1.0,
+          "key": [
+            2810961,
+            72109,
+            23,
+            41,
+            73
+          ],
+          "data": [
+            90,
+            3,
+            193,
+            39,
+            188
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 673865,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "4675223d",
+          "text": "Fu\"=",
+          "printable_ratio": 1.0,
+          "key": [
+            1832425,
+            3382035,
+            171,
+            103,
+            203
+          ],
+          "data": [
+            174,
+            54,
+            96,
+            169
+          ],
+          "seed": 541
+        }
+      ]
+    },
+    {
+      "character_offset": 674236,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "62357c7c",
+          "text": "b5||",
+          "printable_ratio": 1.0,
+          "key": [
+            1848993,
+            2682055,
+            233,
+            101,
+            41
+          ],
+          "data": [
+            174,
+            54,
+            96,
+            169
+          ],
+          "seed": 453
+        }
+      ]
+    },
+    {
+      "character_offset": 687972,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "6a463c5b",
+          "text": "jF<[",
+          "printable_ratio": 1.0,
+          "key": [
+            2329849,
+            3691797,
+            191,
+            191,
+            47
+          ],
+          "data": [
+            142,
+            180,
+            119,
+            234
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 689235,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "68532e28",
+          "text": "hS.(",
+          "printable_ratio": 1.0,
+          "key": [
+            2329849,
+            3691797,
+            191,
+            191,
+            47
+          ],
+          "data": [
+            249,
+            36,
+            54,
+            219
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 696821,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "3b7b3a68",
+          "text": ";{:h",
+          "printable_ratio": 1.0,
+          "key": [
+            3629925,
+            443289,
+            35,
+            153,
+            135
+          ],
+          "data": [
+            131,
+            125,
+            140,
+            220
+          ],
+          "seed": 529
+        },
+        {
+          "hex": "59752b53",
+          "text": "Yu+S",
+          "printable_ratio": 1.0,
+          "key": [
+            1626221,
+            280557,
+            117,
+            217,
+            243
+          ],
+          "data": [
+            131,
+            125,
+            140,
+            220
+          ],
+          "seed": 493
+        },
+        {
+          "hex": "6b412764",
+          "text": "kA'd",
+          "printable_ratio": 1.0,
+          "key": [
+            1626221,
+            280557,
+            117,
+            217,
+            243
+          ],
+          "data": [
+            131,
+            125,
+            140,
+            220
+          ],
+          "seed": 463
+        }
+      ]
+    },
+    {
+      "character_offset": 703470,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "3a623851",
+          "text": ":b8Q",
+          "printable_ratio": 1.0,
+          "key": [
+            851493,
+            3832877,
+            101,
+            99,
+            99
+          ],
+          "data": [
+            131,
+            125,
+            140,
+            220
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 706043,
+      "algorithm": "bV",
+      "candidates": [
+        {
+          "hex": "4b357d4c6f75",
+          "text": "K5}Lou",
+          "printable_ratio": 1.0,
+          "key": [
+            1188201,
+            3351883,
+            213,
+            49,
+            227
+          ],
+          "data": [
+            42,
+            153,
+            242,
+            91,
+            11,
+            48
+          ],
+          "seed": 1
+        }
+      ]
+    },
+    {
+      "character_offset": 713358,
+      "algorithm": "bQ",
+      "candidates": [
+        {
+          "hex": "393f6772",
+          "text": "9?gr",
+          "printable_ratio": 1.0,
+          "key": [
+            2893701,
+            25665,
+            71,
+            241,
+            99
+          ],
+          "data": [
+            97,
+            119,
+            27,
+            93
+          ],
+          "seed": 532
+        },
+        {
+          "hex": "647d585c",
+          "text": "d}X\\",
+          "printable_ratio": 1.0,
+          "key": [
+            739541,
+            2491579,
+            125,
+            95,
+            139
+          ],
+          "data": [
+            97,
+            119,
+            27,
+            93
+          ],
+          "seed": 539
+        },
+        {
+          "hex": "66402268",
+          "text": "f@\"h",
+          "printable_ratio": 1.0,
+          "key": [
+            29105,
+            227219,
+            227,
+            209,
+            91
+          ],
+          "data": [
+            97,
+            119,
+            27,
+            93
+          ],
+          "seed": 532
+        }
+      ]
+    },
+    {
+      "character_offset": 714011,
+      "algorithm": "bO",
+      "candidates": [
+        {
+          "hex": "09684665494b",
+          "text": "\thFeIK",
+          "printable_ratio": 1.0,
+          "key": [
+            739541,
+            2491579,
+            125,
+            95,
+            139
+          ],
+          "data": [
+            26,
+            150,
+            82,
+            81,
+            144,
+            147
+          ],
+          "seed": 401997
+        },
+        {
+          "hex": "71625d46",
+          "text": "qb]F",
+          "printable_ratio": 1.0,
+          "key": [
+            3296101,
+            3153641,
+            17,
+            23,
+            175
+          ],
+          "data": [
+            97,
+            119,
+            27,
+            93
+          ],
+          "seed": 539
+        }
+      ]
+    }
+  ]
+}

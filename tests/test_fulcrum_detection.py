@@ -109,20 +109,23 @@ class FulcrumDetectionTests(unittest.TestCase):
         self.assertTrue(any(plugin.name == "fulcrum" for plugin in PLUGINS))
         self.assertEqual(by_name("fulcrum").label, "Fulcrum Deobfuscator")
 
-    def test_unavailable_engine_detection_is_reported_for_fulcrum_and_jayfuscator(self):
-        for name in ("fulcrum", "jayfuscator"):
-            match = bot_module._unavailable_engine_match([
-                (name, 0.94, name, ["header matched"]),
-            ])
-            self.assertEqual(match, (name, 0.94))
+    def test_unavailable_engine_detection_is_reported_for_jayfuscator_only(self):
+        match = bot_module._unavailable_engine_match([
+            ("jayfuscator", 0.94, "jayfuscator", ["header matched"]),
+        ])
+        self.assertEqual(match, ("jayfuscator", 0.94))
+        # Fulcrum recovery is live now, so even a confident hit is never "unavailable"
+        self.assertIsNone(bot_module._unavailable_engine_match([
+            ("fulcrum", 0.94, "Fulcrum Deobfuscator", ["header matched"]),
+        ]))
         self.assertIsNone(bot_module._unavailable_engine_match([
             ("fulcrum", 0.74, "Fulcrum Deobfuscator", ["shape only"]),
         ]))
 
-    def test_bot_disables_recovery_until_the_engine_is_complete(self):
+    def test_bot_enables_recovery_with_the_full_engine(self):
         self.assertIn("fulcrum", bot_module.SUPPORTED)
-        self.assertFalse(bot_module._engine_is_available("fulcrum"))
-        self.assertFalse(any(option.value == "fulcrum" for option in bot_module._engine_select_options()))
+        self.assertTrue(bot_module._engine_is_available("fulcrum"))
+        self.assertTrue(any(option.value == "fulcrum" for option in bot_module._engine_select_options()))
         context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
         view = bot_module._EnginePickerView(context, ("url", "https://example.com/sample.lua"))
         unavailable = [
@@ -130,14 +133,33 @@ class FulcrumDetectionTests(unittest.TestCase):
             if isinstance(item, bot_module.discord.ui.Button)
             and "Fulcrum Deobfuscator" in item.label
         ]
-        self.assertEqual(len(unavailable), 1)
-        self.assertTrue(unavailable[0].disabled)
+        # Fulcrum is pickable in the engine select, so it must not appear as an
+        # "unavailable" button anymore
+        self.assertEqual(len(unavailable), 0)
 
     def test_deobfuscation_fails_closed_without_emitting_output(self):
-        with self.assertRaises(SystemExit) as raised:
-            self.engine.deobfuscate(type("Job", (), {})())
-        self.assertIn("tool.py and lualex.py", str(raised.exception))
-        self.assertIn("No output was generated", str(raised.exception))
+        import os
+        import tempfile
+        work = tempfile.mkdtemp(prefix="fulcrum_plugin_")
+        src = os.path.join(work, "plain.lua")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write('print("hello world")\n')
+        args = type("Args", (), {"timeout": 120})()
+
+        class Job:
+            pass
+        job = Job()
+        job.source_path = src
+        job.args = args
+        job.trace_path = os.path.join(work, "plain.deobf.luau")
+        job.outdir = os.path.join(work, "output")
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                self.engine.deobfuscate(job)
+            self.assertIn("fulcrum engine failed", str(raised.exception))
+        finally:
+            self.assertFalse(os.path.exists(os.path.join(job.outdir, "fulcrum_deobfuscated.lua")),
+                             "a failed run must not leave an output file")
 
 
 if __name__ == "__main__":

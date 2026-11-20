@@ -63,7 +63,6 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         expected_engine_options = set(bot.SUPPORTED)
         expected_engine_options.discard("moonveil_v145")
         expected_engine_options.discard("jayfuscator")
-        expected_engine_options.discard("fulcrum")
         expected_engine_options.add("moonveil")
         self.assertEqual(
             set(option.value for option in bot._EngineSelect().options),

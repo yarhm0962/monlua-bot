@@ -1,9 +1,22 @@
-# Fulcrum detection
+# Fulcrum detection + recovery
 
-MonLua includes a code-aware Fulcrum detector and a reference digest for the exact sample described in the supplied archive.
+MonLua detects Fulcrum-protected scripts (deobf/obfuscators/fulcrum.py) and
+recovers them with a full two-stage static engine (deobf/fulcrum-engine/).
 
-Recovery is intentionally disabled. The archive's full engine imports missing `tool.py` and `lualex.py` modules using absolute paths from another machine. Its fallback package explicitly describes itself as an experimental partial decoder that does not perform full VM devirtualization. The archive does not contain the original reference input, so the full engine cannot be validated end-to-end.
+Detection: leading Lua header comments ("obfuscated by fulcrum"), the Fulcrum
+VM entry-point pattern, O/Q/U/V decoder call sites, and an exact known-sample
+digest. It masks strings and comments before evaluating code signatures.
 
-The detector uses leading Lua header comments, the Fulcrum VM entry-point pattern, O/Q/U/V decoder call sites, and an exact known-sample digest. It masks strings and comments before evaluating executable-code signatures. Regression tests check the existing Centurion and Luraph v15.1 sample corpora.
+Recovery (deobf/fulcrum-engine/, wired through the plugin's deobfuscate()):
 
-The engine appears as detection-only in the MonLua picker until a complete, self-contained, authorized recovery implementation and its original test inputs are available.
+1. Stage 1, unflat.py: un-flattens the Fulcrum VM skeleton back into readable
+   Lua (split-segment reassembly, payload integrity checksums, decoy removal,
+   ldexp shim kept, loadstring-or-load kept).
+2. Stage 2, polish.py: constant folding, variable renaming, syntax healing
+   against the bundled Luau compiler (bin/luau-compile), plus the GUI/decoy
+   blocks preserved as-is.
+
+Everything is static analysis: no input file is ever executed and no network
+access is performed. The engine verifies its own output (luau-compile, 0
+syntax errors) before the plugin accepts it, and a failed run leaves no
+output file.

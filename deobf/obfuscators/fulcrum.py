@@ -1,5 +1,8 @@
 import hashlib
+import os
 import re
+import subprocess
+import sys
 
 from obfuscators.base import Obfuscator
 from obfuscators.extra_families import LuaAnalysis
@@ -51,10 +54,28 @@ class Fulcrum(Obfuscator):
 
         return 0.0
 
+    # the full two-stage engine (unflat -> polish -> heal -> verify), self-contained
+    # under deobf/fulcrum-engine/ (README: deobf/fulcrum/README.md)
+    ENGINE_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fulcrum-engine")
+    ENGINE_CLI = os.path.join(ENGINE_DIR, "fulcrum.py")
+
     def deobfuscate(self, job):
-        raise SystemExit(
-            "[!] Fulcrum was identified, but recovery is disabled. The supplied full engine imports "
-            "tool.py and lualex.py, which are missing from the archive, and uses hard-coded external "
-            "paths. The bundled fallback describes itself as an experimental partial scanner, not a "
-            "complete devirtualizer. No output was generated."
-        )
+        env = dict(os.environ)
+        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        env["LUAU_CC"] = os.path.join(self.ENGINE_DIR, "bin", "luau-compile")
+        timeout = int(getattr(job.args, "timeout", 0) or 0) or 900
+        timeout = max(60, timeout - 60)
+        os.makedirs(job.outdir, exist_ok=True)
+        outpath = os.path.join(job.outdir, "fulcrum_deobfuscated.lua")
+        cmd = [sys.executable, self.ENGINE_CLI, "deobf", job.source_path, outpath]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=timeout,
+                                  cwd=self.ENGINE_DIR, env=env)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Fulcrum run exceeded the %ds job timeout" % timeout)
+        out = (proc.stdout or b"").decode("utf-8", "replace")
+        if proc.returncode != 0 or not os.path.exists(outpath) or os.path.getsize(outpath) == 0:
+            err = ((proc.stderr or b"").decode("utf-8", "replace") or out)[-500:]
+            raise RuntimeError("fulcrum engine failed: %s" % err.strip())
+        return outpath

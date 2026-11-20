@@ -1,0 +1,2780 @@
+{
+  "input": "../uploads/km_e184_ls_1ee.txt",
+  "sha256": "351e2801ddfcdfb34fb9aa4874cd2125593c1d11ccb1736005d65b9bd07dde48",
+  "fulcrum_header": true,
+  "note": "This is a static analysis report, not devirtualized code. Known-sample strings are heuristic candidates, not verified substitutions.",
+  "known_sample": true,
+  "string_candidates": [
+    {
+      "character_offset": 3741,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 4412,
+      "alg": "O",
+      "text": "game"
+    },
+    {
+      "character_offset": 6029,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 6750,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 11278,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 12584,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 13258,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 13949,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 16775,
+      "alg": "Q",
+      "text": "Polsec is a Lua whitelisting service, and attempting to deobfuscate, reverse-engineer, or otherwise bypass its protections is against the serviceâs Terms of Service. Continuing to do so could potentially get the owner or other involved parties in trouble, including account or service consequences. Stop attempting to deobfuscate or bypass Polsec and leave the protected code alone."
+    },
+    {
+      "character_offset": 17519,
+      "alg": "V",
+      "text": "trial"
+    },
+    {
+      "character_offset": 18498,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 19232,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 21053,
+      "alg": "O",
+      "text": "Loaded"
+    },
+    {
+      "character_offset": 26984,
+      "alg": "U",
+      "text": "Wait"
+    },
+    {
+      "character_offset": 32856,
+      "alg": "U",
+      "text": "gone"
+    },
+    {
+      "character_offset": 33954,
+      "alg": "O",
+      "text": "http_request"
+    },
+    {
+      "character_offset": 35608,
+      "alg": "Q",
+      "text": "`y $"
+    },
+    {
+      "character_offset": 36303,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37079,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37745,
+      "alg": "V",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 38559,
+      "alg": "U",
+      "text": "H*2R"
+    },
+    {
+      "character_offset": 45757,
+      "alg": "Q",
+      "text": "C"
+    },
+    {
+      "character_offset": 46529,
+      "alg": "O",
+      "text": "connect"
+    },
+    {
+      "character_offset": 51709,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 55617,
+      "alg": "V",
+      "text": "g"
+    },
+    {
+      "character_offset": 58878,
+      "alg": "O",
+      "text": "|"
+    },
+    {
+      "character_offset": 59722,
+      "alg": "V",
+      "text": "Content-Type"
+    },
+    {
+      "character_offset": 61193,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 61883,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 62466,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63254,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63912,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 65756,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 67494,
+      "alg": "V",
+      "text": "mQ"
+    },
+    {
+      "character_offset": 68212,
+      "alg": "Q",
+      "text": "h"
+    },
+    {
+      "character_offset": 70859,
+      "alg": "O",
+      "text": "min"
+    },
+    {
+      "character_offset": 71111,
+      "alg": "U",
+      "text": "'c<"
+    },
+    {
+      "character_offset": 71926,
+      "alg": "V",
+      "text": "1*v"
+    },
+    {
+      "character_offset": 72601,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 73344,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74105,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74843,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 76187,
+      "alg": "O",
+      "text": "o"
+    },
+    {
+      "character_offset": 76783,
+      "alg": "O",
+      "text": "J"
+    },
+    {
+      "character_offset": 77085,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 77793,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 80115,
+      "alg": "V",
+      "text": "t"
+    },
+    {
+      "character_offset": 81089,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 81373,
+      "alg": "U",
+      "text": "Body"
+    },
+    {
+      "character_offset": 81657,
+      "alg": "Q",
+      "text": ","
+    },
+    {
+      "character_offset": 82342,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 83097,
+      "alg": "O",
+      "text": "O"
+    },
+    {
+      "character_offset": 83879,
+      "alg": "Q",
+      "text": "POST"
+    },
+    {
+      "character_offset": 84671,
+      "alg": "U",
+      "text": "f"
+    },
+    {
+      "character_offset": 86091,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 96028,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 96583,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 99909,
+      "alg": "O",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 102238,
+      "alg": "U",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 107714,
+      "alg": "U",
+      "text": "\nT(Ya"
+    },
+    {
+      "character_offset": 113441,
+      "alg": "O",
+      "text": "task"
+    },
+    {
+      "character_offset": 128823,
+      "alg": "U",
+      "text": "RobloxPromptGui"
+    },
+    {
+      "character_offset": 131665,
+      "alg": "V",
+      "text": "TitleFrame"
+    },
+    {
+      "character_offset": 132319,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 133033,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 133763,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 135735,
+      "alg": "O",
+      "text": "CoreGui"
+    },
+    {
+      "character_offset": 137475,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 138229,
+      "alg": "O",
+      "text": "ErrorTitle"
+    },
+    {
+      "character_offset": 138924,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 139580,
+      "alg": "Q",
+      "text": "MessageArea"
+    },
+    {
+      "character_offset": 142705,
+      "alg": "V",
+      "text": "wait"
+    },
+    {
+      "character_offset": 143374,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 148688,
+      "alg": "Q",
+      "text": "K37\r"
+    },
+    {
+      "character_offset": 149273,
+      "alg": "O",
+      "text": "Players"
+    },
+    {
+      "character_offset": 149934,
+      "alg": "V",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 150815,
+      "alg": "U",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 153054,
+      "alg": "V",
+      "text": "o`1:"
+    },
+    {
+      "character_offset": 158364,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 159766,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 160367,
+      "alg": "U",
+      "text": ".c7]"
+    },
+    {
+      "character_offset": 168077,
+      "alg": "O",
+      "text": "application/json"
+    },
+    {
+      "character_offset": 170340,
+      "alg": "V",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 172070,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 172792,
+      "alg": "O",
+      "text": "HH."
+    },
+    {
+      "character_offset": 175549,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 184948,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 185561,
+      "alg": "U",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 187631,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 190860,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 191575,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 192281,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 203288,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/heartbeat"
+    },
+    {
+      "character_offset": 204304,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206042,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206788,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 207034,
+      "alg": "O",
+      "text": "'(\ty"
+    },
+    {
+      "character_offset": 207638,
+      "alg": "Q",
+      "text": "\nE%T"
+    },
+    {
+      "character_offset": 208360,
+      "alg": "V",
+      "text": "math"
+    },
+    {
+      "character_offset": 210601,
+      "alg": "U",
+      "text": "{.Uw"
+    },
+    {
+      "character_offset": 211232,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 211957,
+      "alg": "U",
+      "text": "F"
+    },
+    {
+      "character_offset": 212619,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 212998,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 213660,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 214301,
+      "alg": "U",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 215153,
+      "alg": "O",
+      "text": "Invalid token"
+    },
+    {
+      "character_offset": 219503,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 223436,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 226000,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 234480,
+      "alg": "U",
+      "text": "a"
+    },
+    {
+      "character_offset": 235179,
+      "alg": "Q",
+      "text": "a"
+    },
+    {
+      "character_offset": 235529,
+      "alg": "O",
+      "text": "x"
+    },
+    {
+      "character_offset": 236155,
+      "alg": "V",
+      "text": "["
+    },
+    {
+      "character_offset": 239319,
+      "alg": "O",
+      "text": "type"
+    },
+    {
+      "character_offset": 240368,
+      "alg": "Q",
+      "text": "\\v!"
+    },
+    {
+      "character_offset": 246785,
+      "alg": "O",
+      "text": "gui"
+    },
+    {
+      "character_offset": 247595,
+      "alg": "Q",
+      "text": "SESSION_END:"
+    },
+    {
+      "character_offset": 255577,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 258610,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 259303,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 260962,
+      "alg": "U",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 261728,
+      "alg": "V",
+      "text": "Invalid key"
+    },
+    {
+      "character_offset": 264525,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 265324,
+      "alg": "O",
+      "text": "r-N$"
+    },
+    {
+      "character_offset": 266540,
+      "alg": "Q",
+      "text": "Invalid sessionId"
+    },
+    {
+      "character_offset": 272060,
+      "alg": "V",
+      "text": "d"
+    },
+    {
+      "character_offset": 272358,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 272941,
+      "alg": "Q",
+      "text": "<"
+    },
+    {
+      "character_offset": 296138,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 296821,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 298117,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 298813,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 299107,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 300943,
+      "alg": "O",
+      "text": "s"
+    },
+    {
+      "character_offset": 301585,
+      "alg": "V",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 304959,
+      "alg": "V",
+      "text": "https://api.polsec.net/runtime/socket/http"
+    },
+    {
+      "character_offset": 305610,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 318979,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 322595,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 323253,
+      "alg": "V",
+      "text": "5'"
+    },
+    {
+      "character_offset": 323848,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 324568,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 325393,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 326028,
+      "alg": "U",
+      "text": "mx"
+    },
+    {
+      "character_offset": 326390,
+      "alg": "V",
+      "text": "}"
+    },
+    {
+      "character_offset": 328898,
+      "alg": "U",
+      "text": "n"
+    },
+    {
+      "character_offset": 329527,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 330691,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 335208,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 335494,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336148,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336802,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 340258,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 340887,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 345889,
+      "alg": "Q",
+      "text": "connect"
+    },
+    {
+      "character_offset": 353474,
+      "alg": "Q",
+      "text": "rejected"
+    },
+    {
+      "character_offset": 354102,
+      "alg": "U",
+      "text": "clock"
+    },
+    {
+      "character_offset": 357673,
+      "alg": "V",
+      "text": "JSONDecode"
+    },
+    {
+      "character_offset": 364234,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 371071,
+      "alg": "O",
+      "text": "d"
+    },
+    {
+      "character_offset": 375274,
+      "alg": "V",
+      "text": "string"
+    },
+    {
+      "character_offset": 378741,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379315,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379854,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 381824,
+      "alg": "Q",
+      "text": "0QJ"
+    },
+    {
+      "character_offset": 385032,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 385699,
+      "alg": "V",
+      "text": "a"
+    },
+    {
+      "character_offset": 386403,
+      "alg": "U",
+      "text": "s"
+    },
+    {
+      "character_offset": 388830,
+      "alg": "V",
+      "text": "&gns"
+    },
+    {
+      "character_offset": 390244,
+      "alg": "O",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 390865,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 391136,
+      "alg": "U",
+      "text": "og9>"
+    },
+    {
+      "character_offset": 392688,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 393295,
+      "alg": "V",
+      "text": "StatusCode"
+    },
+    {
+      "character_offset": 397095,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 397851,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 398123,
+      "alg": "U",
+      "text": "-"
+    },
+    {
+      "character_offset": 401847,
+      "alg": "Q",
+      "text": "s"
+    },
+    {
+      "character_offset": 404742,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406203,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406826,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 408760,
+      "alg": "U",
+      "text": "0Af"
+    },
+    {
+      "character_offset": 409378,
+      "alg": "U",
+      "text": "M"
+    },
+    {
+      "character_offset": 410502,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 419790,
+      "alg": "V",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 428979,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 429894,
+      "alg": "V",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 430216,
+      "alg": "O",
+      "text": "Z"
+    },
+    {
+      "character_offset": 431038,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 431670,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 434846,
+      "alg": "V",
+      "text": "*ka"
+    },
+    {
+      "character_offset": 446256,
+      "alg": "Q",
+      "text": "b"
+    },
+    {
+      "character_offset": 460811,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 461994,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 463503,
+      "alg": "Q",
+      "text": "warn"
+    },
+    {
+      "character_offset": 468829,
+      "alg": "Q",
+      "text": "\\"
+    },
+    {
+      "character_offset": 471648,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 472877,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 473556,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 475474,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 475705,
+      "alg": "V",
+      "text": "mWd@"
+    },
+    {
+      "character_offset": 491179,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 498937,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 499670,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 500380,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 503213,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 505591,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 506335,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 524160,
+      "alg": "Q",
+      "text": "clock"
+    },
+    {
+      "character_offset": 524848,
+      "alg": "O",
+      "text": "\n@> e"
+    },
+    {
+      "character_offset": 525609,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526333,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526963,
+      "alg": "O",
+      "text": "s 9[t"
+    },
+    {
+      "character_offset": 527649,
+      "alg": "Q",
+      "text": "xP?zb"
+    },
+    {
+      "character_offset": 528356,
+      "alg": "O",
+      "text": "Y{-}"
+    },
+    {
+      "character_offset": 528993,
+      "alg": "O",
+      "text": "!z\r~"
+    },
+    {
+      "character_offset": 531162,
+      "alg": "V",
+      "text": "5b#"
+    },
+    {
+      "character_offset": 533003,
+      "alg": "O",
+      "text": "a"
+    },
+    {
+      "character_offset": 533715,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 535823,
+      "alg": "Q",
+      "text": "%"
+    },
+    {
+      "character_offset": 536967,
+      "alg": "U",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 537620,
+      "alg": "Q",
+      "text": "delay"
+    },
+    {
+      "character_offset": 538279,
+      "alg": "O",
+      "text": "`!qY9"
+    },
+    {
+      "character_offset": 543919,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 547825,
+      "alg": "O",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 549406,
+      "alg": "U",
+      "text": "~"
+    },
+    {
+      "character_offset": 551283,
+      "alg": "Q",
+      "text": "u"
+    },
+    {
+      "character_offset": 551953,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 553594,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554247,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554623,
+      "alg": "O",
+      "text": "hv"
+    },
+    {
+      "character_offset": 554938,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 555496,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 556204,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 562135,
+      "alg": "Q",
+      "text": "HttpService"
+    },
+    {
+      "character_offset": 562872,
+      "alg": "U",
+      "text": "Velocity"
+    },
+    {
+      "character_offset": 570476,
+      "alg": "V",
+      "text": "__index"
+    },
+    {
+      "character_offset": 583111,
+      "alg": "V",
+      "text": "l4"
+    },
+    {
+      "character_offset": 583710,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 584496,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 584962,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 586684,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 587367,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 595339,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 595612,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 596317,
+      "alg": "V",
+      "text": "getfenv"
+    },
+    {
+      "character_offset": 599198,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 599562,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 621779,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 622583,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 625276,
+      "alg": "U",
+      "text": "\t"
+    },
+    {
+      "character_offset": 626023,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 626787,
+      "alg": "U",
+      "text": "1"
+    },
+    {
+      "character_offset": 627446,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 628639,
+      "alg": "V",
+      "text": "/"
+    },
+    {
+      "character_offset": 629223,
+      "alg": "Q",
+      "text": "r"
+    },
+    {
+      "character_offset": 631750,
+      "alg": "O",
+      "text": "F"
+    },
+    {
+      "character_offset": 641886,
+      "alg": "V",
+      "text": "!"
+    },
+    {
+      "character_offset": 642571,
+      "alg": "Q",
+      "text": "d"
+    },
+    {
+      "character_offset": 645171,
+      "alg": "Q",
+      "text": "Basalt"
+    },
+    {
+      "character_offset": 645834,
+      "alg": "U",
+      "text": "955789dbe862b654"
+    },
+    {
+      "character_offset": 655488,
+      "alg": "O",
+      "text": "new"
+    },
+    {
+      "character_offset": 656138,
+      "alg": "U",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 661327,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662006,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662723,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 663898,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 664605,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 665440,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 666215,
+      "alg": "U",
+      "text": "]5#=+~n"
+    },
+    {
+      "character_offset": 667066,
+      "alg": "Q",
+      "text": "i7}H"
+    },
+    {
+      "character_offset": 667737,
+      "alg": "O",
+      "text": "X\\J'"
+    },
+    {
+      "character_offset": 668488,
+      "alg": "Q",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 669731,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 673865,
+      "alg": "V",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 678012,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 681170,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 681905,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 687972,
+      "alg": "Q",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 689235,
+      "alg": "O",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 692393,
+      "alg": "O",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 696196,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 696821,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 699195,
+      "alg": "V",
+      "text": "restart"
+    },
+    {
+      "character_offset": 702803,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 703470,
+      "alg": "V",
+      "text": "R2"
+    },
+    {
+      "character_offset": 703810,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 704606,
+      "alg": "O",
+      "text": "W#"
+    },
+    {
+      "character_offset": 705320,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 706043,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 706728,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 707416,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 708179,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 708885,
+      "alg": "U",
+      "text": "-tcI"
+    },
+    {
+      "character_offset": 713358,
+      "alg": "Q",
+      "text": "rawset"
+    },
+    {
+      "character_offset": 714011,
+      "alg": "O",
+      "text": "consts"
+    },
+    {
+      "character_offset": 721630,
+      "alg": "O",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 722346,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 725186,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 733467,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 733729,
+      "alg": "V",
+      "text": "l2"
+    },
+    {
+      "character_offset": 734376,
+      "alg": "O",
+      "text": "#."
+    },
+    {
+      "character_offset": 738426,
+      "alg": "U",
+      "text": "requestBound"
+    }
+  ],
+  "unresolved_count": 79,
+  "direct_literal_candidates": [
+    {
+      "character_offset": 3741,
+      "algorithm": "bV",
+      "hex": "74797065",
+      "utf8": "type",
+      "data": [
+        185,
+        17,
+        51,
+        154
+      ],
+      "key": [
+        3721385,
+        2501549,
+        77,
+        127,
+        139
+      ],
+      "seed": 12071399
+    },
+    {
+      "character_offset": 13258,
+      "algorithm": "bU",
+      "hex": "5f47",
+      "utf8": "_G",
+      "data": [
+        67,
+        91
+      ],
+      "key": [
+        933589,
+        1146777,
+        155,
+        187,
+        59
+      ],
+      "seed": 8007431
+    },
+    {
+      "character_offset": 51709,
+      "algorithm": "bO",
+      "hex": "737061776e",
+      "utf8": "spawn",
+      "data": [
+        16,
+        70,
+        254,
+        194,
+        94
+      ],
+      "key": [
+        1466157,
+        3532869,
+        41,
+        167,
+        53
+      ],
+      "seed": 16647530
+    },
+    {
+      "character_offset": 96028,
+      "algorithm": "bQ",
+      "hex": "47657453657276696365",
+      "utf8": "GetService",
+      "data": [
+        40,
+        199,
+        75,
+        171,
+        248,
+        163,
+        27,
+        117,
+        221,
+        246
+      ],
+      "key": [
+        1347685,
+        2857035,
+        205,
+        227,
+        207
+      ],
+      "seed": 6388197
+    },
+    {
+      "character_offset": 102238,
+      "algorithm": "bU",
+      "hex": "4b69636b",
+      "utf8": "Kick",
+      "data": [
+        126,
+        166,
+        22,
+        204
+      ],
+      "key": [
+        2967285,
+        748969,
+        161,
+        247,
+        221
+      ],
+      "seed": 11239186
+    },
+    {
+      "character_offset": 109439,
+      "algorithm": "bO",
+      "hex": "737562",
+      "utf8": "sub",
+      "data": [
+        1,
+        216,
+        33
+      ],
+      "key": [
+        2593865,
+        513287,
+        171,
+        129,
+        123
+      ],
+      "seed": 5386948
+    },
+    {
+      "character_offset": 113441,
+      "algorithm": "bO",
+      "hex": "7461736b",
+      "utf8": "task",
+      "data": [
+        176,
+        248,
+        75,
+        110
+      ],
+      "key": [
+        2485413,
+        1457747,
+        107,
+        75,
+        211
+      ],
+      "seed": 15217742
+    },
+    {
+      "character_offset": 121142,
+      "algorithm": "bQ",
+      "hex": "737061776e",
+      "utf8": "spawn",
+      "data": [
+        43,
+        35,
+        90,
+        12,
+        48
+      ],
+      "key": [
+        400489,
+        46237,
+        201,
+        21,
+        35
+      ],
+      "seed": 6438627
+    },
+    {
+      "character_offset": 129881,
+      "algorithm": "bV",
+      "hex": "70726f6d70744f7665726c6179",
+      "utf8": "promptOverlay",
+      "data": [
+        189,
+        84,
+        244,
+        35,
+        117,
+        215,
+        196,
+        26,
+        88,
+        62,
+        133,
+        171,
+        253
+      ],
+      "key": [
+        169821,
+        3629303,
+        123,
+        59,
+        197
+      ],
+      "seed": 7628582
+    },
+    {
+      "character_offset": 133763,
+      "algorithm": "bV",
+      "hex": "70726f6d70744f7665726c6179",
+      "utf8": "promptOverlay",
+      "data": [
+        189,
+        84,
+        244,
+        35,
+        117,
+        215,
+        196,
+        26,
+        88,
+        62,
+        133,
+        171,
+        253
+      ],
+      "key": [
+        169821,
+        3629303,
+        123,
+        59,
+        197
+      ],
+      "seed": 7628582
+    },
+    {
+      "character_offset": 141821,
+      "algorithm": "bO",
+      "hex": "7063616c6c",
+      "utf8": "pcall",
+      "data": [
+        48,
+        174,
+        96,
+        109,
+        99
+      ],
+      "key": [
+        217597,
+        3586579,
+        157,
+        51,
+        235
+      ],
+      "seed": 4784138
+    },
+    {
+      "character_offset": 158364,
+      "algorithm": "bV",
+      "hex": "7461736b",
+      "utf8": "task",
+      "data": [
+        250,
+        228,
+        11,
+        33
+      ],
+      "key": [
+        2248501,
+        908013,
+        245,
+        47,
+        247
+      ],
+      "seed": 2369984
+    },
+    {
+      "character_offset": 168077,
+      "algorithm": "bO",
+      "hex": "6170706c69636174696f6e2f6a736f6e",
+      "utf8": "application/json",
+      "data": [
+        146,
+        224,
+        188,
+        234,
+        140,
+        181,
+        60,
+        146,
+        50,
+        113,
+        21,
+        56,
+        140,
+        27,
+        130,
+        57
+      ],
+      "key": [
+        3754169,
+        3728003,
+        15,
+        225,
+        151
+      ],
+      "seed": 5930454
+    },
+    {
+      "character_offset": 170067,
+      "algorithm": "bU",
+      "hex": "504f5354",
+      "utf8": "POST",
+      "data": [
+        172,
+        194,
+        171,
+        8
+      ],
+      "key": [
+        2065317,
+        1218959,
+        95,
+        109,
+        197
+      ],
+      "seed": 12228306
+    },
+    {
+      "character_offset": 171001,
+      "algorithm": "bQ",
+      "hex": "436f6e74656e742d54797065",
+      "utf8": "Content-Type",
+      "data": [
+        51,
+        38,
+        164,
+        56,
+        200,
+        236,
+        44,
+        35,
+        200,
+        83,
+        172,
+        3
+      ],
+      "key": [
+        1013269,
+        1323925,
+        61,
+        253,
+        247
+      ],
+      "seed": 15040420
+    },
+    {
+      "character_offset": 185561,
+      "algorithm": "bU",
+      "hex": "746f6e756d626572",
+      "utf8": "tonumber",
+      "data": [
+        68,
+        65,
+        247,
+        182,
+        153,
+        161,
+        234,
+        26
+      ],
+      "key": [
+        1474521,
+        3486183,
+        87,
+        3,
+        117
+      ],
+      "seed": 3492012
+    },
+    {
+      "character_offset": 192281,
+      "algorithm": "bV",
+      "hex": "7461736b",
+      "utf8": "task",
+      "data": [
+        135,
+        125,
+        98,
+        199
+      ],
+      "key": [
+        2430189,
+        3292995,
+        177,
+        87,
+        227
+      ],
+      "seed": 16677382
+    },
+    {
+      "character_offset": 203288,
+      "algorithm": "bQ",
+      "hex": "68747470733a2f2f6170692e706f6c7365632e6e65742f72756e74696d652f736f636b65742f686561727462656174",
+      "utf8": "https://api.polsec.net/runtime/socket/heartbeat",
+      "data": [
+        196,
+        24,
+        24,
+        71,
+        68,
+        220,
+        25,
+        119,
+        45,
+        8,
+        91,
+        33,
+        57,
+        75,
+        133,
+        117,
+        175,
+        240,
+        229,
+        9,
+        173,
+        231,
+        24,
+        97,
+        169,
+        135,
+        52,
+        125,
+        184,
+        120,
+        154,
+        224,
+        123,
+        216,
+        114,
+        178,
+        53,
+        184,
+        146,
+        187,
+        97,
+        80,
+        244,
+        134,
+        86,
+        162,
+        203
+      ],
+      "key": [
+        848421,
+        2600873,
+        105,
+        167,
+        159
+      ],
+      "seed": 15944693
+    },
+    {
+      "character_offset": 204304,
+      "algorithm": "bV",
+      "hex": "506f6c5365633a20756e61626c6520746f207265636f766572207468697320657865637574696f6e2e20506c65617365206578656375746520616761696e2e",
+      "utf8": "PolSec: unable to recover this execution. Please execute again.",
+      "data": [
+        68,
+        253,
+        124,
+        117,
+        126,
+        55,
+        47,
+        243,
+        124,
+        69,
+        67,
+        210,
+        195,
+        235,
+        62,
+        222,
+        239,
+        26,
+        181,
+        18,
+        166,
+        81,
+        98,
+        131,
+        167,
+        43,
+        101,
+        72,
+        6,
+        210,
+        54,
+        240,
+        74,
+        221,
+        236,
+        1,
+        14,
+        51,
+        47,
+        240,
+        60,
+        87,
+        181,
+        204,
+        8,
+        55,
+        198,
+        106,
+        217,
+        104,
+        212,
+        169,
+        142,
+        64,
+        250,
+        249,
+        97,
+        244,
+        165,
+        174,
+        128,
+        115,
+        109
+      ],
+      "key": [
+        736033,
+        327317,
+        43,
+        61,
+        201
+      ],
+      "seed": 7557362
+    },
+    {
+      "character_offset": 206788,
+      "algorithm": "bV",
+      "hex": "496e76616c69642073657373696f6e",
+      "utf8": "Invalid session",
+      "data": [
+        189,
+        244,
+        77,
+        53,
+        217,
+        42,
+        23,
+        13,
+        190,
+        212,
+        50,
+        150,
+        92,
+        122,
+        189
+      ],
+      "key": [
+        2968153,
+        3215799,
+        251,
+        251,
+        169
+      ],
+      "seed": 13092518
+    },
+    {
+      "character_offset": 210601,
+      "algorithm": "bU",
+      "hex": "737061776e",
+      "utf8": "spawn",
+      "data": [
+        122,
+        250,
+        33,
+        148,
+        192
+      ],
+      "key": [
+        3199993,
+        3832561,
+        103,
+        17,
+        25
+      ],
+      "seed": 4440069
+    },
+    {
+      "character_offset": 211232,
+      "algorithm": "bO",
+      "hex": "7969656c64",
+      "utf8": "yield",
+      "data": [
+        175,
+        96,
+        26,
+        251,
+        93
+      ],
+      "key": [
+        703621,
+        2972423,
+        15,
+        65,
+        19
+      ],
+      "seed": 4465159
+    },
+    {
+      "character_offset": 212619,
+      "algorithm": "bQ",
+      "hex": "61",
+      "utf8": "a",
+      "data": [
+        200
+      ],
+      "key": [
+        3960997,
+        1759619,
+        35,
+        215,
+        35
+      ],
+      "seed": 2040276
+    },
+    {
+      "character_offset": 223436,
+      "algorithm": "bU",
+      "hex": "31",
+      "utf8": "1",
+      "data": [
+        176
+      ],
+      "key": [
+        1698637,
+        2777067,
+        201,
+        151,
+        121
+      ],
+      "seed": 8802103
+    },
+    {
+      "character_offset": 235179,
+      "algorithm": "bQ",
+      "hex": "61",
+      "utf8": "a",
+      "data": [
+        200
+      ],
+      "key": [
+        3960997,
+        1759619,
+        35,
+        215,
+        35
+      ],
+      "seed": 2040276
+    },
+    {
+      "character_offset": 246785,
+      "algorithm": "bO",
+      "hex": "677569",
+      "utf8": "gui",
+      "data": [
+        236,
+        115,
+        42
+      ],
+      "key": [
+        334513,
+        2574905,
+        27,
+        185,
+        17
+      ],
+      "seed": 7590062
+    },
+    {
+      "character_offset": 255577,
+      "algorithm": "bV",
+      "hex": "4a534f4e456e636f6465",
+      "utf8": "JSONEncode",
+      "data": [
+        60,
+        136,
+        16,
+        220,
+        46,
+        155,
+        236,
+        100,
+        120,
+        192
+      ],
+      "key": [
+        1490709,
+        2599875,
+        129,
+        65,
+        71
+      ],
+      "seed": 3324033
+    },
+    {
+      "character_offset": 258610,
+      "algorithm": "bU",
+      "hex": "737562",
+      "utf8": "sub",
+      "data": [
+        163,
+        249,
+        98
+      ],
+      "key": [
+        2244905,
+        441033,
+        187,
+        71,
+        71
+      ],
+      "seed": 6808596
+    },
+    {
+      "character_offset": 259303,
+      "algorithm": "bO",
+      "hex": "7265636f6e6e656374",
+      "utf8": "reconnect",
+      "data": [
+        187,
+        223,
+        45,
+        50,
+        244,
+        157,
+        177,
+        57,
+        21
+      ],
+      "key": [
+        2202901,
+        2060173,
+        203,
+        119,
+        79
+      ],
+      "seed": 13337624
+    },
+    {
+      "character_offset": 261728,
+      "algorithm": "bV",
+      "hex": "496e76616c6964206b6579",
+      "utf8": "Invalid key",
+      "data": [
+        93,
+        74,
+        162,
+        155,
+        137,
+        205,
+        129,
+        102,
+        188,
+        177,
+        215
+      ],
+      "key": [
+        3653885,
+        2435345,
+        5,
+        43,
+        167
+      ],
+      "seed": 12408275
+    },
+    {
+      "character_offset": 264525,
+      "algorithm": "bQ",
+      "hex": "7461736b",
+      "utf8": "task",
+      "data": [
+        190,
+        23,
+        44,
+        147
+      ],
+      "key": [
+        2533385,
+        3069419,
+        127,
+        177,
+        65
+      ],
+      "seed": 2007945
+    },
+    {
+      "character_offset": 272060,
+      "algorithm": "bV",
+      "hex": "64",
+      "utf8": "d",
+      "data": [
+        23
+      ],
+      "key": [
+        2313753,
+        2731439,
+        43,
+        37,
+        171
+      ],
+      "seed": 13272761
+    },
+    {
+      "character_offset": 385699,
+      "algorithm": "bV",
+      "hex": "61",
+      "utf8": "a",
+      "data": [
+        89
+      ],
+      "key": [
+        1912249,
+        3042839,
+        61,
+        101,
+        183
+      ],
+      "seed": 10072369
+    },
+    {
+      "character_offset": 394255,
+      "algorithm": "bQ",
+      "hex": "474554",
+      "utf8": "GET",
+      "data": [
+        219,
+        189,
+        191
+      ],
+      "key": [
+        2921917,
+        2099337,
+        75,
+        223,
+        39
+      ],
+      "seed": 1313238
+    },
+    {
+      "character_offset": 409378,
+      "algorithm": "bU",
+      "hex": "65",
+      "utf8": "e",
+      "data": [
+        207
+      ],
+      "key": [
+        2551389,
+        3427187,
+        95,
+        165,
+        41
+      ],
+      "seed": 4296426
+    },
+    {
+      "character_offset": 431038,
+      "algorithm": "bU",
+      "hex": "737472696e67",
+      "utf8": "string",
+      "data": [
+        67,
+        202,
+        116,
+        82,
+        233,
+        139
+      ],
+      "key": [
+        2379773,
+        2275737,
+        77,
+        15,
+        217
+      ],
+      "seed": 9846827
+    },
+    {
+      "character_offset": 431670,
+      "algorithm": "bU",
+      "hex": "64",
+      "utf8": "d",
+      "data": [
+        232
+      ],
+      "key": [
+        346249,
+        1573001,
+        21,
+        243,
+        27
+      ],
+      "seed": 15729775
+    },
+    {
+      "character_offset": 491179,
+      "algorithm": "bV",
+      "hex": "746f6e756d626572",
+      "utf8": "tonumber",
+      "data": [
+        94,
+        199,
+        216,
+        241,
+        105,
+        247,
+        166,
+        99
+      ],
+      "key": [
+        2510289,
+        2372969,
+        159,
+        45,
+        25
+      ],
+      "seed": 16083258
+    },
+    {
+      "character_offset": 505591,
+      "algorithm": "bU",
+      "hex": "72656d6f7665",
+      "utf8": "remove",
+      "data": [
+        150,
+        145,
+        141,
+        205,
+        85,
+        43
+      ],
+      "key": [
+        3994129,
+        2900749,
+        89,
+        221,
+        27
+      ],
+      "seed": 14285738
+    },
+    {
+      "character_offset": 538279,
+      "algorithm": "bO",
+      "hex": "7461626c65",
+      "utf8": "table",
+      "data": [
+        195,
+        179,
+        47,
+        78,
+        217
+      ],
+      "key": [
+        1067865,
+        2683339,
+        223,
+        199,
+        155
+      ],
+      "seed": 10123990
+    },
+    {
+      "character_offset": 562135,
+      "algorithm": "bQ",
+      "hex": "4874747053657276696365",
+      "utf8": "HttpService",
+      "data": [
+        15,
+        211,
+        130,
+        93,
+        152,
+        172,
+        148,
+        164,
+        124,
+        189,
+        175
+      ],
+      "key": [
+        3739957,
+        1308275,
+        79,
+        87,
+        161
+      ],
+      "seed": 1033946
+    },
+    {
+      "character_offset": 562872,
+      "algorithm": "bU",
+      "hex": "56656c6f63697479",
+      "utf8": "Velocity",
+      "data": [
+        192,
+        132,
+        134,
+        80,
+        29,
+        24,
+        96,
+        174
+      ],
+      "key": [
+        2107121,
+        2128833,
+        189,
+        45,
+        9
+      ],
+      "seed": 1487020
+    },
+    {
+      "character_offset": 599198,
+      "algorithm": "bO",
+      "hex": "6c6f6164737472696e67",
+      "utf8": "loadstring",
+      "data": [
+        46,
+        134,
+        240,
+        101,
+        101,
+        229,
+        183,
+        13,
+        170,
+        47
+      ],
+      "key": [
+        2613337,
+        3751913,
+        243,
+        153,
+        67
+      ],
+      "seed": 11915625
+    },
+    {
+      "character_offset": 655488,
+      "algorithm": "bO",
+      "hex": "6e6577",
+      "utf8": "new",
+      "data": [
+        244,
+        71,
+        76
+      ],
+      "key": [
+        2678477,
+        1513591,
+        75,
+        231,
+        185
+      ],
+      "seed": 3165576
+    },
+    {
+      "character_offset": 656138,
+      "algorithm": "bU",
+      "hex": "6c6f6164737472696e67",
+      "utf8": "loadstring",
+      "data": [
+        22,
+        202,
+        58,
+        248,
+        0,
+        156,
+        53,
+        229,
+        110,
+        100
+      ],
+      "key": [
+        936589,
+        3583245,
+        227,
+        133,
+        25
+      ],
+      "seed": 1890341
+    },
+    {
+      "character_offset": 662723,
+      "algorithm": "bO",
+      "hex": "44656c7461",
+      "utf8": "Delta",
+      "data": [
+        90,
+        3,
+        193,
+        39,
+        188
+      ],
+      "key": [
+        130357,
+        2183259,
+        181,
+        173,
+        163
+      ],
+      "seed": 2396811
+    },
+    {
+      "character_offset": 668488,
+      "algorithm": "bQ",
+      "hex": "77726170",
+      "utf8": "wrap",
+      "data": [
+        174,
+        54,
+        96,
+        169
+      ],
+      "key": [
+        2810961,
+        72109,
+        23,
+        41,
+        73
+      ],
+      "seed": 12913960
+    },
+    {
+      "character_offset": 689235,
+      "algorithm": "bO",
+      "hex": "777269746566696c65",
+      "utf8": "writefile",
+      "data": [
+        192,
+        5,
+        105,
+        186,
+        237,
+        169,
+        237,
+        219,
+        83
+      ],
+      "key": [
+        211925,
+        1053465,
+        217,
+        131,
+        119
+      ],
+      "seed": 6208012
+    },
+    {
+      "character_offset": 692393,
+      "algorithm": "bO",
+      "hex": "7063616c6c",
+      "utf8": "pcall",
+      "data": [
+        94,
+        37,
+        248,
+        189,
+        123
+      ],
+      "key": [
+        2844393,
+        346129,
+        81,
+        207,
+        25
+      ],
+      "seed": 3438924
+    },
+    {
+      "character_offset": 705320,
+      "algorithm": "bQ",
+      "hex": "72657175657374",
+      "utf8": "request",
+      "data": [
+        27,
+        234,
+        164,
+        40,
+        216,
+        14,
+        221
+      ],
+      "key": [
+        581501,
+        1384271,
+        43,
+        223,
+        241
+      ],
+      "seed": 4284552
+    },
+    {
+      "character_offset": 713358,
+      "algorithm": "bQ",
+      "hex": "726177736574",
+      "utf8": "rawset",
+      "data": [
+        168,
+        206,
+        101,
+        222,
+        8,
+        143
+      ],
+      "key": [
+        739541,
+        2491579,
+        125,
+        95,
+        139
+      ],
+      "seed": 1767303
+    },
+    {
+      "character_offset": 738426,
+      "algorithm": "bU",
+      "hex": "72657175657374426f756e64",
+      "utf8": "requestBound",
+      "data": [
+        130,
+        200,
+        120,
+        232,
+        162,
+        39,
+        79,
+        105,
+        122,
+        28,
+        78,
+        172
+      ],
+      "key": [
+        959381,
+        1741811,
+        183,
+        31,
+        161
+      ],
+      "seed": 2479550
+    }
+  ]
+}

@@ -1,0 +1,1530 @@
+{
+  "input": "../uploads/km_e184_ls_1ee.txt",
+  "sha256": "351e2801ddfcdfb34fb9aa4874cd2125593c1d11ccb1736005d65b9bd07dde48",
+  "fulcrum_header": true,
+  "note": "This is a static analysis report, not devirtualized code. Known-sample strings are heuristic candidates, not verified substitutions.",
+  "known_sample": true,
+  "string_candidates": [
+    {
+      "character_offset": 3741,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 4412,
+      "alg": "O",
+      "text": "game"
+    },
+    {
+      "character_offset": 6029,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 6750,
+      "alg": "O",
+      "text": "getmetatable"
+    },
+    {
+      "character_offset": 11278,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 12584,
+      "alg": "V",
+      "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1"
+    },
+    {
+      "character_offset": 13258,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 13949,
+      "alg": "U",
+      "text": "print"
+    },
+    {
+      "character_offset": 16775,
+      "alg": "Q",
+      "text": "Polsec is a Lua whitelisting service, and attempting to deobfuscate, reverse-engineer, or otherwise bypass its protections is against the serviceâs Terms of Service. Continuing to do so could potentially get the owner or other involved parties in trouble, including account or service consequences. Stop attempting to deobfuscate or bypass Polsec and leave the protected code alone."
+    },
+    {
+      "character_offset": 17519,
+      "alg": "V",
+      "text": "trial"
+    },
+    {
+      "character_offset": 18498,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 19232,
+      "alg": "Q",
+      "text": "getgenv"
+    },
+    {
+      "character_offset": 21053,
+      "alg": "O",
+      "text": "Loaded"
+    },
+    {
+      "character_offset": 26984,
+      "alg": "U",
+      "text": "Wait"
+    },
+    {
+      "character_offset": 32856,
+      "alg": "U",
+      "text": "gone"
+    },
+    {
+      "character_offset": 33954,
+      "alg": "O",
+      "text": "http_request"
+    },
+    {
+      "character_offset": 35608,
+      "alg": "Q",
+      "text": "`y $"
+    },
+    {
+      "character_offset": 36303,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37079,
+      "alg": "Q",
+      "text": "wait"
+    },
+    {
+      "character_offset": 37745,
+      "alg": "V",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 38559,
+      "alg": "U",
+      "text": "H*2R"
+    },
+    {
+      "character_offset": 45757,
+      "alg": "Q",
+      "text": "C"
+    },
+    {
+      "character_offset": 46529,
+      "alg": "O",
+      "text": "connect"
+    },
+    {
+      "character_offset": 51709,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 55617,
+      "alg": "V",
+      "text": "g"
+    },
+    {
+      "character_offset": 58878,
+      "alg": "O",
+      "text": "|"
+    },
+    {
+      "character_offset": 59722,
+      "alg": "V",
+      "text": "Content-Type"
+    },
+    {
+      "character_offset": 61193,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 61883,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 62466,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63254,
+      "alg": "O",
+      "text": "max"
+    },
+    {
+      "character_offset": 63912,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 65756,
+      "alg": "Q",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 67494,
+      "alg": "V",
+      "text": "mQ"
+    },
+    {
+      "character_offset": 68212,
+      "alg": "Q",
+      "text": "h"
+    },
+    {
+      "character_offset": 70859,
+      "alg": "O",
+      "text": "min"
+    },
+    {
+      "character_offset": 71111,
+      "alg": "U",
+      "text": "'c<"
+    },
+    {
+      "character_offset": 71926,
+      "alg": "V",
+      "text": "1*v"
+    },
+    {
+      "character_offset": 72601,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 73344,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74105,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 74843,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 76187,
+      "alg": "O",
+      "text": "o"
+    },
+    {
+      "character_offset": 76783,
+      "alg": "O",
+      "text": "J"
+    },
+    {
+      "character_offset": 77085,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 77793,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/diagnostic"
+    },
+    {
+      "character_offset": 80115,
+      "alg": "V",
+      "text": "t"
+    },
+    {
+      "character_offset": 81089,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 81373,
+      "alg": "U",
+      "text": "Body"
+    },
+    {
+      "character_offset": 81657,
+      "alg": "Q",
+      "text": ","
+    },
+    {
+      "character_offset": 82342,
+      "alg": "V",
+      "text": "floor"
+    },
+    {
+      "character_offset": 83097,
+      "alg": "O",
+      "text": "O"
+    },
+    {
+      "character_offset": 83879,
+      "alg": "Q",
+      "text": "POST"
+    },
+    {
+      "character_offset": 84671,
+      "alg": "U",
+      "text": "f"
+    },
+    {
+      "character_offset": 86091,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 96028,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 96583,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 99909,
+      "alg": "O",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 102238,
+      "alg": "U",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 107714,
+      "alg": "U",
+      "text": "\nT(Ya"
+    },
+    {
+      "character_offset": 113441,
+      "alg": "O",
+      "text": "task"
+    },
+    {
+      "character_offset": 128823,
+      "alg": "U",
+      "text": "RobloxPromptGui"
+    },
+    {
+      "character_offset": 131665,
+      "alg": "V",
+      "text": "TitleFrame"
+    },
+    {
+      "character_offset": 132319,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 133033,
+      "alg": "Q",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 133763,
+      "alg": "V",
+      "text": "promptOverlay"
+    },
+    {
+      "character_offset": 135735,
+      "alg": "O",
+      "text": "CoreGui"
+    },
+    {
+      "character_offset": 137475,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 138229,
+      "alg": "O",
+      "text": "ErrorTitle"
+    },
+    {
+      "character_offset": 138924,
+      "alg": "U",
+      "text": "ErrorMessage"
+    },
+    {
+      "character_offset": 139580,
+      "alg": "Q",
+      "text": "MessageArea"
+    },
+    {
+      "character_offset": 142705,
+      "alg": "V",
+      "text": "wait"
+    },
+    {
+      "character_offset": 143374,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 148688,
+      "alg": "Q",
+      "text": "K37\r"
+    },
+    {
+      "character_offset": 149273,
+      "alg": "O",
+      "text": "Players"
+    },
+    {
+      "character_offset": 149934,
+      "alg": "V",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 150815,
+      "alg": "U",
+      "text": "GetService"
+    },
+    {
+      "character_offset": 153054,
+      "alg": "V",
+      "text": "o`1:"
+    },
+    {
+      "character_offset": 158364,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 159766,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 160367,
+      "alg": "U",
+      "text": ".c7]"
+    },
+    {
+      "character_offset": 168077,
+      "alg": "O",
+      "text": "application/json"
+    },
+    {
+      "character_offset": 170340,
+      "alg": "V",
+      "text": "Headers"
+    },
+    {
+      "character_offset": 172070,
+      "alg": "U",
+      "text": "Method"
+    },
+    {
+      "character_offset": 172792,
+      "alg": "O",
+      "text": "HH."
+    },
+    {
+      "character_offset": 175549,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 184948,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 185561,
+      "alg": "U",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 187631,
+      "alg": "O",
+      "text": "spawn"
+    },
+    {
+      "character_offset": 190860,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 191575,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 192281,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 203288,
+      "alg": "Q",
+      "text": "https://api.polsec.net/runtime/socket/heartbeat"
+    },
+    {
+      "character_offset": 204304,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206042,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 206788,
+      "alg": "V",
+      "text": "PolSec: unable to recover this execution. Please execute again."
+    },
+    {
+      "character_offset": 207034,
+      "alg": "O",
+      "text": "'(\ty"
+    },
+    {
+      "character_offset": 207638,
+      "alg": "Q",
+      "text": "\nE%T"
+    },
+    {
+      "character_offset": 208360,
+      "alg": "V",
+      "text": "math"
+    },
+    {
+      "character_offset": 210601,
+      "alg": "U",
+      "text": "{.Uw"
+    },
+    {
+      "character_offset": 211232,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 211957,
+      "alg": "U",
+      "text": "F"
+    },
+    {
+      "character_offset": 212619,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 212998,
+      "alg": "Q",
+      "text": " Q"
+    },
+    {
+      "character_offset": 213660,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 214301,
+      "alg": "U",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 215153,
+      "alg": "O",
+      "text": "Invalid token"
+    },
+    {
+      "character_offset": 219503,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 223436,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 226000,
+      "alg": "U",
+      "text": "j "
+    },
+    {
+      "character_offset": 234480,
+      "alg": "U",
+      "text": "a"
+    },
+    {
+      "character_offset": 235179,
+      "alg": "Q",
+      "text": "a"
+    },
+    {
+      "character_offset": 235529,
+      "alg": "O",
+      "text": "x"
+    },
+    {
+      "character_offset": 236155,
+      "alg": "V",
+      "text": "["
+    },
+    {
+      "character_offset": 239319,
+      "alg": "O",
+      "text": "type"
+    },
+    {
+      "character_offset": 240368,
+      "alg": "Q",
+      "text": "\\v!"
+    },
+    {
+      "character_offset": 246785,
+      "alg": "O",
+      "text": "gui"
+    },
+    {
+      "character_offset": 247595,
+      "alg": "Q",
+      "text": "SESSION_END:"
+    },
+    {
+      "character_offset": 255577,
+      "alg": "V",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 258610,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 259303,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 260962,
+      "alg": "U",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 261728,
+      "alg": "V",
+      "text": "Invalid key"
+    },
+    {
+      "character_offset": 264525,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 265324,
+      "alg": "O",
+      "text": "r-N$"
+    },
+    {
+      "character_offset": 266540,
+      "alg": "Q",
+      "text": "Invalid sessionId"
+    },
+    {
+      "character_offset": 272060,
+      "alg": "V",
+      "text": "d"
+    },
+    {
+      "character_offset": 272358,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 272941,
+      "alg": "Q",
+      "text": "<"
+    },
+    {
+      "character_offset": 296138,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 296821,
+      "alg": "Q",
+      "text": "answered"
+    },
+    {
+      "character_offset": 298117,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 298813,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 299107,
+      "alg": "O",
+      "text": "W"
+    },
+    {
+      "character_offset": 300943,
+      "alg": "O",
+      "text": "s"
+    },
+    {
+      "character_offset": 301585,
+      "alg": "V",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 304959,
+      "alg": "V",
+      "text": "https://api.polsec.net/runtime/socket/http"
+    },
+    {
+      "character_offset": 305610,
+      "alg": "U",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 318979,
+      "alg": "O",
+      "text": "reconnect"
+    },
+    {
+      "character_offset": 322595,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 323253,
+      "alg": "V",
+      "text": "5'"
+    },
+    {
+      "character_offset": 323848,
+      "alg": "O",
+      "text": "table"
+    },
+    {
+      "character_offset": 324568,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 325393,
+      "alg": "Q",
+      "text": "JSONEncode"
+    },
+    {
+      "character_offset": 326028,
+      "alg": "U",
+      "text": "mx"
+    },
+    {
+      "character_offset": 326390,
+      "alg": "V",
+      "text": "}"
+    },
+    {
+      "character_offset": 328898,
+      "alg": "U",
+      "text": "n"
+    },
+    {
+      "character_offset": 329527,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 330691,
+      "alg": "U",
+      "text": "math"
+    },
+    {
+      "character_offset": 335208,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 335494,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336148,
+      "alg": "O",
+      "text": "~"
+    },
+    {
+      "character_offset": 336802,
+      "alg": "V",
+      "text": "type"
+    },
+    {
+      "character_offset": 340258,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 340887,
+      "alg": "U",
+      "text": "pending"
+    },
+    {
+      "character_offset": 345889,
+      "alg": "Q",
+      "text": "connect"
+    },
+    {
+      "character_offset": 353474,
+      "alg": "Q",
+      "text": "rejected"
+    },
+    {
+      "character_offset": 354102,
+      "alg": "U",
+      "text": "clock"
+    },
+    {
+      "character_offset": 357673,
+      "alg": "V",
+      "text": "JSONDecode"
+    },
+    {
+      "character_offset": 364234,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 371071,
+      "alg": "O",
+      "text": "d"
+    },
+    {
+      "character_offset": 375274,
+      "alg": "V",
+      "text": "string"
+    },
+    {
+      "character_offset": 378741,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379315,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 379854,
+      "alg": "O",
+      "text": "big"
+    },
+    {
+      "character_offset": 381824,
+      "alg": "Q",
+      "text": "0QJ"
+    },
+    {
+      "character_offset": 385032,
+      "alg": "Q",
+      "text": "v"
+    },
+    {
+      "character_offset": 385699,
+      "alg": "V",
+      "text": "a"
+    },
+    {
+      "character_offset": 386403,
+      "alg": "U",
+      "text": "s"
+    },
+    {
+      "character_offset": 388830,
+      "alg": "V",
+      "text": "&gns"
+    },
+    {
+      "character_offset": 390244,
+      "alg": "O",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 390865,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 391136,
+      "alg": "U",
+      "text": "og9>"
+    },
+    {
+      "character_offset": 392688,
+      "alg": "O",
+      "text": "?socket=1"
+    },
+    {
+      "character_offset": 393295,
+      "alg": "V",
+      "text": "StatusCode"
+    },
+    {
+      "character_offset": 397095,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 397851,
+      "alg": "U",
+      "text": "Url"
+    },
+    {
+      "character_offset": 398123,
+      "alg": "U",
+      "text": "-"
+    },
+    {
+      "character_offset": 401847,
+      "alg": "Q",
+      "text": "s"
+    },
+    {
+      "character_offset": 404742,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406203,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 406826,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 408760,
+      "alg": "U",
+      "text": "0Af"
+    },
+    {
+      "character_offset": 409378,
+      "alg": "U",
+      "text": "M"
+    },
+    {
+      "character_offset": 410502,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 419790,
+      "alg": "V",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 428979,
+      "alg": "Q",
+      "text": "table"
+    },
+    {
+      "character_offset": 429894,
+      "alg": "V",
+      "text": "BANNED:"
+    },
+    {
+      "character_offset": 430216,
+      "alg": "O",
+      "text": "Z"
+    },
+    {
+      "character_offset": 431038,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 431670,
+      "alg": "U",
+      "text": "Banned: "
+    },
+    {
+      "character_offset": 434846,
+      "alg": "V",
+      "text": "*ka"
+    },
+    {
+      "character_offset": 446256,
+      "alg": "Q",
+      "text": "b"
+    },
+    {
+      "character_offset": 460811,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 461994,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 463503,
+      "alg": "Q",
+      "text": "warn"
+    },
+    {
+      "character_offset": 468829,
+      "alg": "Q",
+      "text": "\\"
+    },
+    {
+      "character_offset": 471648,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 472877,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 473556,
+      "alg": "V",
+      "text": "allocation"
+    },
+    {
+      "character_offset": 475474,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 475705,
+      "alg": "V",
+      "text": "mWd@"
+    },
+    {
+      "character_offset": 491179,
+      "alg": "V",
+      "text": "tonumber"
+    },
+    {
+      "character_offset": 498937,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 499670,
+      "alg": "Q",
+      "text": "ipairs"
+    },
+    {
+      "character_offset": 500380,
+      "alg": "O",
+      "text": "yield"
+    },
+    {
+      "character_offset": 503213,
+      "alg": "Q",
+      "text": "terminal"
+    },
+    {
+      "character_offset": 505591,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 506335,
+      "alg": "U",
+      "text": "remove"
+    },
+    {
+      "character_offset": 524160,
+      "alg": "Q",
+      "text": "clock"
+    },
+    {
+      "character_offset": 524848,
+      "alg": "O",
+      "text": "\n@> e"
+    },
+    {
+      "character_offset": 525609,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526333,
+      "alg": "V",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 526963,
+      "alg": "O",
+      "text": "s 9[t"
+    },
+    {
+      "character_offset": 527649,
+      "alg": "Q",
+      "text": "xP?zb"
+    },
+    {
+      "character_offset": 528356,
+      "alg": "O",
+      "text": "Y{-}"
+    },
+    {
+      "character_offset": 528993,
+      "alg": "O",
+      "text": "!z\r~"
+    },
+    {
+      "character_offset": 531162,
+      "alg": "V",
+      "text": "5b#"
+    },
+    {
+      "character_offset": 533003,
+      "alg": "O",
+      "text": "a"
+    },
+    {
+      "character_offset": 533715,
+      "alg": "U",
+      "text": "task"
+    },
+    {
+      "character_offset": 535823,
+      "alg": "Q",
+      "text": "%"
+    },
+    {
+      "character_offset": 536967,
+      "alg": "U",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 537620,
+      "alg": "Q",
+      "text": "delay"
+    },
+    {
+      "character_offset": 538279,
+      "alg": "O",
+      "text": "`!qY9"
+    },
+    {
+      "character_offset": 543919,
+      "alg": "V",
+      "text": "1003"
+    },
+    {
+      "character_offset": 547825,
+      "alg": "O",
+      "text": "authSent"
+    },
+    {
+      "character_offset": 549406,
+      "alg": "U",
+      "text": "~"
+    },
+    {
+      "character_offset": 551283,
+      "alg": "Q",
+      "text": "u"
+    },
+    {
+      "character_offset": 551953,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 553594,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554247,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 554623,
+      "alg": "O",
+      "text": "hv"
+    },
+    {
+      "character_offset": 554938,
+      "alg": "U",
+      "text": "inflight"
+    },
+    {
+      "character_offset": 555496,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 556204,
+      "alg": "V",
+      "text": "setup"
+    },
+    {
+      "character_offset": 562135,
+      "alg": "Q",
+      "text": "HttpService"
+    },
+    {
+      "character_offset": 562872,
+      "alg": "U",
+      "text": "Velocity"
+    },
+    {
+      "character_offset": 570476,
+      "alg": "V",
+      "text": "__index"
+    },
+    {
+      "character_offset": 583111,
+      "alg": "V",
+      "text": "l4"
+    },
+    {
+      "character_offset": 583710,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 584496,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 584962,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 586684,
+      "alg": "U",
+      "text": "coroutine"
+    },
+    {
+      "character_offset": 587367,
+      "alg": "Q",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 595339,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 595612,
+      "alg": "U",
+      "text": "isnewcclosure"
+    },
+    {
+      "character_offset": 596317,
+      "alg": "V",
+      "text": "getfenv"
+    },
+    {
+      "character_offset": 599198,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 599562,
+      "alg": "O",
+      "text": "setmetatable"
+    },
+    {
+      "character_offset": 621779,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 622583,
+      "alg": "O",
+      "text": "Unknown"
+    },
+    {
+      "character_offset": 625276,
+      "alg": "U",
+      "text": "\t"
+    },
+    {
+      "character_offset": 626023,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 626787,
+      "alg": "U",
+      "text": "1"
+    },
+    {
+      "character_offset": 627446,
+      "alg": "Q",
+      "text": "t"
+    },
+    {
+      "character_offset": 628639,
+      "alg": "V",
+      "text": "/"
+    },
+    {
+      "character_offset": 629223,
+      "alg": "Q",
+      "text": "r"
+    },
+    {
+      "character_offset": 631750,
+      "alg": "O",
+      "text": "F"
+    },
+    {
+      "character_offset": 641886,
+      "alg": "V",
+      "text": "!"
+    },
+    {
+      "character_offset": 642571,
+      "alg": "Q",
+      "text": "d"
+    },
+    {
+      "character_offset": 645171,
+      "alg": "Q",
+      "text": "Basalt"
+    },
+    {
+      "character_offset": 645834,
+      "alg": "U",
+      "text": "955789dbe862b654"
+    },
+    {
+      "character_offset": 655488,
+      "alg": "O",
+      "text": "new"
+    },
+    {
+      "character_offset": 656138,
+      "alg": "U",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 661327,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662006,
+      "alg": "V",
+      "text": "identifyexecutor"
+    },
+    {
+      "character_offset": 662723,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 663898,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 664605,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 665440,
+      "alg": "O",
+      "text": "Delta"
+    },
+    {
+      "character_offset": 666215,
+      "alg": "U",
+      "text": "]5#=+~n"
+    },
+    {
+      "character_offset": 667066,
+      "alg": "Q",
+      "text": "i7}H"
+    },
+    {
+      "character_offset": 667737,
+      "alg": "O",
+      "text": "X\\J'"
+    },
+    {
+      "character_offset": 668488,
+      "alg": "Q",
+      "text": "wrap"
+    },
+    {
+      "character_offset": 669731,
+      "alg": "V",
+      "text": "w"
+    },
+    {
+      "character_offset": 673865,
+      "alg": "V",
+      "text": "loadstring"
+    },
+    {
+      "character_offset": 678012,
+      "alg": "V",
+      "text": "task"
+    },
+    {
+      "character_offset": 681170,
+      "alg": "U",
+      "text": "wait"
+    },
+    {
+      "character_offset": 681905,
+      "alg": "Q",
+      "text": "task"
+    },
+    {
+      "character_offset": 687972,
+      "alg": "Q",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 689235,
+      "alg": "O",
+      "text": "writefile"
+    },
+    {
+      "character_offset": 692393,
+      "alg": "O",
+      "text": "pcall"
+    },
+    {
+      "character_offset": 696196,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 696821,
+      "alg": "O",
+      "text": "__tostring"
+    },
+    {
+      "character_offset": 699195,
+      "alg": "V",
+      "text": "restart"
+    },
+    {
+      "character_offset": 702803,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 703470,
+      "alg": "V",
+      "text": "R2"
+    },
+    {
+      "character_offset": 703810,
+      "alg": "U",
+      "text": "wf"
+    },
+    {
+      "character_offset": 704606,
+      "alg": "O",
+      "text": "W#"
+    },
+    {
+      "character_offset": 705320,
+      "alg": "Q",
+      "text": "request"
+    },
+    {
+      "character_offset": 706043,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 706728,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 707416,
+      "alg": "Q",
+      "text": "__newindex"
+    },
+    {
+      "character_offset": 708179,
+      "alg": "V",
+      "text": "consts"
+    },
+    {
+      "character_offset": 708885,
+      "alg": "U",
+      "text": "-tcI"
+    },
+    {
+      "character_offset": 713358,
+      "alg": "Q",
+      "text": "rawset"
+    },
+    {
+      "character_offset": 714011,
+      "alg": "O",
+      "text": "consts"
+    },
+    {
+      "character_offset": 721630,
+      "alg": "O",
+      "text": "Kick"
+    },
+    {
+      "character_offset": 722346,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 725186,
+      "alg": "V",
+      "text": "Hydrogen"
+    },
+    {
+      "character_offset": 733467,
+      "alg": "U",
+      "text": "dbg.txt"
+    },
+    {
+      "character_offset": 733729,
+      "alg": "V",
+      "text": "l2"
+    },
+    {
+      "character_offset": 734376,
+      "alg": "O",
+      "text": "#."
+    },
+    {
+      "character_offset": 738426,
+      "alg": "U",
+      "text": "requestBound"
+    }
+  ],
+  "unresolved_count": 79
+}

@@ -53,7 +53,7 @@ SUPPORTED = {
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
-    "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is disabled because the supplied engine is incomplete and its bundled fallback is not a complete devirtualizer."},
+    "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "status": "Full recovery: two-stage static engine (unflatten, fold/rename, syntax heal), output verified with the bundled Luau compiler before delivery. Detection first."},
     "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
 

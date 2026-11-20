@@ -1,0 +1,183 @@
+local g = type(getgenv) == "function" and getgenv() or _G
+local marker = "Z,e=O(D[E](I(D,E+1,e))),E+A-1;"
+local replacement = marker .. "if D[E+1]==3 then __ps_record(Z[1],D[E+2]) end;"
+local __ps_export_writer = writefile
+local prefix = [=[
+local __ps_env = type(getgenv) == "function" and getgenv() or _G
+local __ps_write = type(__ps_env) == "table" and __ps_env.__ps_capture_export or nil
+if type(__ps_write) ~= "function" then __ps_write = writefile end
+local __ps_argument_saved = false
+local __ps_args = table.pack(...)
+pcall(function()
+    local lines = {"count=" .. tostring(__ps_args.n)}
+    for i=1,__ps_args.n do
+        local v=__ps_args[i]
+        if type(v)=="string" then lines[#lines+1]="arg"..i.."="..string.format("%q",v)
+        elseif type(v)=="number" or type(v)=="boolean" then lines[#lines+1]="arg"..i.."="..tostring(v)
+        else lines[#lines+1]="arg"..i.."_type="..type(v) end
+    end
+    __ps_write("polsec_live_entry_args.txt",table.concat(lines,"\n"))
+    warn("[PolSec capture] saved polsec_live_entry_args.txt")
+end)
+local __ps_entry_saved = false
+local function __ps_record_entry(H)
+    if __ps_entry_saved then return end
+    pcall(function()
+        if type(H)~="table" or H[37]~=222849253 or type(H[35])~="function" then return end
+        local lines={"key_type="..type(H[27]),"value_type="..type(H[36])}
+        if type(H[27])=="string" then lines[#lines+1]="key="..string.format("%q",H[27])
+        elseif type(H[27])=="number" then lines[#lines+1]="key="..string.format("%.17g",H[27]) end
+        if type(H[36])=="number" then lines[#lines+1]="value="..string.format("%.17g",H[36])
+        elseif type(H[36])=="string" then lines[#lines+1]="value="..string.format("%q",H[36]) end
+        __ps_write("polsec_live_entry_state.txt",table.concat(lines,"\n"))
+        __ps_entry_saved=true
+        warn("[PolSec capture] saved polsec_live_entry_state.txt")
+    end)
+end
+local function __ps_record_app(H)
+    if __ps_argument_saved then return end
+    pcall(function()
+        if type(H)~="table" or type(H[63])~="number" or type(H[64])~="number" or H[64]~=528465306 then return end
+        local lines={"checksum="..string.format("%.17g",H[63]),"constant="..tostring(H[64]),"key_type="..type(H[27])}
+        local key=H[27]
+        if type(key)=="string" then lines[#lines+1]="key="..string.format("%q",key)
+        elseif type(key)=="number" then lines[#lines+1]="key="..string.format("%.17g",key) end
+        local ok,value=pcall(function() return getfenv()[key] end)
+        if ok then
+            if type(value)=="number" then lines[#lines+1]="value="..string.format("%.17g",value)
+            elseif type(value)=="string" then lines[#lines+1]="value="..string.format("%q",value)
+            else lines[#lines+1]="value_type="..type(value) end
+        end
+        __ps_write("polsec_live_app_state.txt",table.concat(lines,"\n"))
+        __ps_argument_saved=true
+        warn("[PolSec capture] saved polsec_live_app_state.txt")
+    end)
+end
+local __ps_session
+local __ps_state_saved = false
+local function __ps_capture_state(cells)
+    if __ps_state_saved then return end
+    pcall(function()
+        if type(cells) ~= "table" or type(cells[2]) ~= "table" then return end
+        local cell = cells[2]
+        if cell[4] ~= 76 or type(cell[5]) ~= "table" then return end
+        local root = cell[5]
+        if type(root[77]) ~= "table" or #root[77] ~= 383 or root[76] ~= 13483 then return end
+        local lines = {"length=" .. tostring(#root[77])}
+        for i = 1, #root[77] do
+            if type(root[77][i]) ~= "number" then return end
+            lines[#lines + 1] = tostring(root[77][i])
+        end
+        __ps_write("polsec_live_state_new.txt", table.concat(lines, "\n"))
+        __ps_state_saved = true
+        warn("[PolSec capture] saved polsec_live_state_new.txt")
+    end)
+end
+local function __ps_save_session(value)
+    if type(value) == "number" or type(value) == "string" then
+        __ps_session = value
+    end
+end
+local function __ps_record(response, request)
+    pcall(function()
+        if type(response) ~= "table" then return end
+        local body = response.e
+        if type(body) ~= "table" or body.e ~= "Valid key" then return end
+        local lines = {}
+        local function add(name, value)
+            local kind = type(value)
+            if kind == "number" then
+                lines[#lines + 1] = name .. "=" .. string.format("%.17g", value)
+            elseif kind == "string" then
+                lines[#lines + 1] = name .. "=" .. string.format("%q", value)
+            elseif kind == "boolean" then
+                lines[#lines + 1] = name .. "=" .. tostring(value)
+            else
+                lines[#lines + 1] = name .. "_type=" .. kind
+            end
+        end
+        add("a", body.a)
+        add("b", body.b)
+        add("c", body.c)
+        add("session", __ps_session)
+        if type(request) == "table" and type(request.b) == "table" then
+            add("request4", request.b[4])
+            add("request5", request.b[5])
+            add("request6", request.b[6])
+        end
+        __ps_write("polsec_live_handshake_new.txt", table.concat(lines, "\n"))
+        warn("[PolSec capture] saved polsec_live_handshake_new.txt")
+    end)
+end
+]=]
+local function patch(src)
+    if type(src) ~= "string" or not src:find("Luraph", 1, true) or not src:find(marker, 1, true) then
+        return src
+    end
+    local out = {}
+    local from = 1
+    local count = 0
+    while true do
+        local first, last = src:find(marker, from, true)
+        if not first then break end
+        out[#out + 1] = src:sub(from, first - 1)
+        out[#out + 1] = replacement
+        from = last + 1
+        count += 1
+    end
+    out[#out + 1] = src:sub(from)
+    local instrumented = table.concat(out)
+    local loops = {
+        "while true do local C,ld=e[F];",
+        "while true do local z=e[F];",
+        "while true do local z,Y=e[F];",
+    }
+    for _, loop in ipairs(loops) do
+        local parts, start = {}, 1
+        while true do
+            local first, last = instrumented:find(loop, start, true)
+            if not first then break end
+            parts[#parts + 1] = instrumented:sub(start, last)
+            parts[#parts + 1] = "if F==142 then __ps_capture_state(G) elseif F==2202 then __ps_record_app(H) elseif F==43 then __ps_record_entry(H) end;"
+            start = last + 1
+        end
+        parts[#parts + 1] = instrumented:sub(start)
+        instrumented = table.concat(parts)
+    end
+    local indexMarker = "q=D[e];e-=1;D[e]=D[e][q];"
+    local indexReplacement = indexMarker .. "if q==\"session\" then __ps_save_session(D[e]) end;"
+    local parts = {}
+    local start = 1
+    while true do
+        local first, last = instrumented:find(indexMarker, start, true)
+        if not first then break end
+        parts[#parts + 1] = instrumented:sub(start, first - 1)
+        parts[#parts + 1] = indexReplacement
+        start = last + 1
+    end
+    parts[#parts + 1] = instrumented:sub(start)
+    pcall(writefile, "polsec_response_source.lua", src)
+    warn("[PolSec capture] saved source and instrumented " .. count .. " VM call sites")
+    return prefix .. table.concat(parts)
+end
+local function wrap(original)
+    return function(src, ...)
+        local ok, result = pcall(patch, src)
+        return original(ok and result or src, ...)
+    end
+end
+local function arm(env)
+    if type(env) ~= "table" then return end
+    rawset(env, "__ps_capture_export", __ps_export_writer)
+    if rawget(env, "__polsec_response_armed") then return end
+    local old = env.loadstring
+    if type(old) == "function" then
+        rawset(env, "loadstring", wrap(old))
+        rawset(env, "__polsec_response_armed", true)
+    end
+end
+pcall(arm, g)
+pcall(arm, _G)
+pcall(arm, shared)
+if type(getfenv) == "function" then pcall(arm, getfenv()) end
+warn("[PolSec capture] armed; run your usual loader")

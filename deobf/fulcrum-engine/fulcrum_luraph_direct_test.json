@@ -1,0 +1,9 @@
+{
+  "input": "../uploads/polsec_luraph_3.txt",
+  "sha256": "c675b61926ddf73f3fa54d7d1bd71f29e3321da8a1853af574fcc1f5cf6812e3",
+  "fulcrum_header": false,
+  "note": "This is a static analysis report, not devirtualized code. Known-sample strings are heuristic candidates, not verified substitutions.",
+  "known_sample": false,
+  "string_candidates": [],
+  "direct_literal_candidates": []
+}

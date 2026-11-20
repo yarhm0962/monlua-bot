@@ -1,0 +1,192 @@
+{
+ "bI": {
+  "algo": "Q",
+  "text": "http",
+  "hex": "68747470"
+ },
+ "bJ": {
+  "algo": "O",
+  "text": "http_request",
+  "hex": "687474705f72657175657374"
+ },
+ "bK": {
+  "algo": "Q",
+  "text": "pcall",
+  "hex": "7063616c6c"
+ },
+ "bP": {
+  "algo": "O",
+  "text": "script_key",
+  "hex": "7363726970745f6b6579"
+ },
+ "bd": {
+  "algo": "U",
+  "text": "2ab80ae141b17f8e8ec6266171048dbacc255535afb6c3b7e25180eaea6d1be1",
+  "hex": "32616238306165313431623137663865386563363236363137313034386462616363323535353335616662366333623765323531383065616561366431626531"
+ },
+ "bj": {
+  "algo": "U",
+  "text": "BANNED:",
+  "hex": "42414e4e45443a"
+ },
+ "bp": {
+  "algo": "O",
+  "text": "Polsec is a Lua whitelisting service, and attempting to deobfuscate, reverse-engineer, or otherwise bypass its protections is against the service’s Terms of Service. Continuing to do so could potentially get the owner or other involved parties in trouble, including account or service consequences. Stop attempting to deobfuscate or bypass Polsec and leave the protected code alone.",
+  "hex": "506f6c7365632069732061204c75612077686974656c697374696e6720736572766963652c20616e6420617474656d7074696e6720746f2064656f62667573636174652c20726576657273652d656e67696e6565722c206f72206f746865727769736520627970617373206974732070726f74656374696f6e7320697320616761696e7374207468652073657276696365e2809973205465726d73206f6620536572766963652e20436f6e74696e75696e6720746f20646f20736f20636f756c6420706f74656e7469616c6c792067657420746865206f776e6572206f72206f7468657220696e766f6c766564207061727469657320696e2074726f75626c652c20696e636c7564696e67206163636f756e74206f72207365727669636520636f6e73657175656e6365732e2053746f7020617474656d7074696e6720746f2064656f6266757363617465206f722062797061737320506f6c73656320616e64206c65617665207468652070726f74656374656420636f646520616c6f6e652e"
+ },
+ "br": {
+  "algo": "O",
+  "text": "R2",
+  "hex": "5232"
+ },
+ "bv": {
+  "algo": "O",
+  "text": "5",
+  "hex": "35"
+ },
+ "bx": {
+  "algo": "V",
+  "text": "_",
+  "hex": "5f"
+ },
+ "eH": {
+  "algo": "V",
+  "text": "Invalid sessionId",
+  "hex": "496e76616c69642073657373696f6e4964"
+ },
+ "eJ": {
+  "algo": "V",
+  "text": "JSONEncode",
+  "hex": "4a534f4e456e636f6465"
+ },
+ "eK": {
+  "algo": "Q",
+  "text": "Method",
+  "hex": "4d6574686f64"
+ },
+ "eP": {
+  "algo": "O",
+  "text": "acks",
+  "hex": "61636b73"
+ },
+ "eR": {
+  "algo": "V",
+  "text": "answered",
+  "hex": "616e737765726564"
+ },
+ "eS": {
+  "algo": "V",
+  "text": "authSent",
+  "hex": "6175746853656e74"
+ },
+ "fa": {
+  "algo": "U",
+  "text": "inflight",
+  "hex": "696e666c69676874"
+ },
+ "fe": {
+  "algo": "O",
+  "text": "min",
+  "hex": "6d696e"
+ },
+ "fi": {
+  "algo": "O",
+  "text": "reported",
+  "hex": "7265706f72746564"
+ },
+ "fl": {
+  "algo": "Q",
+  "text": "sub",
+  "hex": "737562"
+ },
+ "fn": {
+  "algo": "Q",
+  "text": "terminal",
+  "hex": "7465726d696e616c"
+ },
+ "fo": {
+  "algo": "V",
+  "text": "tonumber",
+  "hex": "746f6e756d626572"
+ },
+ "fq": {
+  "algo": "Q",
+  "text": "warn",
+  "hex": "7761726e"
+ },
+ "hL": {
+  "algo": "U",
+  "text": "SESSION_END:",
+  "hex": "53455353494f4e5f454e443a"
+ },
+ "hM": {
+  "algo": "O",
+  "text": "https://api.polsec.net/runtime/socket/heartbeat",
+  "hex": "68747470733a2f2f6170692e706f6c7365632e6e65742f72756e74696d652f736f636b65742f686561727462656174"
+ },
+ "hN": {
+  "algo": "Q",
+  "text": "restarting",
+  "hex": "72657374617274696e67"
+ },
+ "ht": {
+  "algo": "V",
+  "text": "Invalid session",
+  "hex": "496e76616c69642073657373696f6e"
+ },
+ "iG": {
+  "algo": "U",
+  "text": "1000",
+  "hex": "31303030"
+ },
+ "iJ": {
+  "algo": "V",
+  "text": "rejected",
+  "hex": "72656a6563746564"
+ },
+ "kH": {
+  "algo": "O",
+  "text": "?socket=1",
+  "hex": "3f736f636b65743d31"
+ },
+ "kO": {
+  "algo": "O",
+  "text": "https://api.polsec.net/loader/session/",
+  "hex": "68747470733a2f2f6170692e706f6c7365632e6e65742f6c6f616465722f73657373696f6e2f"
+ },
+ "mE": {
+  "algo": "V",
+  "text": "k",
+  "hex": "6b"
+ },
+ "nl": {
+  "algo": "Q",
+  "text": "CoreGui",
+  "hex": "436f7265477569"
+ },
+ "nq": {
+  "algo": "V",
+  "text": "MessageArea",
+  "hex": "4d65737361676541726561"
+ },
+ "oY": {
+  "algo": "Q",
+  "text": "requestBound",
+  "hex": "72657175657374426f756e64"
+ },
+ "oz": {
+  "algo": "U",
+  "text": "hash",
+  "hex": "68617368"
+ },
+ "pe": {
+  "algo": "O",
+  "text": "setmetatable",
+  "hex": "7365746d6574617461626c65"
+ },
+ "pi": {
+  "algo": "O",
+  "text": "rawset",
+  "hex": "726177736574"
+ }
+}
