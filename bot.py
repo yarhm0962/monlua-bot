@@ -53,6 +53,7 @@ SUPPORTED = {
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
+    "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is disabled because the supplied engine is incomplete and its bundled fallback is not a complete devirtualizer."},
     "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
 
@@ -821,7 +822,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     return view
 
 
-DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator")
+DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator", "fulcrum")
 
 
 def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None, owner_id: Optional[int] = None) -> discord.ui.LayoutView:

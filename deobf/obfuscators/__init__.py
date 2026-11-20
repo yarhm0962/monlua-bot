@@ -10,6 +10,7 @@ from obfuscators.moonveil_v211 import MoonVeilV211
 from obfuscators.ironveil_v1 import IronveilV1
 from obfuscators.seventyseven import SeventySevenFuscator
 from obfuscators.ironbrew2 import Ironbrew2
+from obfuscators.fulcrum import Fulcrum
 from obfuscators.generic import Generic
 from obfuscators import extra_families
 
@@ -24,6 +25,7 @@ PLUGINS = [
     IronveilV1(),
     SeventySevenFuscator(),
     Ironbrew2(),
+    Fulcrum(),
     Generic(),
 ]
 
