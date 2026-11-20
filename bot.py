@@ -2288,7 +2288,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             async with cloud_slots:
                                 cloud_out = await _await_with_progress(
                                     status,
-                                    f"`{filename[:120]}` is being processed on the remote runner.\nElapsed · {elapsed}",
+                                    f"`{filename[:120]}` is being processed on the remote runner." + "\nElapsed · {elapsed}",
                                     asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
                                     heading="Cloud processing",
                                     interval=30,
@@ -2317,7 +2317,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         try:
                             returncode, stdout, stderr = await _await_with_progress(
                                 status,
-                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}\nElapsed · {elapsed}",
+                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}" + "\nElapsed · {elapsed}",
                                 _run_process(command, JOB_TIMEOUT + 15, env=process_env),
                             )
                         except asyncio.TimeoutError:
