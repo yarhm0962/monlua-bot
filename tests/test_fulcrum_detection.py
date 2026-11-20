@@ -109,6 +109,16 @@ class FulcrumDetectionTests(unittest.TestCase):
         self.assertTrue(any(plugin.name == "fulcrum" for plugin in PLUGINS))
         self.assertEqual(by_name("fulcrum").label, "Fulcrum Deobfuscator")
 
+    def test_unavailable_engine_detection_is_reported_for_fulcrum_and_jayfuscator(self):
+        for name in ("fulcrum", "jayfuscator"):
+            match = bot_module._unavailable_engine_match([
+                (name, 0.94, name, ["header matched"]),
+            ])
+            self.assertEqual(match, (name, 0.94))
+        self.assertIsNone(bot_module._unavailable_engine_match([
+            ("fulcrum", 0.74, "Fulcrum Deobfuscator", ["shape only"]),
+        ]))
+
     def test_bot_disables_recovery_until_the_engine_is_complete(self):
         self.assertIn("fulcrum", bot_module.SUPPORTED)
         self.assertFalse(bot_module._engine_is_available("fulcrum"))
