@@ -61,6 +61,17 @@ class EngineAvailabilityTests(unittest.TestCase):
         self.assertTrue(unavailable[0].disabled)
         self.assertIn("unavailable", unavailable[0].label.lower())
 
+
+    def test_fulcrum_is_registered_but_disabled_until_recovery_is_validated(self):
+        import bot as bot_module
+
+        self.assertEqual(by_name("fulcrum").label, "Fulcrum Deobfuscator")
+        self.assertIn("fulcrum", bot_module.SUPPORTED)
+        self.assertFalse(bot_module._engine_is_available("fulcrum"))
+        self.assertFalse(any(option.value == "fulcrum" for option in bot_module._engine_select_options()))
+        rows = [("fulcrum", 1.0, "Fulcrum Deobfuscator", ["known sample fingerprint"])]
+        self.assertIsNone(bot_module._recommended_engine(rows))
+
     def test_unavailable_engines_are_not_recommended(self):
         import bot as bot_module
 

@@ -53,6 +53,7 @@ SUPPORTED = {
     "ironbrew2": {"label": "IronBrew2", "command": ".do"},
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
+    "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "available": False, "status": "Detection is available; verified recovery is unavailable because the supplied engine package is incomplete."},
     "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
 
