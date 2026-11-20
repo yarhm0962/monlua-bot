@@ -279,8 +279,10 @@ def cloud_runner_configured() -> bool:
     token = GH_DISPATCH_TOKEN.lower()
     return len(token) >= 20 and not any(marker in token for marker in GH_TOKEN_PLACEHOLDERS)
 CLOUD_V151_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_V151_MIN_BYTES", "100000")))
-CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "256000")))
+CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "131072")))
+CLOUD_FULCRUM_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_FULCRUM_MIN_BYTES", "100000")))
 CLOUD_WAIT_SECONDS = max(60, min(1800, int(os.getenv("CLOUD_WAIT_SECONDS", "1500"))))
+CLOUD_MIN_BYTES = {"luraph_v151": CLOUD_V151_MIN_BYTES, "fulcrum": CLOUD_FULCRUM_MIN_BYTES}
 CLOUD_POLL_SECONDS = max(3, min(20, int(os.getenv("CLOUD_POLL_SECONDS", "5"))))
 cloud_slots = asyncio.Semaphore(1)
 _RESULT_CACHE: OrderedDict = OrderedDict()
@@ -451,7 +453,7 @@ def _prepare_deobfuscated_output(source: str) -> str:
 
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
-PASTEFY_TOKEN = os.getenv("PASTEFY_TOKEN", "").strip()
+PASTEFY_TOKEN = (os.getenv("PASTEFY_TOKEN") or os.getenv("PASTEFY_API_TOKEN") or "").strip()
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
 MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(256 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
@@ -670,8 +672,10 @@ async def _send_beautified_output(ctx: commands.Context, filename: str, source: 
 
 def _pastefy_post(payload: dict):
     headers = {"Content-Type": "application/json"}
-    attempts = ([{"Authorization": PASTEFY_TOKEN}] if PASTEFY_TOKEN else []) + [{}]
+    # Pastefy's API expects the token as a Bearer header, not a raw value.
+    attempts = ([{"Authorization": f"Bearer {PASTEFY_TOKEN}"}] if PASTEFY_TOKEN else []) + [{}]
     for auth in attempts:
+        tagged = "with API token" if auth else "anonymous"
         try:
             request = urllib.request.Request(
                 PASTEFY_API_URL, data=json.dumps(payload).encode("utf-8"),
@@ -680,10 +684,14 @@ def _pastefy_post(payload: dict):
                 data = json.loads(response.read().decode("utf-8", errors="replace"))
             paste = data.get("paste") or {}
             if paste.get("id"):
+                if auth:
+                    print("Pastefy upload OK with API token.", flush=True)
                 return paste
-            print(f"Pastefy upload rejected: {str(data)[:200]}", flush=True)
+            print(f"Pastefy upload rejected ({tagged}): {str(data)[:200]}", flush=True)
+            if auth and PASTEFY_TOKEN:
+                print("Pastefy rejected the API token; uploads fall back to anonymous. Check PASTEFY_TOKEN.", flush=True)
         except Exception as exc:
-            print(f"Pastefy upload failed ({'with token' if auth else 'anonymous'}): {type(exc).__name__}: {exc}", flush=True)
+            print(f"Pastefy upload failed ({tagged}): {type(exc).__name__}: {exc}", flush=True)
     return None
 
 
@@ -1607,9 +1615,10 @@ def _read_lua_string_literal(source: str, start: int) -> tuple[Optional[str], in
     return None, start
 
 
-def _extract_loadstring_url(source: bytes | str) -> Optional[str]:
+def _extract_loadstring_urls(source: bytes | str) -> list[str]:
     text = source.decode("utf-8-sig", errors="replace") if isinstance(source, bytes) else source
     code = _strip_lua_comments(text)
+    all_urls: list[str] = []
     index = 0
     while index < len(code):
         char = code[index]
@@ -1650,74 +1659,101 @@ def _extract_loadstring_url(source: bytes | str) -> Optional[str]:
                 cursor += 1
             if candidates:
                 candidates.sort(key=lambda item: item[0])
-                return candidates[0][1]
+                all_urls.extend(candidate[1] for candidate in candidates)
             index = max(cursor, finish)
             continue
         index += 1
-    return None
+    return all_urls
+
+
+def _extract_loadstring_url(source: bytes | str) -> Optional[str]:
+    urls = _extract_loadstring_urls(source) or []
+    return urls[0] if urls else None
 
 
 def _download_get_source(
     url: str,
     destination: Path,
     max_loader_depth: int = 4,
+    request_timeout: int = 15,
+    chain_budget_seconds: int = 120,
 ) -> tuple[str, int, int, Optional[str]]:
-    current_url = _normalize_get_url(url)
+    """Fetch raw source, then follow every embedded loadstring link that works.
+
+    Each request is short and the whole chain has a time budget, so one dead
+    link in a loader can no longer stall the command; the first embedded URL
+    that downloads wins, and further candidates are tried when one fails."""
     seen: set[str] = set()
     last_body: Optional[bytes] = None
     last_filename = "raw.lua"
     note: Optional[str] = None
+    blocked_note: Optional[str] = None
     resolved_depth = 0
-    following_loader = False
+    chain_deadline = time.monotonic() + chain_budget_seconds
 
     with tempfile.TemporaryDirectory(prefix="monlua_get_") as workspace:
         stage = Path(workspace) / "download.bin"
-        for _ in range(max_loader_depth + 1):
-            current_url = _normalize_get_url(current_url)
-            try:
-                validated_url, _filename = _validate_public_url(current_url, allow_any_ext=True)
-            except ValueError as exc:
-                note = f"An embedded URL was blocked by URL safety checks: {exc}"
+        pending_urls: list[str] = [_normalize_get_url(url)]
+        iteration = 0
+        while pending_urls and time.monotonic() < chain_deadline:
+            followed = False
+            for candidate in pending_urls:
+                current_url = _normalize_get_url(candidate)
+                try:
+                    validated_url, _filename = _validate_public_url(current_url, allow_any_ext=True)
+                except ValueError as exc:
+                    blocked_note = f"An embedded URL was blocked by URL safety checks: {exc}"
+                    continue
+                if validated_url in seen:
+                    continue
+                seen.add(validated_url)
+                try:
+                    filename, _size = _download_url(
+                        validated_url, stage, allow_any_ext=True,
+                        timeout=request_timeout, max_attempts=2,
+                    )
+                    body = stage.read_bytes()
+                except (ValueError, OSError) as exc:
+                    if last_body is None:
+                        raise
+                    note = f"Couldn't follow an embedded loadstring URL ({str(exc)[:150]})."
+                    continue
+                last_body = body
+                last_filename = filename
+                followed = True
                 break
-            if validated_url in seen:
-                note = "A repeating loadstring URL was detected; returned the last non-repeating source."
+            if not followed:
                 break
-            seen.add(validated_url)
-            try:
-                filename, _size = _download_url(validated_url, stage, allow_any_ext=True)
-                body = stage.read_bytes()
-            except (ValueError, OSError) as exc:
-                if last_body is None:
-                    raise
-                note = f"Couldn't follow an embedded loadstring URL ({str(exc)[:150]}). Returned its parent loader."
-                break
-
-            if following_loader:
+            if iteration > 0:
                 resolved_depth += 1
-                following_loader = False
-            last_body = body
-            last_filename = filename
-            nested_url = _extract_loadstring_url(body)
-            if not nested_url:
-                destination.write_bytes(body)
-                return filename, len(body), resolved_depth, note
+            iteration += 1
+            nested_urls = _extract_loadstring_urls(last_body)
+            if not nested_urls:
+                destination.write_bytes(last_body)
+                return last_filename, len(last_body), resolved_depth, note
             if resolved_depth >= max_loader_depth:
                 note = f"Loader nesting limit reached ({max_loader_depth}); returned the last fetched loader."
                 break
-            current_url = nested_url
-            following_loader = True
+            pending_urls = nested_urls
 
         if last_body is None:
-            raise ValueError(note or "No source content could be fetched.")
+            raise ValueError(blocked_note or note or "No source content could be fetched.")
+        if note is None:
+            if blocked_note:
+                note = blocked_note
+            elif pending_urls and time.monotonic() >= chain_deadline:
+                note = f"Stopped following the loadstring chain after {chain_budget_seconds}s; returned the deepest source reached."
+            elif pending_urls:
+                note = "A repeating loadstring URL was detected; returned the last non-repeating source."
         destination.write_bytes(last_body)
         return last_filename, len(last_body), resolved_depth, note
 
 
-def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> tuple[str, int]:
+def _download_url(url: str, destination: Path, allow_any_ext: bool = False, timeout: int = URL_TIMEOUT, max_attempts: int = 2) -> tuple[str, int]:
     current_url = url
     last_net_error: Optional[Exception] = None
     opener = urllib.request.build_opener(_NoRedirect)
-    for attempt in range(2):          # one retry for transient network drops
+    for attempt in range(max_attempts):  # one retry for transient network drops
         if attempt:
             time.sleep(2)             # brief backoff, then the same ladder again
         for _ in range(4):
@@ -1731,7 +1767,7 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False) -> t
                     "Accept-Language": "en-US,en;q=0.9",
                 })
                 try:
-                    response = opener.open(request, timeout=URL_TIMEOUT)
+                    response = opener.open(request, timeout=timeout)
                     break
                 except urllib.error.HTTPError as exc:
                     if exc.code in (301, 302, 303, 307, 308):
@@ -2100,6 +2136,42 @@ def result_embed(filename: str, label: str, size: int, desc: str, file_note: boo
     return embed
 
 
+async def _await_with_progress(
+    status,
+    base_text: str,
+    coro,
+    heading: str = "Processing source",
+    interval: int = 15,
+):
+    """Await coro while refreshing the status message with a live elapsed timer.
+
+    The timer stops as soon as coro settles so later status edits always win."""
+    started = time.monotonic()
+    stopped = False
+
+    async def refresh():
+        nonlocal stopped
+        while not stopped:
+            await asyncio.sleep(interval)
+            if stopped:
+                return
+            seconds = max(1, int(time.monotonic() - started))
+            elapsed = f"{seconds}s" if seconds < 120 else f"{seconds // 60}m {seconds % 60}s"
+            try:
+                await status.edit(content=None, view=info_view(heading, base_text.replace("{elapsed}", elapsed)))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return
+
+    timer = asyncio.create_task(refresh())
+    try:
+        return await coro
+    finally:
+        stopped = True
+        timer.cancel()
+
+
 async def process_input(ctx: commands.Context, engine: str, url: str = "", preset=None) -> None:
     if engine not in SUPPORTED or not _engine_is_available(engine):
         await ctx.reply(view=info_view("Engine unavailable", SUPPORTED.get(engine, {}).get("status", "This deobfuscation engine is not available yet.")), mention_author=False)
@@ -2208,13 +2280,19 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     _RESULT_CACHE.move_to_end(cache_key)
                     await asyncio.to_thread(output_path.write_bytes, cached)
                 else:
-                    go_cloud = engine != "moonveil_v145" and ((size >= CLOUD_V151_MIN_BYTES) if engine == "luraph_v151" else (size >= CLOUD_OTHER_MIN_BYTES))
+                    cloud_min = CLOUD_MIN_BYTES.get(engine, CLOUD_OTHER_MIN_BYTES)
+                    go_cloud = engine != "moonveil_v145" and size >= cloud_min
                     if go_cloud and cloud_runner_configured():
                         try:
                             await status.edit(content=None, view=info_view("Cloud processing", f"`{filename[:120]}` is being processed on the remote runner."))
                             async with cloud_slots:
-                                cloud_out = await asyncio.to_thread(
-                                    _cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS)
+                                cloud_out = await _await_with_progress(
+                                    status,
+                                    f"`{filename[:120]}` is being processed on the remote runner.\nElapsed · {elapsed}",
+                                    asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
+                                    heading="Cloud processing",
+                                    interval=30,
+                                )
                             await asyncio.to_thread(output_path.write_bytes, cloud_out)
                         except Exception as exc:
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
@@ -2237,7 +2315,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                                        "--output", str(output_path), "--timeout", str(JOB_TIMEOUT)]
                         print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
                         try:
-                            returncode, stdout, stderr = await _run_process(command, JOB_TIMEOUT + 15, env=process_env)
+                            returncode, stdout, stderr = await _await_with_progress(
+                                status,
+                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}\nElapsed · {elapsed}",
+                                _run_process(command, JOB_TIMEOUT + 15, env=process_env),
+                            )
                         except asyncio.TimeoutError:
                             await status.edit(content=None, view=error_view("Processing timed out", f"The engine reached its {JOB_TIMEOUT}-second execution limit. Try a smaller input or retry later."))
                             return

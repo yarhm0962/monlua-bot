@@ -71,7 +71,7 @@ class GetLoaderRegressionTests(unittest.TestCase):
         def fake_validate(url, allow_any_ext=False):
             return url, "loader.lua"
 
-        def fake_download(url, destination, allow_any_ext=False):
+        def fake_download(url, destination, allow_any_ext=False, **kwargs):
             if url != parent_url:
                 raise ValueError("the child source is unavailable")
             destination.write_bytes(parent_body)

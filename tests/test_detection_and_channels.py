@@ -112,7 +112,7 @@ class GetCommandLinkTests(unittest.TestCase):
         def fake_validate(url, allow_any_ext=False):
             return url, Path(url).name
 
-        def fake_download(url, destination, allow_any_ext=False):
+        def fake_download(url, destination, allow_any_ext=False, **kwargs):
             body = bodies[url]
             destination.write_bytes(body)
             return Path(url).name, len(body)
