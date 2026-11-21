@@ -148,7 +148,7 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
 class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_output_giver_prefers_rubis_then_falls_back_to_pastefy(self):
         with patch.object(bot, "_rubis_upload", return_value=("https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw")):
-            self.assertEqual(bot._upload_output("code", "title"), ("Rubis", "https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw"))
+            self.assertEqual(bot._upload_output("code", "title"), ("Rubiš", "https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw"))
         with patch.object(bot, "_rubis_upload", return_value=("", "")), patch.object(
             bot, "_pastefy_upload", return_value="https://pastefy.app/test"
         ):
