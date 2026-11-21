@@ -359,6 +359,27 @@ def _polsec_dump(src, dst, depth=0):
 
 
 def cmd_deobf(src, dst, depth=0, skip_polsec=False):
+    # Fulcrum new build: local VM, no HWID/key gate -> the payload is inside the
+    # file; reconstruct it from the traced dispatch states instead of phoning
+    # polsec.net (that path only fits the HWID-gated remote-loader builds).
+    try:
+        text = Path(src).read_text(errors='replace')
+    except OSError:
+        text = ''
+    if 'bit32.bxor' in text and 'HWID' not in text and 'api.polsec.net/loader/' not in text:
+        try:
+            import newbuild
+            sites = newbuild.find_sites(text)
+        except Exception:
+            sites = []
+        if sites:
+            print('fulcrum new build detected (%d dispatch heads, no HWID gate): local trace-driven reconstruction' % len(sites))
+            art, res, _b0 = newbuild.deobfuscate(text)
+            Path(dst).write_text(art, encoding='utf-8')
+            total = sum(len(v['states']) for v in res.values())
+            bad = sum(len(v['bad']) for v in res.values())
+            print('reconstructed %d executed VM states (%d unresolved) -> %s' % (total, bad, dst))
+            return
     tmp = ROOT / '_stage1_out.lua'
     try:
         try:
