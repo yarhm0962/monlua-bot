@@ -2632,7 +2632,11 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             await status.edit(content=None, view=info_view("Source preview", body))
         elif size <= upload_limit:
             await status.edit(content=None, view=info_view("Source fetched", details_text + "\nThe complete file is attached below."))
-            await ctx.send(view=info_view("Download ready", "The complete source file is attached."), file=discord.File(fp=str(temporary), filename=safe_name))
+            # Components V2 messages only show attachments referenced by a File
+            # component, so the download card carries one pointing at the upload.
+            download_view = info_view("Download ready", "The complete source file is attached.")
+            download_view.children[0].add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{safe_name}")))
+            await ctx.send(view=download_view, file=discord.File(fp=str(temporary), filename=safe_name))
         else:
             source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
             pastefy_url = await asyncio.to_thread(_pastefy_upload, source_text, Path(filename).stem or "raw")
