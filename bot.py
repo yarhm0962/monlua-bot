@@ -121,23 +121,28 @@ CHANNEL_CONFIG_PATH = Path(os.getenv("CHANNEL_CONFIG_PATH", str(ROOT / "channel_
 CHANNEL_CONFIG_LOAD_FAILED = False
 
 
+def _validate_channel_config(raw) -> dict[str, list[int]]:
+    """Shape-check a raw allowlist mapping; raises ValueError on anything invalid."""
+    if not isinstance(raw, dict):
+        raise ValueError("expected a JSON object keyed by guild ID")
+    result: dict[str, list[int]] = {}
+    for guild_id, values in raw.items():
+        if not str(guild_id).isdigit() or not isinstance(values, list):
+            raise ValueError("invalid guild ID or channel list in settings")
+        if any(not str(value).isdigit() for value in values):
+            raise ValueError("invalid channel ID in settings")
+        valid = sorted({int(value) for value in values})
+        if valid:
+            result[str(int(guild_id))] = valid
+    return result
+
+
 def _load_channel_restrictions() -> dict[str, list[int]]:
     """Load per-guild allowlists; malformed/unreadable settings fail closed."""
     global CHANNEL_CONFIG_LOAD_FAILED
     try:
         raw = json.loads(CHANNEL_CONFIG_PATH.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("expected a JSON object keyed by guild ID")
-        result: dict[str, list[int]] = {}
-        for guild_id, values in raw.items():
-            if not str(guild_id).isdigit() or not isinstance(values, list):
-                raise ValueError("invalid guild ID or channel list in settings")
-            if any(not str(value).isdigit() for value in values):
-                raise ValueError("invalid channel ID in settings")
-            valid = sorted({int(value) for value in values})
-            if valid:
-                result[str(int(guild_id))] = valid
-        return result
+        return _validate_channel_config(raw)
     except FileNotFoundError:
         return {}
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -161,6 +166,109 @@ def _persist_channel_restrictions(updated: dict[str, list[int]]) -> None:
             temporary.unlink()
         except FileNotFoundError:
             pass
+
+# The service filesystem is wiped by every deploy and restart, which silently
+# erased a configured /set channel allowlist. The settings are therefore
+# mirrored into the private jobs repo and re-applied on boot, so a configured
+# channel list survives deploys, restarts, and free-tier cold starts.
+CHANNEL_CONFIG_REMOTE_PATH = "config/channel_restrictions.json"
+_channel_config_remote_sha: Optional[str] = None
+_channel_config_remote_lock = asyncio.Lock()
+_channel_config_restored = False
+_channel_backup_tasks: set[asyncio.Task] = set()
+
+
+def _fetch_remote_channel_state() -> tuple[Optional[dict], Optional[str]]:
+    """(validated allowlist or None, blob sha or None) from the jobs repo; both None when absent."""
+    if not cloud_runner_configured():
+        return None, None
+    code, resp = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/contents/{CHANNEL_CONFIG_REMOTE_PATH}?ref=main")
+    if code == 404:
+        return None, None
+    if code != 200:
+        print(f"WARNING: remote channel-config fetch failed: HTTP {code}", flush=True)
+        return None, None
+    try:
+        payload = json.loads(resp)
+        content = base64.b64decode(payload.get("content", "")).decode("utf-8")
+        return _validate_channel_config(json.loads(content)), payload.get("sha")
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        print(f"WARNING: remote channel-config unreadable: {type(exc).__name__}: {exc}", flush=True)
+        return None, None
+
+
+async def _push_channel_restrictions_remote(updated: dict[str, list[int]]) -> bool:
+    """Best-effort backup of the allowlist into the jobs repo; False when it could not be stored."""
+    global _channel_config_remote_sha
+    if not cloud_runner_configured():
+        return False
+    code, resp = 0, b""
+    async with _channel_config_remote_lock:
+        for attempt in range(2):
+            if _channel_config_remote_sha is None:
+                _remote_state, _channel_config_remote_sha = await asyncio.to_thread(_fetch_remote_channel_state)
+            payload = json.dumps(updated, indent=2, sort_keys=True) + "\n"
+            body = {
+                "message": "update MonLua command-channel settings",
+                "content": base64.b64encode(payload.encode("utf-8")).decode("ascii"),
+            }
+            if _channel_config_remote_sha:
+                body["sha"] = _channel_config_remote_sha
+            code, resp = await asyncio.to_thread(
+                _gh_api, "PUT", f"/repos/{GH_JOBS_REPO}/contents/{CHANNEL_CONFIG_REMOTE_PATH}", body=body
+            )
+            if code in (200, 201):
+                try:
+                    _channel_config_remote_sha = json.loads(resp)["content"]["sha"]
+                except (ValueError, TypeError, KeyError):
+                    pass
+                return True
+            if code in (409, 422) and attempt == 0:
+                # stale blob sha: refetch and retry once
+                _channel_config_remote_sha = None
+                continue
+            break
+    print(f"WARNING: channel-restriction backup failed: HTTP {code}: {resp[:200]!r}", flush=True)
+    return False
+
+
+async def _backup_channel_restrictions_task() -> None:
+    try:
+        await _push_channel_restrictions_remote(
+            {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
+        )
+    except Exception as exc:
+        print(f"WARNING: channel-restriction backup task failed: {type(exc).__name__}: {exc}", flush=True)
+
+
+def _schedule_channel_backup() -> None:
+    task = asyncio.create_task(_backup_channel_restrictions_task())
+    _channel_backup_tasks.add(task)
+    task.add_done_callback(_channel_backup_tasks.discard)
+
+
+async def _restore_channel_restrictions_remote() -> None:
+    """Re-apply the persisted allowlist after a fresh container so /set channel settings survive."""
+    global _channel_config_restored, _channel_config_remote_sha
+    if _channel_config_restored or not cloud_runner_configured():
+        return
+    _channel_config_restored = True
+    async with _channel_config_remote_lock:
+        remote, sha = await asyncio.to_thread(_fetch_remote_channel_state)
+        _channel_config_remote_sha = sha
+    if remote is None:
+        if CHANNEL_RESTRICTIONS:
+            await _backup_channel_restrictions_task()
+        return
+    if {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()} != remote:
+        CHANNEL_RESTRICTIONS.clear()
+        CHANNEL_RESTRICTIONS.update(remote)
+        try:
+            _persist_channel_restrictions(remote)
+        except OSError as exc:
+            print(f"Couldn't cache restored channel restrictions locally: {type(exc).__name__}: {exc}", flush=True)
+        print(f"Restored command-channel settings for {len(remote)} server(s) from the persisted config.", flush=True)
+
 
 CHANNEL_RESTRICTIONS: dict[str, list[int]] = _load_channel_restrictions()
 _channel_settings_lock = asyncio.Lock()
@@ -3177,6 +3285,7 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
         CHANNEL_CONFIG_LOAD_FAILED = False
         configured_count = len(updated[guild_key])
     await interaction.response.send_message(view=info_view("Command channel saved", f"Commands now allowed in {channel.mention}" + (f" and {configured_count - 1} more." if configured_count > 1 else ".") + "\nRun /set channel for another.", color=0x57F287), ephemeral=True)
+    _schedule_channel_backup()
 
 
 remove_group = app_commands.Group(
@@ -3230,6 +3339,7 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
     else:
         message = f"Removed {channel.mention}. This server no longer has a command-channel restriction."
     await interaction.response.send_message(view=info_view("Command channel updated", message, color=0x57F287), ephemeral=True)
+    _schedule_channel_backup()
 
 
 remove_group.add_command(remove_set_group)
@@ -3239,6 +3349,7 @@ bot.tree.add_command(remove_group)
 
 @bot.event
 async def on_ready() -> None:
+    await _restore_channel_restrictions_remote()
     ok, detail = runtime_status()
     v151_ok, v151_detail = runtime_status("luraph_v151")
     print(f"Logged in as {bot.user} (ID: {bot.user.id})", flush=True)
