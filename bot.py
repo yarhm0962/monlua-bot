@@ -53,8 +53,10 @@ ENVLOGGER_APIDUMP = ENVLOGGER_DIR / "core" / "io" / "apidump.json"
 LUNE_BIN = ENVLOGGER_DIR / "bin" / "lune"
 ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "300"))))
 SUPPORTED = {
+    "luraph_v143": {"label": "Luraph v14.3", "command": ".do", "status": "Recovery: blob decode, bytecode deserialization with bias auto-detection, and structured CFG output. Deeply virtualized builds are still in research."},
     "luraph_v15": {"label": "Luraph v15", "command": ".do"},
     "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
+    "luraph_all": {"label": "Luraph (All Versions)", "command": ".do", "status": "One engine for every Luraph build: v14.7, v14.8, v14.9, v15 and v15.1 auto-route by detected version. Node + Python devirtualizer with Luau runtime tracing."},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
     "centurion": {"label": "Centurion", "command": ".do"},
     "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
@@ -63,7 +65,6 @@ SUPPORTED = {
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
     "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "status": "Full recovery: two-stage static engine (unflatten, fold/rename, syntax heal), output verified with the bundled Luau compiler before delivery. Detection first."},
-    "luraph_v143": {"label": "Luraph v14.3", "command": ".do", "status": "Recovery: blob decode, bytecode deserialization with bias auto-detection, and structured CFG output. Deeply virtualized builds are still in research."},
         "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
 
@@ -3281,7 +3282,7 @@ async def help_command(ctx: commands.Context) -> None:
         + "• `.do` with a Lua file attached"
         + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandbox)"
     )
-    await ctx.reply(view=info_view("Command guide", body), mention_author=False)
+    await ctx.reply(view=info_view("GUIDE COMMANDS", body), mention_author=False)
 
 _tree_synced = False
 

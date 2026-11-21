@@ -55,12 +55,13 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         shortcut = bot.bot.get_command("do")
         self.assertIsNotNone(shortcut)
         self.assertIs(shortcut, bot.bot.get_command("deobf"))
-        self.assertEqual(len(bot.SUPPORTED), 12)
+        self.assertEqual(len(bot.SUPPORTED), 13)
         self.assertIn("ironveil_v1", bot.SUPPORTED)
         self.assertIn("77fuscator", bot.SUPPORTED)
         self.assertIn("ironbrew1", bot.SUPPORTED)
         self.assertIn("ironbrew2", bot.SUPPORTED)
         self.assertIn("luraph_v143", bot.SUPPORTED)
+        self.assertIn("luraph_all", bot.SUPPORTED)
         expected_engine_options = set(bot.SUPPORTED)
         expected_engine_options.discard("moonveil_v145")
         expected_engine_options.discard("jayfuscator")
@@ -73,6 +74,11 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("IronBrew2", bot.engines_body())
         self.assertIn("Jayfuscator", bot.engines_body())
         self.assertIn("Fulcrum Deobfuscator", bot.engines_body())
+        self.assertIn("Luraph (All Versions)", bot.engines_body())
+        self.assertLess(
+            bot.engines_body().index("Luraph v14.3"),
+            bot.engines_body().index("Luraph v15"),
+        )
         self.assertIn("Luraph v14.3", bot.engines_body())
         self.assertNotIn("SERVER SETTINGS", bot.engines_body())
         for engine in bot.SUPPORTED:

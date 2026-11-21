@@ -236,6 +236,21 @@ class LuraphVersionDetectionTests(unittest.TestCase):
         self.assertEqual(scores["luraph_v15"], 0.3)
         self.assertIsNone(bot_module._recommended_engine(rows))
 
+    def test_v148_header_is_routed_to_the_all_versions_engine(self):
+        source = "-- This file was protected using Luraph Obfuscator v14.8 [https://lura.ph/]\\nreturn 1"
+        rows = all_scores(source)
+        self.assertEqual(rows[0][0], "luraph_all")
+        self.assertEqual(rows[0][1], 1.0)
+        self.assertEqual(bot_module._recommended_engine(rows), "luraph_all")
+
+    def test_all_versions_engine_stays_below_the_version_specific_engines(self):
+        for version, winner in (("v15.0", "luraph_v15"), ("v15.1", "luraph_v151"), ("v14.3", "luraph_v143")):
+            source = "-- This file was protected using Luraph Obfuscator %s [https://lura.ph/]\\nreturn 1" % version
+            rows = all_scores(source)
+            scores = {row[0]: row[1] for row in rows}
+            self.assertLess(scores["luraph_all"], scores[winner], version)
+            self.assertLess(scores["luraph_all"], 0.75, version)
+
     def test_v150_header_is_routed_to_the_v15_engine(self):
         source = "-- This file was protected using Luraph Obfuscator v15.0 [https://lura.ph/]\\nreturn 1"
         rows = all_scores(source)
