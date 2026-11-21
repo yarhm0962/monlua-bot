@@ -808,8 +808,8 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     """Create a compact result card with a clear hierarchy on narrow screens."""
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
-    container.add_item(discord.ui.TextDisplay("## ✅ Deobfuscation Complete"))
-    summary = f"**Engine** · {label}\n**Output size** · {_human_size(size)}"
+    container.add_item(discord.ui.TextDisplay(f"## ✅ {label}"))
+    summary = f"**Output size** · {_human_size(size)}"
     if elapsed:
         summary += f"\n**Time** · {elapsed}"
     container.add_item(discord.ui.TextDisplay(summary))
@@ -819,11 +819,11 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
         container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
-        container.add_item(discord.ui.TextDisplay("📎 **Output file attached**\n-# Download the attachment to save the full result."))
+        container.add_item(discord.ui.TextDisplay("📎 **Output file attached**"))
     if online_copy and online_copy[1]:
         container.add_item(_online_action_row(online_copy))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay("-# Review recovered code before running it."))
+    container.add_item(discord.ui.TextDisplay("-# Review the output before running it."))
     view.add_item(container)
     return view
 
@@ -890,7 +890,7 @@ async def _deliver_deobf_output(
         try:
             await status.edit(
                 content=None,
-                view=info_view("Output delivered", f"**Engine** · {label}\n**Size** · {_human_size(output_size)}\nThe completed output was sent above.", color=0x57F287),
+                view=info_view("Output delivered", f"**{label}** · {_human_size(output_size)}\nThe output was sent above.", color=0x57F287),
             )
         except discord.HTTPException:
             pass
@@ -902,13 +902,12 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0xED4245)
     container.add_item(discord.ui.TextDisplay(f"## ⚠️ {title}"))
-    container.add_item(discord.ui.TextDisplay("The job did not complete. Check the diagnostic details below."))
     container.add_item(discord.ui.Separator())
     safe_detail = str(detail or "No diagnostic details were provided.").strip()[-900:]
     safe_detail = safe_detail.replace("```", "`\u200b``")
     container.add_item(discord.ui.TextDisplay(f"```text\n{safe_detail}\n```"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay("**Try next**\nRun `.detect` to identify the engine, or `.help` to review supported commands."))
+    container.add_item(discord.ui.TextDisplay("**Try next**\n`.detect` identifies the engine · `.help` lists commands"))
     view.add_item(container)
     return view
 
@@ -1090,7 +1089,7 @@ class _ConfirmDeobfButton(discord.ui.Button):
         try:
             await interaction.response.edit_message(
                 content=None,
-                view=info_view("Request accepted", "The confirmation is locked. Your selected engine is starting."),
+                view=info_view("Request accepted", "Engine locked in, the job is starting."),
             )
             accepted_message_shown = True
         except discord.HTTPException:
@@ -1150,7 +1149,7 @@ class _CancelDeobfButton(discord.ui.Button):
             parent.stop()
         await interaction.response.edit_message(
             content=None,
-            view=info_view("Cancelled", "No deobfuscation job was started."),
+            view=info_view("Cancelled", "No job was started."),
         )
 
 
@@ -1350,7 +1349,7 @@ class _MoonVeilVersionButton(discord.ui.Button):
                 content=None,
                 view=info_view(
                     "MoonVeil v2.1.1 is not available yet",
-                    "The uploaded archive contains 71 MoonVeil v2.1.1 sample files, but no deobfuscator source code or executable. The public v2.1.0 toolkit we reviewed is analysis-only and does not generate recovered source, so it cannot be used as a working replacement. No deobfuscation job was started.\n\nMoonVeil v1.4.5 remains available for matching v1.4.5 inputs.",
+                    "MoonVeil v2.1.1 has no working deobfuscator yet, so nothing was started.\n\nMoonVeil v1.4.5 still works for v1.4.5 inputs.",
                     color=0xFAA61A,
                 ),
             )
@@ -1391,7 +1390,7 @@ class _EngineSelect(discord.ui.Select):
                 content=None,
                 view=info_view(
                     "Source file required",
-                    "Run .do or .deobf again with one .lua, .luau, or .txt attachment, or include a direct raw-file URL.",
+                    "Run .do or .deobf again with a .lua, .luau, or .txt file attached, or a raw file URL.",
                     color=0xFAA61A,
                 ),
             )
@@ -1406,7 +1405,7 @@ class _EngineSelect(discord.ui.Select):
                 content=None,
                 view=info_view(
                     "MoonVeil version selector",
-                    "Choose a version from the separate Components V2 message below.",
+                    "Pick a version in the message below.",
                 ),
             )
             try:
@@ -1420,7 +1419,7 @@ class _EngineSelect(discord.ui.Select):
                     await interaction.followup.send(
                         view=error_view(
                             "Version selector unavailable",
-                            "Discord could not deliver the separate MoonVeil version message. Run .do again to retry.",
+                            "Discord could not deliver the version selector. Run .do again to retry.",
                         ),
                         ephemeral=True,
                     )
@@ -2368,10 +2367,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         attachment = None
         source_url = ""
     elif attachments and url.strip():
-        await ctx.reply(view=info_view("Choose one source", "Attach a single source file or provide a raw-file URL. Use one input method per request."), mention_author=False)
+        await ctx.reply(view=info_view("Choose one source", "Attach one file or give a raw URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply(view=info_view("Single-file processing", "Please attach one source file per command. You can run another request after this one."), mention_author=False)
+        await ctx.reply(view=info_view("Single-file processing", "Attach one file per request."), mention_author=False)
         return
     if preset is None:
         attachment = attachments[0] if attachments else None
@@ -2392,10 +2391,10 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
     elif attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are `.lua`, `.luau`, and `.txt`."), mention_author=False)
+            await ctx.reply(view=error_view("Unsupported file type", "Use `.lua`, `.luau`, or `.txt`."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
@@ -2409,14 +2408,14 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         await ctx.reply(
             view=error_view(
                 "Engine runtime unavailable",
-                f"The {label} runtime is not ready.\n\nMissing or unavailable\n{runtime_detail}\n\nCheck the service build logs and retry after the runtime is restored."
+                f"The {label} runtime is not ready.\n\nMissing\n{runtime_detail}\n\nCheck the build logs, then retry."
             ),
             mention_author=False,
         )
         return
 
     status = await ctx.reply(
-        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:120]}`\nWaiting for an available processing slot."),
+        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:120]}`\nWaiting for a free slot."),
         mention_author=False,
     )
 
@@ -2431,21 +2430,21 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     input_path.write_bytes(preset_bytes)
                     size = input_path.stat().st_size
                     if size == 0:
-                        await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
+                        await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
                         return
                 elif attachment is not None:
                     await attachment.save(input_path)
                     size = input_path.stat().st_size
                     if size == 0:
-                        await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
+                        await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
                         return
                     if size > MAX_INPUT_BYTES:
-                        await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+                        await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                         return
                 else:
                     filename, size, fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
 
-                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + "\nSource is ready. Starting the selected engine."))
+                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + ""))
                 print(f"selected engine={label}; source scan completed before engine selection", flush=True)
 
                 wait_note = ""
@@ -2455,7 +2454,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     wait_note = " MoonVeil recovery includes isolated probing and may take several minutes."
                 elif input_path.stat().st_size > 1024 * 1024:
                     wait_note = " Large file: this can take a few minutes."
-                await status.edit(content=None, view=info_view("Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}"))
+                await status.edit(content=None, view=info_view("Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}"))
                 start_time = time.monotonic()
                 # result cache: an identical file + engine re-run is instant
                 cache_key = await asyncio.to_thread(_cache_key, engine, input_path)
@@ -2468,11 +2467,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     go_cloud = engine != "moonveil_v145" and size >= cloud_min
                     if go_cloud and cloud_runner_configured():
                         try:
-                            await status.edit(content=None, view=info_view("Cloud processing", f"`{filename[:120]}` is being processed on the remote runner."))
+                            await status.edit(content=None, view=info_view("Cloud processing", f"Running `{filename[:120]}` on the cloud runner."))
                             async with cloud_slots:
                                 cloud_out = await _await_with_progress(
                                     status,
-                                    f"`{filename[:120]}` is being processed on the remote runner." + "\nElapsed · {elapsed}",
+                                    f"Running `{filename[:120]}` on the cloud runner." + "\nElapsed · {elapsed}",
                                     asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
                                     heading="Cloud processing",
                                     interval=30,
@@ -2480,7 +2479,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             await asyncio.to_thread(output_path.write_bytes, cloud_out)
                         except Exception as exc:
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
-                            await status.edit(content=None, view=info_view("Using local engine", f"The cloud runner could not complete this job.\n{str(exc)[:180]}\nTrying the local engine instead.", color=0xFAA61A))
+                            await status.edit(content=None, view=info_view("Using local engine", f"Cloud run failed: {str(exc)[:180]}\nFalling back to the local engine.", color=0xFAA61A))
                     if not output_path.is_file():
                         process_env = None
                         if engine == "luraph_v151":
@@ -2501,15 +2500,15 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         try:
                             returncode, stdout, stderr = await _await_with_progress(
                                 status,
-                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The selected engine is running.'}" + "\nElapsed · {elapsed}",
+                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}" + "\nElapsed · {elapsed}",
                                 _run_process(command, JOB_TIMEOUT + 15, env=process_env),
                             )
                         except asyncio.TimeoutError:
-                            await status.edit(content=None, view=error_view("Processing timed out", f"The engine reached its {JOB_TIMEOUT}-second execution limit. Try a smaller input or retry later."))
+                            await status.edit(content=None, view=error_view("Processing timed out", f"Over the {JOB_TIMEOUT}s limit. Try a smaller input or retry later."))
                             return
                         except JobMemoryExceeded as exc:
                             print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
-                            await status.edit(content=None, view=error_view("Memory limit reached", f"This job exceeded the available memory budget ({exc}). The process was stopped to keep the bot online."))
+                            await status.edit(content=None, view=error_view("Memory limit reached", f"Over the memory budget ({exc}). The job was stopped."))
                             return
 
                         if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
@@ -2520,7 +2519,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                                     (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
                                 ))
                             except discord.HTTPException:
-                                await status.edit(content=None, view=error_view("Deobfuscation failed", (detail[-600:] or "No diagnostic output.") + "\nThe script structure may not be supported."))
+                                await status.edit(content=None, view=error_view("Deobfuscation failed", (detail[-600:] or "No diagnostic output.") + "\nThis structure may not be supported."))
                             print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
                             return
 
@@ -2530,7 +2529,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     await asyncio.to_thread(output_path.write_text, out_text, encoding="utf-8", newline="\n")
                     output_size = output_path.stat().st_size
                     if output_size > MAX_OUTPUT_BYTES:
-                        await status.edit(content=None, view=error_view("Output limit exceeded", f"The recovered file is {_human_size(output_size)}. The configured output limit is {_human_size(MAX_OUTPUT_BYTES)}."))
+                        await status.edit(content=None, view=error_view("Output limit exceeded", f"Output is {_human_size(output_size)}, over the {_human_size(MAX_OUTPUT_BYTES)} limit."))
                         return
                     cached_output = await asyncio.to_thread(output_path.read_bytes)
                     _result_cache_store(cache_key, cached_output)
@@ -2563,7 +2562,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 print("Discord permission error: cannot read/send messages or attachments.", flush=True)
                 if status:
                     try:
-                        await status.edit(content=None, view=error_view("Missing Discord permissions", "The bot cannot read or send messages or attachments in this channel."))
+                        await status.edit(content=None, view=error_view("Missing Discord permissions", "The bot needs Read, Send and Attach permissions here."))
                     except discord.HTTPException:
                         pass
             except discord.HTTPException as exc:
@@ -2593,7 +2592,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
         await ctx.reply(view=error_view("Choose one source", "Attach one file or provide a raw-file URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply(view=error_view("Single-file processing", "Attach one source file per request."), mention_author=False)
+        await ctx.reply(view=error_view("Single-file processing", "Attach one file per request."), mention_author=False)
         return
     attachment = attachments[0] if attachments else None
     if attachment is None and not source_url:
@@ -2609,10 +2608,10 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
     if attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are .lua, .luau, and .txt."), mention_author=False)
+            await ctx.reply(view=error_view("Unsupported file type", "Use .lua, .luau, or .txt."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
@@ -2621,7 +2620,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
     status = await ctx.reply(
-        view=info_view("Scanning source", f"Checking `{filename[:120]}` against all registered obfuscator detectors."),
+        view=info_view("Scanning source", f"Checking `{filename[:120]}` against every detector."),
         mention_author=False,
     )
     try:
@@ -2679,7 +2678,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
             content=None,
             view=error_view(
                 "Source scan failed",
-                "The bot could not complete automatic detection. Retry the command or use .detect to inspect the source.",
+                "Detection failed. Retry, or use .detect.",
             ),
         )
 
@@ -2688,11 +2687,11 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
 async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
     url = (url or "").strip().strip("<>").strip()
     if not url:
-        await ctx.reply(view=info_view("Usage", "Use .get followed by a URL to fetch raw source or resolve a supported static loadstring URL."), mention_author=False)
+        await ctx.reply(view=info_view("Usage", ".get <url> fetches raw source or resolves a supported loadstring URL."), mention_author=False)
         return
 
     url = _command_input_url(url)
-    status = await ctx.reply(view=info_view("Fetching source", "Checking the URL and resolving supported embedded source links."), mention_author=False)
+    status = await ctx.reply(view=info_view("Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
     temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
         filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, temporary)
@@ -2717,7 +2716,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             await status.edit(content=None, view=info_view("Source fetched", details_text + "\nThe complete file is attached below."))
             # Components V2 messages only show attachments referenced by a File
             # component, so the download card carries one pointing at the upload.
-            download_view = info_view("Download ready", "The complete source file is attached.")
+            download_view = info_view("Download ready", "The file is attached.")
             download_view.children[0].add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{safe_name}")))
             await ctx.send(view=download_view, file=discord.File(fp=str(temporary), filename=safe_name))
         else:
@@ -2728,7 +2727,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
                 fetched_view.children[0].add_item(_online_action_row(online))
                 await status.edit(content=None, view=fetched_view)
             else:
-                await status.edit(content=None, view=error_view("Source exceeds the upload limit", "The file is larger than this server can attach, and the online upload service did not accept it."))
+                await status.edit(content=None, view=error_view("Source exceeds the upload limit", "Too large to attach here, and the online upload did not accept it."))
     except Exception as exc:
         await status.edit(content=None, view=error_view("Could not fetch source", f"{type(exc).__name__}: {str(exc)[:700]}"))
     finally:
@@ -2744,7 +2743,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
         await ctx.reply(view=info_view("Choose one input", "Attach one source file or provide a raw-file URL, not both."), mention_author=False)
         return
     if len(attachments) > 1:
-        await ctx.reply(view=info_view("Single-file processing", "Please attach one source file per command. You can run another request after this one."), mention_author=False)
+        await ctx.reply(view=info_view("Single-file processing", "Attach one file per request."), mention_author=False)
         return
     attachment = attachments[0] if attachments else None
     source_url = _command_input_url(url)
@@ -2754,10 +2753,10 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
     if attachment is not None:
         filename = Path(attachment.filename).name
         if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=error_view("Unsupported file type", "Supported formats are `.lua`, `.luau`, and `.txt`."), mention_author=False)
+            await ctx.reply(view=error_view("Unsupported file type", "Use `.lua`, `.luau`, or `.txt`."), mention_author=False)
             return
         if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=error_view("Input is over the size limit", f"Maximum accepted input: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
             return
     else:
         try:
@@ -2774,10 +2773,10 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
                 filename, _size, _fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
             size = input_path.stat().st_size
             if size == 0:
-                await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
+                await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
                 return
             if size > MAX_INPUT_BYTES:
-                await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+                await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                 return
             status = await ctx.reply(view=info_view("Analyzing source", f"**File** · `{filename[:120]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
             start_time = time.monotonic()
@@ -2801,7 +2800,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             except discord.HTTPException:
                 best_label = rows[0][2] if rows else "nothing"
                 best_pct = int(round(rows[0][1] * 100)) if rows else 0
-                await status.edit(content=None, view=info_view("Detection result", f"**Best match** · {best_label}\n**Confidence** · {best_pct}%\nThe full report could not be displayed by this Discord client.", color=0xFAA61A))
+                await status.edit(content=None, view=info_view("Detection result", f"**Best match** · {best_label}\n**Confidence** · {best_pct}%\nThe full report is not supported by this client.", color=0xFAA61A))
         except discord.HTTPException:
             print("Discord permission error during .detect: cannot read/send messages.", flush=True)
 
@@ -2950,7 +2949,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
         return
 
     status = await ctx.reply(
-        view=info_view("Environment logger running", "Executing the source in a sandboxed Roblox environment and recording everything it does."),
+        view=info_view("Env Logger", "Running your script in a sandbox and recording everything it does."),
         mention_author=False,
     )
     try:
@@ -3017,11 +3016,11 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
         if not delivered:
             raise RuntimeError("The logged output could not be delivered.")
     except subprocess.TimeoutExpired:
-        await status.edit(content=None, view=error_view("Environment logger timed out", f"The run exceeded the {ENVLOGGER_TIMEOUT}s limit."))
+        await status.edit(content=None, view=error_view("Env Logger", f"The run exceeded the {ENVLOGGER_TIMEOUT}s limit."))
     except ValueError as exc:
-        await status.edit(content=None, view=error_view("Could not log this source", str(exc)[:900]))
+        await status.edit(content=None, view=error_view("Env Logger", str(exc)[:900]))
     except RuntimeError as exc:
-        await status.edit(content=None, view=error_view("Environment logger failed", str(exc)[:900]))
+        await status.edit(content=None, view=error_view("Env Logger", str(exc)[:900]))
     except discord.Forbidden:
         print("Discord permission error during .l: cannot read or send messages or attachments.", flush=True)
     except discord.HTTPException as exc:
@@ -3031,7 +3030,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
     except Exception as exc:
         print(f"Unexpected .l error: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
         try:
-            await status.edit(content=None, view=error_view("Environment logger failed", "An unexpected error occurred. Check the bot service logs for details."))
+            await status.edit(content=None, view=error_view("Env Logger", "An unexpected error occurred. Check the service logs."))
         except discord.HTTPException:
             pass
 
@@ -3050,9 +3049,9 @@ async def help_command(ctx: commands.Context) -> None:
         + "• `.beautify` or `.b` followed by a raw Lua URL or pasted code\n"
         + "• `.deobf https://example.com/raw/script.lua`\n"
         + "• `.do` with a Lua file attached"
-        + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandboxed Roblox environment)"
+        + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandbox)"
     )
-    await ctx.reply(view=info_view("COMMAND GUIDE", body), mention_author=False)
+    await ctx.reply(view=info_view("Command guide", body), mention_author=False)
 
 _tree_synced = False
 
@@ -3071,10 +3070,10 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
-        await interaction.response.send_message(view=error_view("Server only", "This command can only be used in a server."), ephemeral=True)
+        await interaction.response.send_message(view=error_view("Server only", "Use this in a server."), ephemeral=True)
         return
     if not permissions or not (permissions.manage_guild or permissions.administrator):
-        await interaction.response.send_message(view=error_view("Permission required", "You need Manage Server or Administrator permission to change command channels."), ephemeral=True)
+        await interaction.response.send_message(view=error_view("Permission required", "Manage Server or Administrator permission required."), ephemeral=True)
         return
     if channel.guild.id != interaction.guild_id:
         await interaction.response.send_message(view=error_view("Invalid channel", "Choose a text channel from this server."), ephemeral=True)
@@ -3095,7 +3094,7 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
         CHANNEL_RESTRICTIONS.update(updated)
         CHANNEL_CONFIG_LOAD_FAILED = False
         configured_count = len(updated[guild_key])
-    await interaction.response.send_message(view=info_view("Command channel saved", f"Bot commands are now allowed in {channel.mention}" + (f" and {configured_count - 1} other configured channel(s)." if configured_count > 1 else ".") + "\nRun /set channel again to allow another channel.", color=0x57F287), ephemeral=True)
+    await interaction.response.send_message(view=info_view("Command channel saved", f"Commands now allowed in {channel.mention}" + (f" and {configured_count - 1} more." if configured_count > 1 else ".") + "\nRun /set channel for another.", color=0x57F287), ephemeral=True)
 
 
 remove_group = app_commands.Group(
@@ -3117,16 +3116,16 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
     member = interaction.user
     permissions = getattr(member, "guild_permissions", None)
     if interaction.guild_id is None:
-        await interaction.response.send_message(view=error_view("Server only", "This command can only be used in a server."), ephemeral=True)
+        await interaction.response.send_message(view=error_view("Server only", "Use this in a server."), ephemeral=True)
         return
     if not permissions or not (permissions.manage_guild or permissions.administrator):
-        await interaction.response.send_message(view=error_view("Permission required", "You need Manage Server or Administrator permission to change command channels."), ephemeral=True)
+        await interaction.response.send_message(view=error_view("Permission required", "Manage Server or Administrator permission required."), ephemeral=True)
         return
     guild_key = str(interaction.guild_id)
     async with _channel_settings_lock:
         current = set(CHANNEL_RESTRICTIONS.get(guild_key, []))
         if channel.id not in current:
-            await interaction.response.send_message(view=info_view("Channel not configured", f"{channel.mention} is not in this server command-channel list."), ephemeral=True)
+            await interaction.response.send_message(view=info_view("Channel not configured", f"{channel.mention} is not configured here."), ephemeral=True)
             return
         current.remove(channel.id)
         updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
@@ -3198,7 +3197,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
         return
     print(f"Command error: {type(error).__name__}: {error}", flush=True)
     try:
-        await ctx.reply(view=error_view("Command failed", "Something went wrong while handling that command. Check the bot service logs."), mention_author=False)
+        await ctx.reply(view=error_view("Command failed", "Something went wrong. Check the service logs."), mention_author=False)
     except discord.HTTPException:
         pass
 
