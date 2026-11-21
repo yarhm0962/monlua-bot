@@ -1,17 +1,23 @@
-"""Luraph v14.3 detection and the v14.3 recovery pipeline (research toolkit)."""
-import importlib
-import os
-import re
-import sys
+"""Luraph v14.3: pinned entry on the vendored LuraphOpenSource engine.
 
+Detection is dedicated to v14.3 headers; execution routes through the
+bundled Node/Python devirtualizer shared with the luraph_all catch-all,
+which handles v14.3 builds natively (verified against a real v14.3
+sample). The repo's Python v14.3 recovery toolkit (driver.py) stays as a
+research project and is not part of the execution path.
+"""
+import re
+
+from obfuscators.luraph_all import LuraphAll
 from obfuscators.luraph_v15 import HEADER, HEADER_ANY
 
 _BLOB_RX = re.compile(r'x\("((?:[^"\\]|\\.)*)",\s*0[xX]5\)')
 
 
-class LuraphV143:
+class LuraphV143(LuraphAll):
     name = "luraph_v143"
     label = "Luraph v14.3"
+    engine_title = "Luraph v14.3"
     doc = "LURAPH.md"
 
     def detect(self, source, analysis=None):
@@ -73,7 +79,6 @@ class LuraphV143:
         pass
 
     def deobfuscate(self, job):
-        from . import driver
-
-        out_path = job.path(".v143.recovered.lua")
-        return driver.deobfuscate_file(job.source_path, out_path, job)
+        # the vendored v14 family handles v14.3 natively; the Python
+        # recovery toolkit stays a research project, off the live path
+        return super().deobfuscate(job)
