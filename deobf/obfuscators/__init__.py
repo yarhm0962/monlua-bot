@@ -4,6 +4,9 @@ from obfuscators.luraph_v15 import LuraphV15
 from obfuscators.luraph_v151 import LuraphV151
 from obfuscators.luraph_v143 import LuraphV143
 from obfuscators.luraph_all import LuraphAll
+from obfuscators.luraph_v147 import LuraphV147
+from obfuscators.luraph_v148 import LuraphV148
+from obfuscators.luraph_v149 import LuraphV149
 from obfuscators.ironbrew1 import Ironbrew1
 from obfuscators.moonsec_v3 import MoonsecV3
 from obfuscators.centurion import Centurion
@@ -20,6 +23,9 @@ PLUGINS = [
     LuraphV151(),
     LuraphV143(),
     LuraphV15(),
+    LuraphV147(),
+    LuraphV148(),
+    LuraphV149(),
     LuraphAll(),
     Ironbrew1(),
     MoonsecV3(),

@@ -54,9 +54,11 @@ LUNE_BIN = ENVLOGGER_DIR / "bin" / "lune"
 ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "300"))))
 SUPPORTED = {
     "luraph_v143": {"label": "Luraph v14.3", "command": ".do", "status": "Recovery: blob decode, bytecode deserialization with bias auto-detection, and structured CFG output. Deeply virtualized builds are still in research."},
+    "luraph_v147": {"label": "Luraph v14.7", "command": ".do", "status": "Dedicated v14.7 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
+    "luraph_v148": {"label": "Luraph v14.8", "command": ".do", "status": "Dedicated v14.8 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
+    "luraph_v149": {"label": "Luraph v14.9", "command": ".do", "status": "Dedicated v14.9 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
     "luraph_v15": {"label": "Luraph v15", "command": ".do"},
     "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
-    "luraph_all": {"label": "Luraph (All Versions)", "command": ".do", "status": "One engine for every Luraph build: v14.7, v14.8, v14.9, v15 and v15.1 auto-route by detected version. Node + Python devirtualizer with Luau runtime tracing."},
     "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
     "centurion": {"label": "Centurion", "command": ".do"},
     "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},

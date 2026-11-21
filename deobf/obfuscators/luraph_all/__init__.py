@@ -52,6 +52,7 @@ def header_version(source, analysis=None):
 class LuraphAll:
     name = "luraph_all"
     label = "Luraph (All Versions)"
+    engine_title = "Luraph (All Versions)"
     doc = "LURAPH.md"
 
     def detect(self, source, analysis=None):
@@ -64,9 +65,9 @@ class LuraphAll:
             if major == "14" and minor is not None:
                 if minor in (7, 8, 9):
                     self.last_evidence = [
-                        "Luraph v14.%d header; the all-versions engine handles it natively" % minor
+                        "Luraph v14.%d header; the dedicated v14.%d engine is the better match" % (minor, minor)
                     ]
-                    return 1.0
+                    return 0.5
                 if minor >= 10:
                     self.last_evidence = [
                         "Luraph v14.%d header; the newest vendored v14 engine is the best match" % minor
@@ -165,11 +166,11 @@ class LuraphAll:
             )
         except subprocess.TimeoutExpired:
             raise RuntimeError(
-                "Luraph (All Versions) exceeded the %ds engine limit." % (timeout + 180)
+                "%s exceeded the %ds engine limit." % (self.engine_title, timeout + 180)
             )
         tail = (proc.stdout or b"").decode("utf-8", "replace")[-1800:]
         if proc.returncode != 0:
-            raise RuntimeError("Luraph engine failed:\n" + tail)
+            raise RuntimeError("%s failed:\n%s" % (self.engine_title, tail))
         if not out_path.is_file():
             raise RuntimeError(
                 "Luraph engine produced no output for this file:\n" + tail
