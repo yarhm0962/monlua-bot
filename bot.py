@@ -1487,6 +1487,37 @@ def _normalize_get_url(url: str) -> str:
     return value
 
 
+def _command_input_url(raw: str) -> str:
+    """Accept a bare URL, a loadstring(...) wrapper line, or a loader link and
+    return the URL to fetch: wrapper lines yield their embedded URL, share
+    pages normalize to raw endpoints, loader links resolve to the hidden boot
+    route so the real script is recovered instead of the decoy."""
+    value = (raw or "").strip().strip("<>").strip()
+    if not value.lower().startswith(("http://", "https://")):
+        lowered = value.lower()
+        if "\n" not in value and "loadstring" in lowered and ("http://" in lowered or "https://" in lowered):
+            found = _extract_loadstring_urls(value)
+            if found:
+                value = found[0]
+    value = _normalize_get_url(value)
+    boot = _loader_boot_url(value)
+    return boot or value
+
+
+def _looks_like_url_argument(value: str) -> bool:
+    """True when the argument is a URL fetch, not pasted code: a bare URL or a
+    single-line loadstring(...) wrapper. Multi-line input stays pasted code."""
+    stripped = (value or "").strip().strip("<>").strip()
+    if "\n" in stripped or "\r" in stripped:
+        return False
+    if stripped.lower().startswith(("http://", "https://")):
+        return True
+    lowered = stripped.lower()
+    if "loadstring" in lowered and ("http://" in lowered or "https://" in lowered):
+        return bool(_extract_loadstring_urls(stripped))
+    return False
+
+
 def _validate_public_url(url: str, allow_any_ext: bool = False) -> tuple[str, str]:
     parsed = urllib.parse.urlparse(url.strip().strip("<>"))
     if parsed.scheme not in ("https", "http") or not parsed.hostname:
@@ -2261,7 +2292,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         return
     if preset is None:
         attachment = attachments[0] if attachments else None
-        source_url = url.strip().strip("<>")
+        source_url = _command_input_url(url)
         preset_bytes = None
     if preset is None and attachment is None and not source_url:
         await ctx.reply(
@@ -2474,7 +2505,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
 @bot.command(name="do", aliases=["deobf"])
 async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
     attachments = ctx.message.attachments
-    source_url = (url or "").strip().strip("<>")
+    source_url = _command_input_url(url or "")
     if attachments and source_url:
         await ctx.reply(view=error_view("Choose one source", "Attach one file or provide a raw-file URL, not both."), mention_author=False)
         return
@@ -2521,7 +2552,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 if size > MAX_INPUT_BYTES:
                     raise ValueError(f"Input exceeds the {_human_size(MAX_INPUT_BYTES)} upload limit.")
             else:
-                filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
+                filename, size, _scan_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
             rows, _basis = await _detect_scores(input_path)
             detected_engine = _recommended_engine(rows)
             source_bytes = await asyncio.to_thread(input_path.read_bytes)
@@ -2577,7 +2608,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         await ctx.reply(view=info_view("Usage", "Use .get followed by a URL to fetch raw source or resolve a supported static loadstring URL."), mention_author=False)
         return
 
-    url = _normalize_get_url(url)
+    url = _command_input_url(url)
     status = await ctx.reply(view=info_view("Fetching source", "Checking the URL and resolving supported embedded source links."), mention_author=False)
     temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
@@ -2627,7 +2658,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
         await ctx.reply(view=info_view("Single-file processing", "Please attach one source file per command. You can run another request after this one."), mention_author=False)
         return
     attachment = attachments[0] if attachments else None
-    source_url = url.strip().strip("<>")
+    source_url = _command_input_url(url)
     if attachment is None and not source_url:
         await ctx.reply(view=info_view("Source file required", "Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n\nExample\n`.detect https://example.com/raw/script.lua`"), mention_author=False)
         return
@@ -2728,12 +2759,12 @@ async def beautify_command(ctx: commands.Context, *, source: str = "") -> None:
                     await attachment.save(input_path)
                     source_bytes = await asyncio.to_thread(input_path.read_bytes)
                     source_text = source_bytes.decode("utf-8-sig")
-            elif source_argument.startswith(("https://", "http://", "<https://", "<http://")):
-                source_url = _normalize_get_url(source_argument.strip("<>").strip())
+            elif _looks_like_url_argument(source_argument):
+                source_url = _command_input_url(source_argument)
                 source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
                 with tempfile.TemporaryDirectory(prefix="beautify_bot_") as directory:
                     input_path = Path(directory) / "source.bin"
-                    await asyncio.to_thread(_download_url, source_url, input_path, True)
+                    filename, _bsize, _bnote = await asyncio.to_thread(_download_command_source, source_url, input_path)
                     source_bytes = await asyncio.to_thread(input_path.read_bytes)
                     if len(source_bytes) > MAX_FORMAT_BYTES:
                         raise ValueError(f"Source exceeds the {_human_size(MAX_FORMAT_BYTES)} beautification limit.")
