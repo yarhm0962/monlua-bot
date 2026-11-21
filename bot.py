@@ -2640,7 +2640,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             async with cloud_slots:
                                 cloud_out = await _await_with_progress(
                                     status,
-                                    f"Running `{filename[:64]}` on the cloud runner.\nElapsed · {elapsed}",
+                                    f"Running `{filename[:64]}` on the cloud runner.\nElapsed · {{elapsed}}",
                                     asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
                                     heading="⏳ Cloud processing",
                                     interval=30,
