@@ -3,6 +3,7 @@
 
 Commands:
   deobf <in> <out>         full two-stage devirtualization (unflat -> polish -> heal -> verify)
+  vmchain <in> <out>       VM-interpreter build: walk the dispatch tree and emit the compact handler chain
   stage1 <in> <out>        stage 1 only: un-flatten the Fulcrum VM to readable Lua
   polish <in> <out>        stage 2 only: constant-fold + rename + heal a stage-1 output
   decrypt <alg> ...        decrypt one O/Q/U/V string cipher blob
@@ -393,7 +394,23 @@ def main():
     c, rest = a[0], a[1:]
     if c == 'deobf':
         if len(rest) != 2: raise SystemExit('usage: fulcrum.py deobf <in> <out>')
-        cmd_deobf(*rest)
+        try:
+            import vmfinal
+            vmfinal.run(rest[0], rest[1])
+            if _verify(rest[1]):
+                return
+            raise SystemExit('vmchain output failed verification; falling back to the two-stage pipeline')
+        except SystemExit as e:
+            msg = str(e)
+            if 'not a Fulcrum VM-interpreter build' in msg:
+                cmd_deobf(*rest)
+            else:
+                raise
+    elif c == 'vmchain':
+        if len(rest) != 2: raise SystemExit('usage: fulcrum.py vmchain <in> <out>')
+        import vmfinal
+        vmfinal.run(rest[0], rest[1])
+        _verify(rest[1])
     elif c == 'stage1':
         if len(rest) != 2: raise SystemExit('usage: fulcrum.py stage1 <in> <out>')
         _stage1(*rest); _verify(rest[1])
