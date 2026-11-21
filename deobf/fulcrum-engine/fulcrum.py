@@ -9,8 +9,10 @@ Commands:
   scan <in> [-o r.json]    static analysis report (never executes the input)
   test                     run the decoder self-tests
 
-Everything is static analysis: no input file is ever executed and no
-network access is performed.
+Static analysis only: no input file is executed and no network access is
+performed, except for Fulcrum/PolSec remote-loader files, which are run in
+a locked sandbox (stubbed environment, no network, no file io, no process
+exec) to recover their handshake and any dynamically compiled source.
 """
 import os, subprocess, sys, tempfile
 from pathlib import Path
@@ -61,10 +63,127 @@ def _wc(p):
     return n
 
 
+def _looks_polsec_remote(text):
+    head = text[:4000]
+    return ('obfuscated by fulcrum' in head.lower() or 'polsec' in head.lower()) and 'bit32.bxor' in text
+
+
+def _polsec_dump(src, dst):
+    """PolSec/Fulcrum remote-loader tier: run the file inside a locked luau
+    sandbox (stubs for the Roblox env, no file io, no process exec, no real
+    network) and recover what is recoverable: any source chunk the loader
+    compiles dynamically, plus its runtime handshake."""
+    print('polsec VM tier detected: running the sandbox dump harness ...')
+    prelude = ROOT / 'polsec_dump_prelude.lua'
+    luau = ROOT / 'bin' / 'luau'
+    if not prelude.exists() or not luau.exists():
+        raise SystemExit('polsec harness missing (prelude or bin/luau)')
+    runf = ROOT / '_polsec_run.lua'
+    runf.write_text(prelude.read_text(errors='replace') + '\n' +
+                    Path(src).read_text(errors='replace'), encoding='utf-8', errors='replace')
+    pre = None
+    try:
+        import resource
+        cap = 2 * 1024 * 1024 * 1024
+
+        def _limit():
+            resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+        pre = _limit
+    except Exception:
+        pre = None
+    out = ''
+    try:
+        r = subprocess.run([str(luau), str(runf)], cwd=str(ROOT),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           text=True, errors='replace', timeout=240, preexec_fn=pre)
+        out = r.stdout or ''
+    except subprocess.TimeoutExpired as e:
+        so = getattr(e, 'stdout', b'') or b''
+        out = so.decode('utf-8', 'replace') if isinstance(so, bytes) else str(so or '')
+    finally:
+        runf.unlink(missing_ok=True)
+
+    lines = out.splitlines()
+    payloads = []
+    jsons = []
+    reqs = []
+    logs = []
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        if ln.startswith('WOAJ_PAYLOAD_START\t'):
+            i += 1
+            body = []
+            while i < len(lines) and lines[i] != 'WOAJ_PAYLOAD_END':
+                body.append(lines[i])
+                i += 1
+            payloads.append('\n'.join(body))
+        elif ln.startswith('WOAJ_JSON\t'):
+            jsons.append(ln.split('\t', 1)[1])
+        elif ln.startswith('WOAJ_REQ\t'):
+            reqs.append(ln.split('\t', 1)[1])
+        elif ln.startswith('WOAJ_LOG\t'):
+            logs.append(ln.split('\t', 1)[1])
+        i += 1
+    logs = logs[:60]
+
+    real = [p2 for p2 in payloads if len(p2.strip()) >= 50]
+    if real:
+        body = []
+        for n, p2 in enumerate(real, 1):
+            body.append('-- captured source chunk #%d (recovered at runtime by the sandbox dump)' % n)
+            body.append(p2)
+            body.append('')
+        Path(dst).write_text('\n'.join(body), encoding='utf-8', errors='replace')
+        print('dumped %d captured source chunk(s) -> %s' % (len(real), dst))
+        return
+
+    rep = []
+    rep.append('-- Fulcrum deobfuscator result: PolSec remote loader (no embedded script)')
+    rep.append('--')
+    rep.append('-- This file is not a normal obfuscated script. It is a Fulcrum/PolSec')
+    rep.append("-- remote loader: a VM that boots, then asks polsec.net's servers for")
+    rep.append('-- the real script at runtime (HWID + key gated). The script code is')
+    rep.append('-- NOT inside this file, so no static deobfuscator can recover it.')
+    rep.append('-- The file was run inside a locked sandbox (no network, no file io,')
+    rep.append('-- no process exec) to recover everything the loader holds locally:')
+    rep.append('')
+    if jsons:
+        rep.append('-- runtime handshake packets recovered:')
+        for j in jsons:
+            rep.append('--   %s' % j)
+        rep.append('')
+    if reqs:
+        rep.append('-- outbound requests the loader attempted:')
+        for q in reqs:
+            rep.append('--   %s' % q)
+        rep.append('')
+    if logs:
+        rep.append('-- loader runtime trace:')
+        for l in logs:
+            rep.append('--   %s' % l)
+        rep.append('')
+    rep.append('-- To obtain the script itself, the loader has to complete a live')
+    rep.append('-- session with the PolSec servers using a valid key; the deobfuscator')
+    rep.append('-- never does that on its own.')
+    Path(dst).write_text('\n'.join(rep) + '\n', encoding='utf-8', errors='replace')
+    print('polsec remote loader: no embedded script; recovery report -> %s' % dst)
+
+
 def cmd_deobf(src, dst):
     tmp = ROOT / '_stage1_out.lua'
     try:
-        _stage1(src, tmp)
+        try:
+            _stage1(src, tmp)
+        except SystemExit:
+            try:
+                text = Path(src).read_text(errors='replace')
+            except OSError:
+                raise
+            if _looks_polsec_remote(text):
+                _polsec_dump(src, dst)
+                return
+            raise
         _stage2(tmp, dst)
         _verify(dst)
     finally:
