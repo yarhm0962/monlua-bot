@@ -724,7 +724,7 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     """Create a compact result card with a clear hierarchy on narrow screens."""
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
-    container.add_item(discord.ui.TextDisplay("## ✅ Deobfuscation complete"))
+    container.add_item(discord.ui.TextDisplay("## Deobfuscation Complete"))
     summary = f"**Engine** · {label}\n**Output size** · {_human_size(size)}"
     if elapsed:
         summary += f"\n**Time** · {elapsed}"
@@ -1163,7 +1163,7 @@ class _EnginePickerView(discord.ui.LayoutView):
         self.claimed = False
         source_name = _source_display_name(source)
         container = discord.ui.Container(accent_color=0x5865F2)
-        container.add_item(discord.ui.TextDisplay("## MonLua · Select an engine"))
+        container.add_item(discord.ui.TextDisplay("## Select An Engine"))
         details = [f"Source · {str(source_name)[:120]}"]
         if scan_note:
             details.append(scan_note)
