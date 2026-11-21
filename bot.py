@@ -834,8 +834,8 @@ DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator"
 
 
 def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None, owner_id: Optional[int] = None) -> discord.ui.LayoutView:
-    """Report card for `.detect`: every engine scored against the file, with
-    the concrete signals each score came from. `source` enables the one-click
+    """Report card for `.detect` (Components V2): the identified engine with
+    its confidence, the signals behind the score, and the one-click
     Deobfuscate button when the best match is 100% on a supported engine."""
     rows = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
     general = next(((c, l, e) for n, c, l, e in rows if n in ("obfuscated", "plain")), None)
@@ -845,70 +845,60 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     partial = 0.30 <= best_conf < 0.75
     unknown_score = general[0] if general else 0.0
     if matched:
-        color, title = 0x57F287, "## \U0001f50d Obfuscator identified"
+        title = "### \U0001f50d Obfuscator Identified"
     elif partial and (unknown_score < 0.5 or best_conf >= unknown_score):
-        color, title = 0xFAA61A, "## \U0001f50d Possible match"
+        title = "### \U0001f50d Possible match"
     elif general and general[0] >= 0.5:
-        color, title = 0xFAA61A, "## \U0001f50d Obfuscated, engine not supported"
+        title = "### \U0001f50d Obfuscated, engine not supported"
     elif general:
-        color, title = 0x5865F2, "## \u2139\ufe0f No obfuscation detected"
+        title = "### \u2139\ufe0f No obfuscation detected"
     else:
-        color, title = 0xED4245, "## \u2753 Unknown obfuscator"
+        title = "### \u2753 Unknown obfuscator"
     one_click = None
     if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED and _engine_is_available(best_name):
         one_click = (best_name, source)
-    view = _LoggedLayoutView()
-    if one_click:
-        view.timeout = None          # keep the button usable for the process lifetime
-    container = discord.ui.Container(accent_color=color)
-    container.add_item(discord.ui.TextDisplay(title))
     head = f"-# Source: `{filename[:140]}`"
     if elapsed:
         head += f" \u00b7 \u23f1\ufe0f {elapsed}"
-    container.add_item(discord.ui.TextDisplay(head))
-    container.add_item(discord.ui.Separator())
+    body: list[str] = []
     if matched or partial:
         verdict = "Identified" if matched else "Likely"
-        detection_only = best_name not in SUPPORTED or not _engine_is_available(best_name)
-        note = " \u00b7 detection only" if detection_only else ""
-        container.add_item(discord.ui.TextDisplay(
-            f"**{verdict}:** {best_label} \u00b7 **{int(round(best_conf * 100))}%** confidence{note}"
-        ))
+        body.append(f"**{verdict}:** {best_label}")
+        body.append(f"**Confidence:** {int(round(best_conf * 100))}%")
         others = [(l, c) for n, c, l, e in engines[1:] if c > 0]
         ev = best_ev
     elif general and general[0] >= 0.5:
-        container.add_item(discord.ui.TextDisplay(
-            f"Obfuscated ({int(round(general[0] * 100))}% structural match), "
-            "but no supported engine or known family fits.\n"
-            "Likely a custom or private obfuscator."
-        ))
+        body.append(f"Obfuscated ({int(round(general[0] * 100))}% structural match), but no supported engine or known family fits.")
+        body.append("Likely a custom or private obfuscator.")
         others = [(l, c) for n, c, l, e in engines if c > 0]
         ev = general[2]
     elif general:
-        container.add_item(discord.ui.TextDisplay(
-            "This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it."
-        ))
+        body.append("This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.")
         others = []
         ev = []
     else:
-        container.add_item(discord.ui.TextDisplay(
-            "No engine reached the 75% confidence threshold."
-        ))
+        body.append("No engine reached the 75% confidence threshold.")
         others = [(l, c) for n, c, l, e in engines if c > 0]
         ev = []
-    details = [f"Matched by {basis}"]
+    body.append(f"-# Matched by {basis}")
     if others:
         others_text = " \u00b7 ".join(f"{lab} ({int(round(c * 100))}%)" for lab, c in others[:3])
-        details.append(f"Other matches: {others_text}")
+        body.append(f"-# Other matches: {others_text}")
     if ev:
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
-        details.append(f"Evidence: {shown}")
-    container.add_item(discord.ui.TextDisplay("\n".join(f"-# {d}" for d in details)))
+        body.append(f"-# Evidence: {shown}")
     stats = ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
              else "\U0001f4a1 `.detect` identifies only \u2014 use .do or .deobf to choose an engine")
-    container.add_item(discord.ui.TextDisplay(f"-# {stats}"))
+    body.append(f"-# {stats}")
+    view = _LoggedLayoutView()
     if one_click:
-        container.add_item(discord.ui.Separator())
+        view.timeout = None          # keep the button usable for the process lifetime
+    container = discord.ui.Container()
+    container.add_item(discord.ui.TextDisplay(f"{title}\n{head}"))
+    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+    container.add_item(discord.ui.TextDisplay("\n".join(body)))
+    if one_click:
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click, owner_id=owner_id)))
     view.add_item(container)
     return view
