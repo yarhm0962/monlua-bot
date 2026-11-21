@@ -1830,7 +1830,7 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False, time
 
 
 
-_LOADER_URL_RE = re.compile(r"^/v1/(?:loaders|boot)/([A-Za-z0-9_-]+?)(?:\\.lua)?/?$", re.IGNORECASE)
+_LOADER_URL_RE = re.compile(r"^/v1/(?:loaders|boot)/([A-Za-z0-9_-]+?)(?:\.lua)?/?$", re.IGNORECASE)
 
 
 def _loader_boot_url(url: str) -> Optional[str]:
