@@ -1526,6 +1526,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+_EXECUTOR_UA = "Roblox/Win64"
 _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 _BOT_UA = "DeobfuscatorDiscordBot/1.0"
 
@@ -1760,10 +1761,10 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False, time
             current_url, filename = _validate_public_url(current_url, allow_any_ext=allow_any_ext)
             response = None
             refused: Optional[urllib.error.HTTPError] = None
-            for agent in (_BROWSER_UA, _BOT_UA):
+            for agent, accept in ((_EXECUTOR_UA, "*/*"), (_BROWSER_UA, "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*"), (_BOT_UA, "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*")):
                 request = urllib.request.Request(current_url, headers={
                     "User-Agent": agent,
-                    "Accept": "text/html,application/xhtml+xml,text/plain,application/octet-stream,*/*",
+                    "Accept": accept,
                     "Accept-Language": "en-US,en;q=0.9",
                 })
                 try:
@@ -1826,6 +1827,39 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False, time
     if last_net_error is not None:
         raise ValueError("Could not download that raw URL even after a retry. Make sure it is publicly accessible.")
     raise ValueError("Too many redirects while downloading the raw file.")
+
+
+
+_LOADER_URL_RE = re.compile(r"^/v1/(?:loaders|boot)/([A-Za-z0-9_-]+?)(?:\\.lua)?/?$", re.IGNORECASE)
+
+
+def _loader_boot_url(url: str) -> Optional[str]:
+    """Loader links (…/v1/loaders/<id>.lua) resolve to their hidden boot route."""
+    parsed = urllib.parse.urlparse((url or "").strip().strip("<>"))
+    if parsed.scheme not in ("https", "http") or not parsed.hostname:
+        return None
+    match = _LOADER_URL_RE.match(urllib.parse.unquote(parsed.path))
+    if not match:
+        return None
+    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, "/v1/boot/%s.lua" % match.group(1), "", parsed.query, ""))
+
+
+def _download_command_source(url: str, destination: Path) -> tuple[str, int, Optional[str]]:
+    """Fetch a command's source. Loader links go through the boot chain so the
+    real script is recovered instead of the decoy; raw links are fetched as-is."""
+    boot = _loader_boot_url(url)
+    if boot:
+        try:
+            filename, size, depth, note = _download_get_source(boot, destination)
+            if note is None:
+                note = ("Loader link resolved to the loader source itself; no followable script URL was found (the loader may be key-gated)."
+                        if depth == 0 else
+                        "Loader link resolved to the real script (%d hop(s) followed)." % depth)
+            return filename, size, note
+        except (ValueError, OSError):
+            pass
+    filename, size = _download_url(url, destination, allow_any_ext=True)
+    return filename, size, None
 
 
 async def _scan_engine(source_path: Path) -> tuple[Optional[str], str]:
@@ -2038,6 +2072,32 @@ def _cloud_dispatch(engine: str, job_id: str) -> None:
         raise RuntimeError(f"dispatch failed: HTTP {code}: {resp[:200]!r}")
 
 
+def _cloud_failure_reason(run_id) -> str:
+    """The engine's own error lines from a failed cloud run, for the user message."""
+    try:
+        code, resp = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/runs/{run_id}/jobs?per_page=5")
+        if code != 200:
+            return ""
+        jobs = json.loads(resp.decode("utf-8", errors="replace")).get("jobs", [])
+    except (ValueError, KeyError, TypeError):
+        return ""
+    for job in jobs:
+        if job.get("conclusion") != "failure" or not job.get("id"):
+            continue
+        lcode, log = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/jobs/{job['id']}/logs", accept="text/plain")
+        if lcode != 200 or not log:
+            return ""
+        lines = [line for line in log.decode("utf-8", errors="replace").splitlines() if line.strip()]
+        interesting = [line for line in lines if ("[!]" in line or "Traceback" in line or "error" in line.lower() or "failed" in line.lower() or "timeout" in line.lower())]
+        tail = interesting[-6:] if interesting else lines[-4:]
+        cleaned = []
+        for line in tail:
+            line = re.sub(r"^\S*Z?\s*", "", line.split("##[", 1)[-1] if "##[" in line else line)
+            cleaned.append(line.strip()[:200])
+        return " | ".join(item for item in cleaned if item)
+    return ""
+
+
 def _cloud_fetch_result(job_id: str) -> bytes:
     code, out = _gh_api(
         "GET", f"/repos/{GH_JOBS_REPO}/contents/results/{job_id}.luau?ref=result/{job_id}",
@@ -2235,7 +2295,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
             return
     else:
         try:
-            source_url, filename = _validate_public_url(source_url)
+            source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
         except ValueError as exc:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
@@ -2262,6 +2322,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
             input_path = workdir / filename
             output_path = workdir / f"{Path(filename).stem}_deobfuscated.luau"
             try:
+                fetch_note = None
                 if preset_bytes is not None:
                     input_path.write_bytes(preset_bytes)
                     size = input_path.stat().st_size
@@ -2278,9 +2339,9 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                         await ctx.reply(view=error_view("Input limit exceeded", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                         return
                 else:
-                    filename, size = await asyncio.to_thread(_download_url, source_url, input_path)
+                    filename, size, fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
 
-                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\nSource is ready. Starting the selected engine."))
+                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + "\nSource is ready. Starting the selected engine."))
                 print(f"selected engine={label}; source scan completed before engine selection", flush=True)
 
                 wait_note = ""
@@ -2451,7 +2512,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
             return
     else:
         try:
-            source_url, filename = _validate_public_url(source_url)
+            source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
         except ValueError as exc:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
@@ -2590,7 +2651,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             return
     else:
         try:
-            source_url, filename = _validate_public_url(source_url)
+            source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
         except ValueError as exc:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
@@ -2600,7 +2661,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             if attachment is not None:
                 await attachment.save(input_path)
             else:
-                filename, _size = await asyncio.to_thread(_download_url, source_url, input_path)
+                filename, _size, _fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
             size = input_path.stat().st_size
             if size == 0:
                 await ctx.reply(view=error_view("Empty source file", "The supplied file contains no data."), mention_author=False)
