@@ -144,13 +144,18 @@ class LuraphAll:
         if not SCRIPT.is_file():
             raise RuntimeError("the vendored Luraph engine is missing deob.js")
         out_path = Path(job.path(".all.lua"))
+        # the vendored engine only accepts .lua/.luau inputs, and job sources
+        # arrive under their transport name (e.g. <job_id>.input), so stage a
+        # .lua copy and hand that to the engine
+        staged = Path(job.path(".staged.lua"))
+        shutil.copyfile(job.source_path, staged)
         cmd = [self._node(), str(SCRIPT)]
         route = self._route(job.source)
         if route:
             cmd += ["--plugin", route]
         timeout = int(getattr(job.args, "timeout", 0) or 600)
         timeout = max(60, min(timeout, 1500))
-        cmd += ["--timeout", str(timeout), "-o", str(out_path), str(job.source_path)]
+        cmd += ["--timeout", str(timeout), "-o", str(out_path), str(staged)]
         env = dict(os.environ)
         env["PYTHON_BIN"] = sys.executable or "python3"
         env["LURAPH_OPEN_SOURCE_ROOT"] = str(ROOT)
