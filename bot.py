@@ -43,6 +43,12 @@ JOB_TIMEOUT = max(10, min(1800, int(os.getenv("DEOB_TIMEOUT", "900"))))  # 15 mi
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
 URL_TIMEOUT = max(5, min(180, int(os.getenv("URL_TIMEOUT", "60"))))
 ALLOWED_EXTENSIONS = {".lua", ".luau", ".txt"}
+
+ENVLOGGER_DIR = DEOB_DIR / "envlogger"
+ENVLOGGER_SCRIPT = ENVLOGGER_DIR / "env_logger.luau"
+ENVLOGGER_APIDUMP = ENVLOGGER_DIR / "core" / "io" / "apidump.json"
+LUNE_BIN = ENVLOGGER_DIR / "bin" / "lune"
+ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "300"))))
 SUPPORTED = {
     "luraph_v15": {"label": "Luraph v15", "command": ".do"},
     "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
@@ -2887,6 +2893,149 @@ async def beautify_command(ctx: commands.Context, *, source: str = "") -> None:
             pass
 
 
+def _env_logger_ready() -> bool:
+    return (
+        LUNE_BIN.is_file()
+        and os.access(LUNE_BIN, os.X_OK)
+        and ENVLOGGER_SCRIPT.is_file()
+        and ENVLOGGER_APIDUMP.is_file()
+    )
+
+
+def _run_env_logger(input_path: Path, output_path: Path) -> tuple[int, str, str]:
+    if not _env_logger_ready():
+        raise RuntimeError("The Env Logger runtime is not installed in this deployment.")
+    if not os.access(input_path, os.R_OK):
+        raise RuntimeError("The source file could not be read back for logging.")
+    proc = subprocess.run(
+        [str(LUNE_BIN), "run", str(ENVLOGGER_SCRIPT), str(input_path), str(output_path)],
+        capture_output=True,
+        timeout=ENVLOGGER_TIMEOUT,
+        cwd=str(ENVLOGGER_DIR),
+    )
+    return (
+        proc.returncode,
+        (proc.stdout or b"").decode("utf-8", "replace"),
+        (proc.stderr or b"").decode("utf-8", "replace"),
+    )
+
+
+@bot.command(name="l", aliases=["envlog", "envlogger"])
+async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None:
+    """Run the MonLua Env Logger on a Lua source and deliver the recorded trace."""
+    attachments = ctx.message.attachments
+    source_argument = (source or "").strip()
+    if len(attachments) > 1:
+        await ctx.reply(
+            content="Single-file logging\nAttach one .lua, .luau, or .txt file per request.",
+            mention_author=False,
+        )
+        return
+    if attachments and source_argument:
+        await ctx.reply(
+            content="Choose one source\nAttach one Lua file, provide a raw URL, or paste code into the command.",
+            mention_author=False,
+        )
+        return
+    if not attachments and not source_argument:
+        await ctx.reply(
+            content=(
+                "Usage\n"
+                ".l with a .lua or .luau attachment\n"
+                ".l followed by a raw Lua URL\n"
+                ".l followed by a Lua code block"
+            ),
+            mention_author=False,
+        )
+        return
+
+    status = await ctx.reply(
+        view=info_view("Environment logger running", "Executing the source in a sandboxed Roblox environment and recording everything it does."),
+        mention_author=False,
+    )
+    try:
+        async with ctx.typing():
+            if attachments:
+                attachment = attachments[0]
+                filename = Path(attachment.filename).name
+                if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+                    raise ValueError("Supported attachment types are .lua, .luau, and .txt.")
+                if attachment.size > MAX_INPUT_BYTES:
+                    raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+            elif _looks_like_url_argument(source_argument):
+                source_url = _command_input_url(source_argument)
+                source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
+            else:
+                filename = "pasted_code.lua"
+
+            with tempfile.TemporaryDirectory(prefix="envlogger_bot_") as directory:
+                input_path = Path(directory) / filename
+                if attachments:
+                    await attachment.save(input_path)
+                    size = input_path.stat().st_size
+                    if size == 0:
+                        raise ValueError("The supplied file contains no data.")
+                    if size > MAX_INPUT_BYTES:
+                        raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+                elif _looks_like_url_argument(source_argument):
+                    saved_name, size, _note = await asyncio.to_thread(_download_command_source, source_url, input_path)
+                    filename = saved_name or filename
+                    if size > MAX_INPUT_BYTES:
+                        raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+                else:
+                    source_text = _unwrap_lua_code_block(source_argument)
+                    input_path.write_text(source_text, encoding="utf-8")
+
+                started = time.monotonic()
+                returncode, stdout_text, stderr_text = await asyncio.to_thread(
+                    _run_env_logger, input_path, Path(directory) / "dump_out.lua"
+                )
+                elapsed = f"{time.monotonic() - started:.1f}s"
+                output_path = Path(directory) / "dump_out.lua"
+                if returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
+                    detail = (stderr_text or stdout_text or "").strip()[-700:] or "no diagnostic output"
+                    raise RuntimeError(f"The Env Logger run failed: {detail}")
+
+                notes = stdout_text.strip()
+                if notes:
+                    with open(output_path, "a", encoding="utf-8", errors="replace") as handle:
+                        handle.write("\n\n--[ [Env Logger notes]\n" + notes[:1200] + "\n]]\n")
+
+                out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                output_size = output_path.stat().st_size
+
+        delivered = await _deliver_deobf_output(
+            ctx,
+            status,
+            f"envlog_{Path(filename).stem}.lua",
+            "Env Logger",
+            output_path,
+            output_size,
+            out_text,
+            elapsed,
+        )
+        if not delivered:
+            raise RuntimeError("The logged output could not be delivered.")
+    except subprocess.TimeoutExpired:
+        await status.edit(content=None, view=error_view("Environment logger timed out", f"The run exceeded the {ENVLOGGER_TIMEOUT}s limit."))
+    except ValueError as exc:
+        await status.edit(content=None, view=error_view("Could not log this source", str(exc)[:900]))
+    except RuntimeError as exc:
+        await status.edit(content=None, view=error_view("Environment logger failed", str(exc)[:900]))
+    except discord.Forbidden:
+        print("Discord permission error during .l: cannot read or send messages or attachments.", flush=True)
+    except discord.HTTPException as exc:
+        print(f"Discord error during .l: {type(exc).__name__}: {exc}", flush=True)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        print(f"Unexpected .l error: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
+        try:
+            await status.edit(content=None, view=error_view("Environment logger failed", "An unexpected error occurred. Check the bot service logs for details."))
+        except discord.HTTPException:
+            pass
+
+
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
 async def deobfs(ctx: commands.Context) -> None:
     await ctx.reply(view=info_view("Supported deobfuscators", engines_body()), mention_author=False)
@@ -2901,6 +3050,7 @@ async def help_command(ctx: commands.Context) -> None:
         + "• `.beautify` or `.b` followed by a raw Lua URL or pasted code\n"
         + "• `.deobf https://example.com/raw/script.lua`\n"
         + "• `.do` with a Lua file attached"
+        + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandboxed Roblox environment)"
     )
     await ctx.reply(view=info_view("COMMAND GUIDE", body), mention_author=False)
 
