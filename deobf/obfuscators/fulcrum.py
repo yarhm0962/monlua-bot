@@ -78,4 +78,17 @@ class Fulcrum(Obfuscator):
         if proc.returncode != 0 or not os.path.exists(outpath) or os.path.getsize(outpath) == 0:
             err = ((proc.stderr or b"").decode("utf-8", "replace") or out)[-500:]
             raise RuntimeError("fulcrum engine failed: %s" % err.strip())
+        try:
+            with open(outpath, "r", encoding="utf-8", errors="replace") as fh:
+                head = fh.read(2000)
+        except OSError:
+            head = ""
+        if "PolSec remote loader (no embedded script)" in head:
+            raise RuntimeError(
+                "This Fulcrum build is a PolSec remote loader: the VM fetches the real "
+                "script from polsec.net's servers at runtime (HWID + key gated), so the "
+                "script code is not inside the file and cannot be deobfuscated statically. "
+                "Run the loader in Roblox with a valid key, dump the payload it receives, "
+                "and send that dump instead."
+            )
         return outpath

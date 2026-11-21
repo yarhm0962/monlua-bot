@@ -167,7 +167,11 @@ def _polsec_dump(src, dst):
     rep.append('-- session with the PolSec servers using a valid key; the deobfuscator')
     rep.append('-- never does that on its own.')
     Path(dst).write_text('\n'.join(rep) + '\n', encoding='utf-8', errors='replace')
+    print('[!] PolSec remote loader detected: the script itself is NOT inside this file.')
+    print("[!] The VM boots and fetches the real script from polsec.net's servers at runtime (HWID + key gated), so no static deobfuscator can recover it.")
+    print('[!] Run the loader in Roblox with a valid key, dump the payload it receives, and send that dump to be deobfuscated instead.')
     print('polsec remote loader: no embedded script; recovery report -> %s' % dst)
+    raise SystemExit(2)
 
 
 def cmd_deobf(src, dst):
