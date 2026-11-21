@@ -361,7 +361,7 @@ def eval_ba_tree(src):
     return store, slices, vals
 
 
-def literal_eval_ba(text, ba):
+def literal_eval_ba(text, ba, varname='ba'):
     """Fold an int expression that may reference `ba`."""
     class BV(ast.NodeTransformer):
         pass
@@ -369,7 +369,7 @@ def literal_eval_ba(text, ba):
         if isinstance(n, ast.Constant) and isinstance(n.value, (int, bool)):
             return n.value, {}
         if isinstance(n, ast.Name):
-            if n.id == 'ba':
+            if n.id == 'ba' or n.id == varname:
                 return 0, {'ba': 1}
             return 0, {n.id: 1}
         if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
@@ -440,7 +440,7 @@ def literal_eval_ba(text, ba):
         return None
 
 
-def canon_name(name, ba=None, env=None):
+def canon_name(name, ba=None, env=None, varname='ba'):
     """Canonicalize `aN[ba-350]` style names by folding the indices."""
     out = ''
     i = 0
@@ -451,7 +451,7 @@ def canon_name(name, ba=None, env=None):
             inner = name[i+1:j]
             v = None
             if ba is not None:
-                v = literal_eval_ba(inner, ba)
+                v = literal_eval_ba(inner, ba, varname)
             if v is None and env is not None:
                 sv = fold_expr(inner, env)
                 if sv.kind == 'int':
@@ -1619,8 +1619,8 @@ def _init_block(p, src, v, var, store, defs):
 def _init_take(text, v, var, store, defs):
     m = re.match(r'\s*([A-Za-z_][A-Za-z_0-9]*(?:\[[^\]]+\])*)\s*=\s*(.+?)\s*$', text, re.S)
     if m and not m.group(2).startswith('function'):
-        key = canon_name(m.group(1), v)
-        val = literal_eval_ba(m.group(2), v)
+        key = canon_name(m.group(1), v, varname=var)
+        val = literal_eval_ba(m.group(2), v, varname=var)
         if val is not None and key:
             store[key] = sym_const(val)
             return
@@ -1630,7 +1630,7 @@ def _init_take(text, v, var, store, defs):
     # table inits and other junk: fold tables into the store, drop the rest
     m2 = re.match(r'\s*([A-Za-z_][A-Za-z_0-9]*(?:\[[^\]]+\])*)\s*=\s*\{', text)
     if m2:
-        key = canon_name(m2.group(1), v) or m2.group(1)
+        key = canon_name(m2.group(1), v, varname=var) or m2.group(1)
         store[key] = Sym('opaque', None, 'table')
         return
     return
@@ -1722,8 +1722,8 @@ def decompile_region(chain_src, store, params, out_lines, depth):
         out_lines.append('-- UNPARSED REGION')
         return
     # init pair: look in store for A / B (set by `local A,B,...=...` handled by caller)
-    init1 = store.get('__init_' + A)
-    init2 = store.get('__init_' + B)
+    init1 = store.get('__init_' + A) if A else None
+    init2 = store.get('__init_' + B) if B else None
     if init1 is None or init2 is None:
         out_lines.append('-- REGION missing init pair (%s,%s)' % (A, B))
         return
@@ -2246,7 +2246,7 @@ def _find_vm_entry(src):
     rm = re.search(r'return\s+([A-Za-z_]\w*)\(', tail)
     if rm:
         alias = rm.group(1)
-        for am in re.finditer(r'(?<![\w.])%s\s*=\s*([A-Za-z_]\w*)\s*(?:$|\bend\b)' % alias, src):
+        for am in reversed(list(re.finditer(r'(?<![\w.])%s\s*=\s*([A-Za-z_]\w*)\s*(?:$|\bend\b)' % alias, src))):
             target = am.group(1)
             fm = re.search(r'(?<![\w.])%s=function\(...\)local\s+[A-Za-z_]\w*' % target, src)
             if not fm:
