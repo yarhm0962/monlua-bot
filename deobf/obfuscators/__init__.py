@@ -2,6 +2,7 @@
 from obfuscators.base import Obfuscator, Job
 from obfuscators.luraph_v15 import LuraphV15
 from obfuscators.luraph_v151 import LuraphV151
+from obfuscators.luraph_v143 import LuraphV143
 from obfuscators.ironbrew1 import Ironbrew1
 from obfuscators.moonsec_v3 import MoonsecV3
 from obfuscators.centurion import Centurion
@@ -16,6 +17,7 @@ from obfuscators import extra_families
 
 PLUGINS = [
     LuraphV151(),
+    LuraphV143(),
     LuraphV15(),
     Ironbrew1(),
     MoonsecV3(),

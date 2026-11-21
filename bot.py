@@ -63,7 +63,8 @@ SUPPORTED = {
     "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
     "77fuscator": {"label": "77fuscator", "command": ".do"},
     "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "status": "Full recovery: two-stage static engine (unflatten, fold/rename, syntax heal), output verified with the bundled Luau compiler before delivery. Detection first."},
-    "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
+    "luraph_v143": {"label": "Luraph v14.3", "command": ".do", "status": "Recovery: blob decode, bytecode deserialization with bias auto-detection, and structured CFG output. Deeply virtualized builds are still in research."},
+        "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
 }
 
 
