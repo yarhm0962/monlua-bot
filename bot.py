@@ -308,12 +308,27 @@ def info_view(title: str, body: str, color: int = 0x5865F2, footer: str = "") ->
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(f"## {title}"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay(body.strip()))
+    container.add_item(discord.ui.TextDisplay(_fit_text(body.strip())))
     if footer:
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
+        container.add_item(discord.ui.TextDisplay(_fit_text(f"-# {footer}")))
     view.add_item(container)
     return view
+
+
+def _fit_text(value, width: int = 64) -> str:
+    """Hard-wrap long lines so cards stay readable on narrow screens."""
+    out = []
+    for raw in str(value or "").splitlines():
+        raw = raw.rstrip()
+        while len(raw) > width:
+            cut = raw.rfind(" ", 0, width + 1)
+            if cut <= 0:
+                cut = width
+            out.append(raw[:cut].rstrip())
+            raw = raw[cut:].lstrip()
+        out.append(raw)
+    return "\n".join(out)
 
 
 def engines_body() -> str:
@@ -813,10 +828,10 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     if elapsed:
         summary += f"\n**Time** · {elapsed}"
     container.add_item(discord.ui.TextDisplay(summary))
-    container.add_item(discord.ui.TextDisplay(f"-# Source: `{filename[:140]}`"))
+    container.add_item(discord.ui.TextDisplay(f"-# Source: `{filename[:64]}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
-        container.add_item(discord.ui.TextDisplay(f"```lua\n{code_text}\n```"))
+        container.add_item(discord.ui.TextDisplay(f"```lua\n{_fit_text(code_text, 72)}\n```"))
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
         container.add_item(discord.ui.TextDisplay("📎 **Output file attached**"))
@@ -903,7 +918,7 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
     container = discord.ui.Container(accent_color=0xED4245)
     container.add_item(discord.ui.TextDisplay(f"## ⚠️ {title}"))
     container.add_item(discord.ui.Separator())
-    safe_detail = str(detail or "No diagnostic details were provided.").strip()[-900:]
+    safe_detail = _fit_text(str(detail or "No diagnostic details were provided.").strip()[-900:])
     safe_detail = safe_detail.replace("```", "`\u200b``")
     container.add_item(discord.ui.TextDisplay(f"```text\n{safe_detail}\n```"))
     container.add_item(discord.ui.Separator())
@@ -939,7 +954,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     one_click = None
     if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED and _engine_is_available(best_name):
         one_click = (best_name, source)
-    head = f"-# Source: `{filename[:140]}`"
+    head = f"-# Source: `{filename[:64]}`"
     if elapsed:
         head += f" \u00b7 \u23f1\ufe0f {elapsed}"
     body: list[str] = []
@@ -978,7 +993,7 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     container = discord.ui.Container()
     container.add_item(discord.ui.TextDisplay(f"{title}\n{head}"))
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-    container.add_item(discord.ui.TextDisplay("\n".join(body)))
+    container.add_item(discord.ui.TextDisplay(_fit_text("\n".join(body))))
     if one_click:
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click, owner_id=owner_id)))
@@ -2415,7 +2430,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         return
 
     status = await ctx.reply(
-        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:120]}`\nWaiting for a free slot."),
+        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:64]}`\nWaiting for a free slot."),
         mention_author=False,
     )
 
@@ -2467,11 +2482,11 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     go_cloud = engine != "moonveil_v145" and size >= cloud_min
                     if go_cloud and cloud_runner_configured():
                         try:
-                            await status.edit(content=None, view=info_view("Cloud processing", f"Running `{filename[:120]}` on the cloud runner."))
+                            await status.edit(content=None, view=info_view("Cloud processing", f"Running `{filename[:64]}` on the cloud runner."))
                             async with cloud_slots:
                                 cloud_out = await _await_with_progress(
                                     status,
-                                    f"Running `{filename[:120]}` on the cloud runner." + "\nElapsed · {elapsed}",
+                                    f"Running `{filename[:64]}` on the cloud runner.\nElapsed · {elapsed}",
                                     asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
                                     heading="Cloud processing",
                                     interval=30,
@@ -2620,7 +2635,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
     status = await ctx.reply(
-        view=info_view("Scanning source", f"Checking `{filename[:120]}` against every detector."),
+        view=info_view("Scanning source", f"Checking `{filename[:64]}` against every detector."),
         mention_author=False,
     )
     try:
@@ -2778,7 +2793,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             if size > MAX_INPUT_BYTES:
                 await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                 return
-            status = await ctx.reply(view=info_view("Analyzing source", f"**File** · `{filename[:120]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
+            status = await ctx.reply(view=info_view("Analyzing source", f"**File** · `{filename[:64]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
             start_time = time.monotonic()
             try:
                 async with job_slots:
