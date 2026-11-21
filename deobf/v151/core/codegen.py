@@ -1679,10 +1679,12 @@ class Renderer:
         if isinstance(st, ST.SCrash):
             return [ind + "LPH_CRASH()"]
         if isinstance(st, ST.SError):
-            return [ind + "error(\"devirt: %s\")" % st.msg.replace("\\", "\\\\").replace("\"", "'")]
+            # a block the structurer could not recover: keep the file loadable
+            # and editable instead of crashing it at load time
+            return [ind + "-- devirt: %s" % st.msg.replace("\\", "\\\\").replace("\"", "'")]
         if isinstance(st, ST.SGotoState):
 
-            return [ind + "error(\"devirt: unstructured jump to block_%s\") -- goto block_%s" % (st.target, st.target)]
+            return [ind + "-- devirt: unstructured jump to block_%s (goto block_%s)" % (st.target, st.target)]
         return [ind + "-- ?? %s" % type(st).__name__]
 
     def lvalue(self, t):

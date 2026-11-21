@@ -121,6 +121,7 @@ def _v151_process_env() -> dict[str, str]:
     process_env["DEOB_REQUIRE_COMPLETE"] = "1"
     process_env["DEOB_LUAU_MEM_KB"] = os.getenv("DEOB_LUAU_MEM_KB", "196608")
     process_env["PYTHON_BIN"] = PYTHON
+    process_env["LURAPH_TOLERANT_LIFT"] = "1"
     return process_env
 
 

@@ -203,7 +203,11 @@ async function run(job) {
     const lifted = fs.readFileSync(dpath, 'utf8');
     const nilCalls = (lifted.match(/\(nil\)\(/g) || []).length;
     const lines = lifted.split('\n').length;
-    if (nilCalls < 50 || nilCalls * 100 < lines) {
+    const codeLines = lifted.split('\n').filter(l => {
+      const t = l.trim();
+      return t && !t.startsWith('--');
+    }).length;
+    if (nilCalls < 50 || nilCalls <= codeLines) {
       return dpath;
     }
     process.stderr.write(`[!] the devirtualized output is broken (${nilCalls} calls of nil); writing behaviour trace instead\n`);

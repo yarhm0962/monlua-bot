@@ -1,3 +1,4 @@
+import os
 import math
 import struct
 import unicodedata
@@ -861,6 +862,11 @@ class Interp:
                 return fb[local["name"]]
             except KeyError:
                 pass
+        # tolerant lift: an unbound free local (an outer capture the runtime
+        # walk never recorded) must not kill the whole program lift; treat it
+        # as nil and keep going, so the output stays real Lua.
+        if os.environ.get("LURAPH_TOLERANT_LIFT"):
+            return None
         raise Unsupported("unbound local %s@%s" % (local["name"], key))
 
     def setvar(self, scope, local, v):

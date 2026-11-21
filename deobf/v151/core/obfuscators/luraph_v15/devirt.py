@@ -4686,6 +4686,15 @@ def lift_program(source, protos_path, chunk_paths=(), fetch=None):
         at = next((i for i, l in enumerate(out) if l and not l.startswith("--")), len(out))
         out[at:at] = shared
     text = backend.polish("\n".join(out))
+    # the payload closes over the loader's outer values; name and declare them
+    # so the output is self-contained, loadable Lua instead of free names
+    ups = sorted(set(re.findall(r"\bupv\d+(?:_\d+)?\b", text)),
+                 key=lambda n: (len(n), n))
+    if ups:
+        text = ("-- Luraph outer values: captured from the loader's environment;\n"
+                "-- their runtime values are not recoverable, so they are declared here\n"
+                "-- and stay nil until the values they held are wired back in.\n"
+                "local " + ", ".join(ups) + " = nil\n\n" + text)
     return text, fl.stats, prog.requests, buffer_patches(prog.dump)
 
 finish_text = backend.finish_text

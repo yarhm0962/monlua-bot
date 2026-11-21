@@ -135,7 +135,9 @@ class LuraphAll:
                 return _V14_PLUGINS[version[1]]
             if version[1] >= 10:
                 return "luraph_v14_9"
-            return None  # older v14.x: the Node engine's v14 family + fallback chain
+            # older v14.x (v14.3 - v14.6): the v14_7 family lift is the one
+            # that reads this shape; auto-detect falls into the raw trace
+            return "luraph_v14_7"
         if version and version[0] == "15":
             return "luraph_v15"
         return None
@@ -160,6 +162,7 @@ class LuraphAll:
         env["PYTHON_BIN"] = sys.executable or "python3"
         env["LURAPH_OPEN_SOURCE_ROOT"] = str(ROOT)
         env["NODE_OPTIONS"] = "--max-old-space-size=6144"
+        env["LURAPH_TOLERANT_LIFT"] = "1"
         try:
             proc = subprocess.run(
                 cmd,

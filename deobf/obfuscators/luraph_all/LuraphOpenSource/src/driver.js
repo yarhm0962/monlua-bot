@@ -33,7 +33,7 @@ function liftQuality(text) {
   }
   const nilCalls = (text.match(/\(nil\)\(/g) || []).length;
   const lines = text.split('\n').length;
-  const broken = code === 0 || (nilCalls >= 50 && nilCalls * 100 >= lines);
+  const broken = code === 0 || (nilCalls >= 50 && nilCalls > code);
   // higher is better; a lift full of unresolved markers loses to a cleaner one
   return { code, marks, nilCalls, broken, score: code - 25 * marks - 10 * nilCalls };
 }
