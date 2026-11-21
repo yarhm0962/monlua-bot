@@ -297,12 +297,15 @@ class _LoggedLayoutView(discord.ui.LayoutView):
         print(f"View error for {item} in {type(self).__name__}: {error!r}\n{traceback.format_exc()}", flush=True)
 
 
-def info_view(title: str, body: str, color: int = 0x5865F2) -> discord.ui.LayoutView:
+def info_view(title: str, body: str, color: int = 0x5865F2, footer: str = "") -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(f"## {title}"))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(body.strip()))
+    if footer:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
     view.add_item(container)
     return view
 
@@ -456,6 +459,9 @@ PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
 PASTEFY_TOKEN = (os.getenv("PASTEFY_TOKEN") or os.getenv("PASTEFY_API_TOKEN") or "").strip()
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
+RUBIS_API_URL = "https://api.rubis.app/v2/scrap"
+RUBIS_TIMEOUT = max(5, min(60, int(os.getenv("RUBIS_TIMEOUT", "30"))))
+RUBIS_CHUNK_CHARS = 2_900_000  # the free Epique plan caps scraps at 3 MB
 MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(256 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
 
 STYLUA_VERSION = "2.6.0"
@@ -720,11 +726,83 @@ def _pastefy_upload(text: str, title: str) -> str:
     return ""
 
 
-def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", pastefy_url: str = "") -> discord.ui.LayoutView:
+def _rubis_post(text: str, title: str):
+    from urllib.parse import quote
+    url = f"{RUBIS_API_URL}?public=true&title={quote(title[:200])}"
+    try:
+        request = urllib.request.Request(
+            url, data=text.encode("utf-8"),
+            headers={"Content-Type": "text/plain; charset=utf-8",
+                     "User-Agent": "monlua-bot/2.0"}, method="POST")
+        with urllib.request.urlopen(request, timeout=RUBIS_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8", errors="replace"))
+        if data.get("success") and data.get("scrapID"):
+            return data
+        print(f"Rubis upload rejected: {str(data)[:200]}", flush=True)
+    except Exception as exc:
+        print(f"Rubis upload failed: {type(exc).__name__}: {exc}", flush=True)
+    return None
+
+
+def _rubis_upload(text: str, title: str) -> tuple[str, str]:
+    """Upload output to Rubis; returns (view URL, raw URL) or ("", "").
+    Scraps past the 3 MB free-plan cap are split into numbered parts with an
+    index scrap holding every link."""
+    if not text:
+        return "", ""
+    part_count = (len(text) + RUBIS_CHUNK_CHARS - 1) // RUBIS_CHUNK_CHARS
+    scraps = []
+    for index in range(part_count):
+        chunk = text[index * RUBIS_CHUNK_CHARS:(index + 1) * RUBIS_CHUNK_CHARS]
+        part_title = title[:200] if part_count == 1 else f"{title[:180]} ({index + 1}/{part_count})"
+        scrap = _rubis_post(chunk, part_title)
+        if not scrap:
+            return "", ""
+        scraps.append(scrap)
+    if part_count == 1:
+        scrap = scraps[0]
+        return (scrap.get("view") or f"https://rubis.app/view/?scrap={scrap['scrapID']}",
+                scrap.get("raw") or "")
+    urls = [item.get("view") or f"https://rubis.app/view/?scrap={item['scrapID']}" for item in scraps]
+    index_text = "Full output split across Rubis parts (in order):\n\n" + "\n".join(
+        f"Part {i}: {u}" for i, u in enumerate(urls, 1))
+    index = _rubis_post(index_text, f"{title[:180]} - index")
+    if not index:
+        return "", ""
+    return (index.get("view") or f"https://rubis.app/view/?scrap={index['scrapID']}",
+            index.get("raw") or "")
+
+
+def _upload_output(text: str, title: str) -> tuple[str, str, str]:
+    """Give oversized output an online home: Rubis first, Pastefy as the fallback.
+    Returns (service name, view URL, raw URL); empty strings when both fail."""
+    text = text or ""
+    if not text:
+        return "", "", ""
+    rubis_view, rubis_raw = _rubis_upload(text, title)
+    if rubis_view:
+        return "Rubiš", rubis_view, rubis_raw
+    pastefy_url = _pastefy_upload(text, title)
+    if pastefy_url:
+        return "Pastefy", pastefy_url, pastefy_url.rstrip("/") + "/raw"
+    return "", "", ""
+
+
+def _online_action_row(online: tuple[str, str, str]) -> discord.ui.ActionRow:
+    """Link buttons for an online copy of an output, the Components V2 way."""
+    service_name, online_url, online_raw = online
+    row = discord.ui.ActionRow(
+        discord.ui.Button(style=discord.ButtonStyle.link, label=f"Open {service_name}", url=online_url))
+    if online_raw:
+        row.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label="View raw", url=online_raw))
+    return row
+
+
+def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", online_copy=None) -> discord.ui.LayoutView:
     """Create a compact result card with a clear hierarchy on narrow screens."""
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
-    container.add_item(discord.ui.TextDisplay("## Deobfuscation Complete"))
+    container.add_item(discord.ui.TextDisplay("## ✅ Deobfuscation Complete"))
     summary = f"**Engine** · {label}\n**Output size** · {_human_size(size)}"
     if elapsed:
         summary += f"\n**Time** · {elapsed}"
@@ -736,9 +814,8 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
     if file_name is not None:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
         container.add_item(discord.ui.TextDisplay("📎 **Output file attached**\n-# Download the attachment to save the full result."))
-    if pastefy_url:
-        container.add_item(discord.ui.TextDisplay(
-            f"**Online copy**\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
+    if online_copy and online_copy[1]:
+        container.add_item(_online_action_row(online_copy))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("-# Review recovered code before running it."))
     view.add_item(container)
@@ -761,9 +838,9 @@ async def _deliver_deobf_output(
         modes.append("inline")
     if output_size <= upload_limit:
         modes.append("attachment")
-    modes.append("pastefy")
+    modes.append("online")
     failures = []
-    pastefy_url = ""
+    online = ("", "", "")
 
     for mode in modes:
         try:
@@ -781,11 +858,11 @@ async def _deliver_deobf_output(
             else:
                 if out_text is None:
                     out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                pastefy_url = await asyncio.to_thread(_pastefy_upload, out_text.rstrip(), Path(filename).stem)
-                if not pastefy_url:
+                online = await asyncio.to_thread(_upload_output, out_text.rstrip(), Path(filename).stem)
+                if not online[1]:
                     raise RuntimeError("The online output service did not return a complete output link.")
                 await ctx.reply(
-                    view=result_view(filename, label, output_size, None, None, elapsed, pastefy_url=pastefy_url),
+                    view=result_view(filename, label, output_size, None, None, elapsed, online_copy=online),
                     mention_author=False,
                 )
             break
@@ -793,8 +870,8 @@ async def _deliver_deobf_output(
             failures.append(f"{type(exc).__name__}: {str(exc)[:240]}")
     else:
         details = "\n".join(failures[-3:]) or "Discord and online delivery methods failed."
-        if pastefy_url:
-            details += f"\nOnline copy: {pastefy_url}"
+        if online[1]:
+            details += f"\nOnline copy: {online[1]}"
         try:
             await status.edit(content=None, view=error_view("Output delivery failed", details[:850]))
         except discord.HTTPException:
@@ -2639,9 +2716,11 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             await ctx.send(view=download_view, file=discord.File(fp=str(temporary), filename=safe_name))
         else:
             source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
-            pastefy_url = await asyncio.to_thread(_pastefy_upload, source_text, Path(filename).stem or "raw")
-            if pastefy_url:
-                await status.edit(content=None, view=info_view("Source fetched", details_text + f"\n\n[Open Pastefy]({pastefy_url}) · [View raw text]({pastefy_url}/raw)"))
+            online = await asyncio.to_thread(_upload_output, source_text, Path(filename).stem or "raw")
+            if online[1]:
+                fetched_view = info_view("Source fetched", details_text + "\n\nThe complete file is available online.")
+                fetched_view.children[0].add_item(_online_action_row(online))
+                await status.edit(content=None, view=fetched_view)
             else:
                 await status.edit(content=None, view=error_view("Source exceeds the upload limit", "The file is larger than this server can attach, and the online upload service did not accept it."))
     except Exception as exc:

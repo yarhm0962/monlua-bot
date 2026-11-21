@@ -146,7 +146,20 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_failed_attachment_uses_pastefy_before_removing_status(self):
+    async def test_output_giver_prefers_rubis_then_falls_back_to_pastefy(self):
+        with patch.object(bot, "_rubis_upload", return_value=("https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw")):
+            self.assertEqual(bot._upload_output("code", "title"), ("Rubis", "https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw"))
+        with patch.object(bot, "_rubis_upload", return_value=("", "")), patch.object(
+            bot, "_pastefy_upload", return_value="https://pastefy.app/test"
+        ):
+            self.assertEqual(bot._upload_output("code", "title"), ("Pastefy", "https://pastefy.app/test", "https://pastefy.app/test/raw"))
+        with patch.object(bot, "_rubis_upload", return_value=("", "")), patch.object(
+            bot, "_pastefy_upload", return_value=""
+        ):
+            self.assertEqual(bot._upload_output("code", "title"), ("", "", ""))
+        self.assertEqual(bot._upload_output("", "title"), ("", "", ""))
+
+    async def test_failed_attachment_uses_online_output_before_removing_status(self):
         class Context:
             guild = SimpleNamespace(filesize_limit=8 * 1024 * 1024)
 
@@ -178,7 +191,7 @@ class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
             output.write_text("local recovered = true\n", encoding="utf-8")
             ctx = Context()
             status = Status()
-            with patch.object(bot, "_pastefy_upload", return_value="https://pastefy.app/test"):
+            with patch.object(bot, "_upload_output", return_value=("Pastefy", "https://pastefy.app/test", "https://pastefy.app/test/raw")):
                 delivered = await bot._deliver_deobf_output(
                     ctx, status, "input.lua", "Luraph v15", output, 2000, None, "2s"
                 )
@@ -209,7 +222,7 @@ class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
             output = Path(directory) / "recovered.luau"
             output.write_text("local recovered = true\n", encoding="utf-8")
             status = Status()
-            with patch.object(bot, "_pastefy_upload", return_value=""):
+            with patch.object(bot, "_upload_output", return_value=("", "", "")):
                 delivered = await bot._deliver_deobf_output(
                     Context(), status, "input.lua", "Luraph v15", output, 2000, None, "2s"
                 )
