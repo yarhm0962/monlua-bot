@@ -15236,7 +15236,10 @@ function oxygen.dumpfile(inpath, outpath)
     if not ok or not chunk then
         if not ok then
             print("CRASH IN LOADSTR: ", chunk)
-            fs.writeFile("core/misc/CRASH.txt", code)
+            _pcall(function()
+                fs.writeDir("core/misc")
+                fs.writeFile("core/misc/CRASH.txt", code)
+            end)
         end
         local ok2, chunk2, le2 = _pcall(function()
             return _loadstr(code, "script", "t", sbox)
@@ -15247,6 +15250,7 @@ function oxygen.dumpfile(inpath, outpath)
         else
             chunk = nil
             le = chunk2 or le2
+            _print("ENVLOGGER LOAD FAILED: " .. tostring(chunk2 or le2 or "unknown load error"))
         end
     end
     _pcall(function()

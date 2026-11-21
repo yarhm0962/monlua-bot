@@ -354,7 +354,7 @@ def engines_body() -> str:
         + "Both commands open the same engine selector and processing flow.\n\n"
         + "**SOURCE TOOLS**\n"
         + "• .detect / .d — scan a file and identify its likely engine\n"
-        + "• .get <url> — fetch raw source and resolve supported static loader links\n"
+        + "• .get <url or file> — fetch raw source (or attach one) and resolve supported static loader links\n"
         + "• .beautify / .b — format Lua or Luau files, raw links, or pasted code\n"
         + "• .deobfs — display this engine reference\n"
         + "• .help — display the command guide\n\n"
@@ -2711,15 +2711,40 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
 @bot.command(name="get")
 async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
     url = (url or "").strip().strip("<>").strip()
-    if not url:
-        await ctx.reply(view=info_view("Usage", ".get <url> fetches raw source or resolves a supported loadstring URL."), mention_author=False)
+    attachments = ctx.message.attachments
+    if attachments and url:
+        await ctx.reply(view=info_view("Choose one source", "Attach one file or give a URL, not both."), mention_author=False)
         return
+    if len(attachments) > 1:
+        await ctx.reply(view=info_view("Single-file processing", "Attach one file per request."), mention_author=False)
+        return
+    attachment = attachments[0] if attachments else None
+    if attachment is None and not url:
+        await ctx.reply(view=info_view("Usage", ".get with a `.lua`, `.luau`, or `.txt` attachment, or `.get <url>` to fetch raw source or resolve a supported loadstring URL."), mention_author=False)
+        return
+    if attachment is not None:
+        filename = Path(attachment.filename).name
+        if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+            await ctx.reply(view=error_view("Unsupported file type", "Use `.lua`, `.luau`, or `.txt`."), mention_author=False)
+            return
+        if attachment.size > MAX_INPUT_BYTES:
+            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            return
 
     url = _command_input_url(url)
-    status = await ctx.reply(view=info_view("⏳ Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
+    if attachment is not None:
+        status = await ctx.reply(view=info_view("⏳ Reading source", "Loading the attached file."), mention_author=False)
+    else:
+        status = await ctx.reply(view=info_view("⏳ Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
     temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
-        filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, temporary)
+        if attachment is not None:
+            await attachment.save(temporary)
+            filename = Path(attachment.filename).name
+            size = temporary.stat().st_size
+            loader_depth, fetch_note = 0, None
+        else:
+            filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, temporary)
         safe_name = Path(filename).name or "raw.txt"
         allowed_names = (".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")
         if not safe_name.lower().endswith(allowed_names):
