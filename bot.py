@@ -488,6 +488,7 @@ PASTEFY_TOKEN = (os.getenv("PASTEFY_TOKEN") or os.getenv("PASTEFY_API_TOKEN") or
 PASTEFY_TIMEOUT = max(5, min(45, int(os.getenv("PASTEFY_TIMEOUT", "20"))))
 PASTEFY_CHUNK_CHARS = 450_000
 RUBIS_API_URL = "https://api.rubis.app/v2/scrap"
+PUBLIC_SERVICE_URL = os.getenv("PUBLIC_SERVICE_URL", "https://monlua-bot-zswa.onrender.com").rstrip("/")
 RUBIS_TIMEOUT = max(5, min(60, int(os.getenv("RUBIS_TIMEOUT", "30"))))
 RUBIS_CHUNK_CHARS = 2_900_000  # the free Epique plan caps scraps at 3 MB
 MAX_FORMAT_BYTES = max(128_000, int(os.getenv("MAX_FORMAT_BYTES", str(256 * 1024))))   # per paste; stays under Pastefy's ~1 MB request cap even with JSON escaping
@@ -754,6 +755,16 @@ def _pastefy_upload(text: str, title: str) -> str:
     return ""
 
 
+def _rubis_proxy_raw_url(scrap_id) -> str:
+    """Raw links go through the bot's own raw viewer: browsers (Discord's in-app
+    one included) download plain-text links, and this route answers browsers
+    with a view-only HTML page while HttpGet callers get identical raw bytes."""
+    scrap_id = str(scrap_id or "").strip()
+    if scrap_id:
+        return f"{PUBLIC_SERVICE_URL}/rubis/{scrap_id}"
+    return ""
+
+
 def _rubis_post(text: str, title: str):
     from urllib.parse import quote
     url = f"{RUBIS_API_URL}?public=true&title={quote(title[:200])}"
@@ -789,16 +800,18 @@ def _rubis_upload(text: str, title: str) -> tuple[str, str]:
         scraps.append(scrap)
     if part_count == 1:
         scrap = scraps[0]
+        raw_url = _rubis_proxy_raw_url(scrap.get("scrapID")) or (scrap.get("raw") or "")
         return (scrap.get("view") or f"https://rubis.app/view/?scrap={scrap['scrapID']}",
-                scrap.get("raw") or "")
+                raw_url)
     urls = [item.get("view") or f"https://rubis.app/view/?scrap={item['scrapID']}" for item in scraps]
     index_text = "Full output split across Rubis parts (in order):\n\n" + "\n".join(
         f"Part {i}: {u}" for i, u in enumerate(urls, 1))
     index = _rubis_post(index_text, f"{title[:180]} - index")
     if not index:
         return "", ""
+    raw_url = _rubis_proxy_raw_url(index.get("scrapID")) or (index.get("raw") or "")
     return (index.get("view") or f"https://rubis.app/view/?scrap={index['scrapID']}",
-            index.get("raw") or "")
+            raw_url)
 
 
 def _upload_output(text: str, title: str) -> tuple[str, str, str]:
@@ -2757,21 +2770,38 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         details_text = "\n".join(details)
         upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
 
+        # Every .get result gets an online copy on Rubis (Pastefy fallback), so
+        # the card always carries Open/View-raw links no matter how it delivers.
+        online = ("", "", "")
+        if size:
+            try:
+                source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
+                online = await asyncio.to_thread(_upload_output, source_text.rstrip(), Path(filename).stem or "raw")
+            except Exception as exc:
+                print(f".get online upload failed: {type(exc).__name__}: {exc}", flush=True)
+                online = ("", "", "")
+
         if size <= 1800:
             preview = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
             preview = preview[:1200].replace("```", "`\u200b``")
             body = details_text + "\n\n```text\n" + preview + "\n```"
-            await status.edit(content=None, view=info_view("Source preview", body))
+            preview_view = info_view("Source preview", body)
+            if online[1]:
+                preview_view.children[0].add_item(_online_action_row(online))
+            await status.edit(content=None, view=preview_view)
         elif size <= upload_limit:
-            await status.edit(content=None, view=info_view("Source fetched", details_text + "\nThe complete file is attached below."))
+            fetched_view = info_view("Source fetched", details_text + "\nThe complete file is attached below.")
+            if online[1]:
+                fetched_view.children[0].add_item(_online_action_row(online))
+            await status.edit(content=None, view=fetched_view)
             # Components V2 messages only show attachments referenced by a File
             # component, so the download card carries one pointing at the upload.
             download_view = info_view("Download ready", "The file is attached.")
+            if online[1]:
+                download_view.children[0].add_item(_online_action_row(online))
             download_view.children[0].add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{safe_name}")))
             await ctx.send(view=download_view, file=discord.File(fp=str(temporary), filename=safe_name))
         else:
-            source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
-            online = await asyncio.to_thread(_upload_output, source_text, Path(filename).stem or "raw")
             if online[1]:
                 fetched_view = info_view("Source fetched", details_text + "\n\nThe complete file is available online.")
                 fetched_view.children[0].add_item(_online_action_row(online))

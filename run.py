@@ -4,14 +4,17 @@ Keeps a small HTTP server alive on $PORT so UptimeRobot can ping the service,
 and runs bot.py alongside it, restarting it if it ever exits.
 """
 
+import html as html_module
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from pathlib import Path
 
 PORT = int(os.environ.get("PORT", "10000"))
@@ -19,8 +22,63 @@ START_TIME = time.time()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    RUBIS_RAW_API = "https://api.rubis.app/v2/scrap/{scrap_id}/raw"
+
+    def _serve_rubis_raw(self, scrap_id: str) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", scrap_id):
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"unknown scrap")
+            return
+        try:
+            request = urllib.request.Request(
+                self.RUBIS_RAW_API.format(scrap_id=scrap_id),
+                headers={"User-Agent": "monlua-bot/2.0"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                body = response.read()
+        except Exception:
+            body = b""
+        if not body:
+            self.send_response(502)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"could not fetch the Rubis scrap")
+            return
+        accept = self.headers.get("Accept", "")
+        if "text/html" in accept:
+            # Browsers (Discord's in-app one included) download plain-text
+            # links, so navigations get a real HTML viewer instead; HttpGet
+            # callers still get the identical raw bytes.
+            page = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                f"<title>Rubis raw &middot; {scrap_id}</title>"
+                "<style>body{margin:0;background:#0A0A0E;color:#E6E6F0}"
+                "header{padding:10px 16px;font:600 13px/1 system-ui;color:#9C7CFF;"
+                "border-bottom:1px solid #23232B}"
+                "pre{margin:0;padding:14px 16px;white-space:pre-wrap;word-break:break-word;"
+                "font:13px/1.55 ui-monospace,Menlo,Consolas,monospace}</style></head>"
+                f"<body><header>Rubi&scaron; raw &middot; {scrap_id}</header>"
+                "<pre>" + html_module.escape(body.decode("utf-8", errors="replace")) + "</pre></body></html>"
+            )
+            data = page.encode("utf-8")
+            out_type = "text/html; charset=utf-8"
+        else:
+            data = body
+            out_type = "text/plain; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", out_type)
+        self.send_header("Content-Disposition", "inline")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path.startswith("/rubis/"):
+            self._serve_rubis_raw(path[len("/rubis/"):].strip("/"))
+            return
         if path == "/status":
             runtime = Path(".runtime")
             dotnet_shared = runtime / "dotnet" / "shared" / "Microsoft.NETCore.App"
