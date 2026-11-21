@@ -37,7 +37,10 @@ ROOT = Path(__file__).resolve().parent
 DEOB_DIR = ROOT / "deobf"
 DEOB_SCRIPT = DEOB_DIR / "deob.py"
 PYTHON = os.getenv("PYTHON", sys.executable or "python3")
-MAX_INPUT_BYTES = max(1, int(os.getenv("MAX_INPUT_BYTES", str(8 * 1024 * 1024))))
+MAX_INPUT_BYTES = max(1, int(os.getenv("MAX_INPUT_BYTES", str(32 * 1024 * 1024))))
+# Sources above this can only run on the cloud runner: the local engine and the
+# Env Logger execute inside this container, which has 512 MB of memory.
+LOCAL_INPUT_BYTES = max(1, int(os.getenv("LOCAL_INPUT_BYTES", str(8 * 1024 * 1024))))
 MAX_OUTPUT_BYTES = max(1, int(os.getenv("MAX_OUTPUT_BYTES", str(24 * 1024 * 1024))))
 JOB_TIMEOUT = max(10, min(1800, int(os.getenv("DEOB_TIMEOUT", "900"))))  # 15 min headroom for ~2 MB files
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
@@ -470,6 +473,23 @@ def engines_body() -> str:
         + "Attach one .lua, .luau, or .txt file to the command, or provide a direct raw-file URL.\n"
         + "Use one source per command. Large jobs may take longer depending on VM complexity."
     )
+
+def _is_size_limit_error(exc: BaseException) -> bool:
+    """True for input-size rejections, so generic handlers show a clear card."""
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "input limit",
+            "upload limit",
+            "input too large",
+            "maximum input size",
+            "too large for local",
+            "too large for the local",
+            "capped at",
+        )
+    )
+
 
 def _human_size(n: int) -> str:
     if n < 1024:
@@ -1276,7 +1296,10 @@ class _ConfirmDeobfButton(discord.ui.Button):
         except Exception as exc:
             print(f"Deobfuscate button job failed: {type(exc).__name__}: {exc}", flush=True)
             try:
-                await interaction.channel.send(view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
+                if _is_size_limit_error(exc):
+                    await interaction.channel.send(view=error_view("Input too large", str(exc)[:400]))
+                else:
+                    await interaction.channel.send(view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
             except discord.HTTPException:
                 pass
 
@@ -2052,7 +2075,7 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False, time
                 content_type = response.headers.get_content_type().lower()
                 declared = response.headers.get("Content-Length")
                 if declared and int(declared) > MAX_INPUT_BYTES:
-                    raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
+                    raise ValueError(f"File exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
                 chunks = []
                 total_bytes = 0
                 while True:
@@ -2061,7 +2084,7 @@ def _download_url(url: str, destination: Path, allow_any_ext: bool = False, time
                         break
                     total_bytes += len(chunk)
                     if total_bytes > MAX_INPUT_BYTES:
-                        raise ValueError(f"File exceeds the {MAX_INPUT_BYTES:,}-byte input limit.")
+                        raise ValueError(f"File exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
                     chunks.append(chunk)
                 body = b"".join(chunks)
                 if content_type in {"text/html", "application/xhtml+xml"}:
@@ -2627,6 +2650,13 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                             print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
                             await status.edit(content=None, view=info_view("Using local engine", f"Cloud run failed: {str(exc)[:180]}\nFalling back to the local engine.", color=0xFAA61A))
                     if not output_path.is_file():
+                        if size > LOCAL_INPUT_BYTES:
+                            await status.edit(content=None, view=error_view(
+                                "File too large for the local engine",
+                                f"This file is {_human_size(size)}; the local {label} engine handles up to {_human_size(LOCAL_INPUT_BYTES)}. "
+                                "Bigger sources are processed on the cloud runner.",
+                            ))
+                            return
                         process_env = None
                         if engine == "luraph_v151":
                             try:
@@ -2781,8 +2811,12 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                     raise ValueError(f"Input exceeds the {_human_size(MAX_INPUT_BYTES)} upload limit.")
             else:
                 filename, size, _scan_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
-            rows, _basis = await _detect_scores(input_path)
-            detected_engine = _recommended_engine(rows)
+            scan_skipped = size > LOCAL_INPUT_BYTES
+            if scan_skipped:
+                rows, detected_engine = [], None
+            else:
+                rows, _basis = await _detect_scores(input_path)
+                detected_engine = _recommended_engine(rows)
             source_bytes = await asyncio.to_thread(input_path.read_bytes)
             if attachment is not None:
                 source = ("attachment", filename, source_bytes)
@@ -2809,6 +2843,8 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
                 "Scan complete. No supported engine matched the 75% confidence threshold. "
                 "Choose an available engine manually from the list."
             )
+        if scan_skipped:
+            scan_note = "Large source: the detection scan runs locally, so it was skipped. Pick an engine from the list."
         view = _EnginePickerView(ctx, source, detected_engine, scan_note)
         view.message = status
         await status.edit(content=None, view=view)
@@ -2917,7 +2953,10 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             else:
                 await status.edit(content=None, view=error_view("Source exceeds the upload limit", "Too large to attach here, and the online upload did not accept it."))
     except Exception as exc:
-        await status.edit(content=None, view=error_view("Could not fetch source", f"{type(exc).__name__}: {str(exc)[:700]}"))
+        if _is_size_limit_error(exc):
+            await status.edit(content=None, view=error_view("Input too large", str(exc)[:400]))
+        else:
+            await status.edit(content=None, view=error_view("Could not fetch source", f"{type(exc).__name__}: {str(exc)[:700]}"))
     finally:
         try:
             temporary.unlink()
@@ -2963,8 +3002,8 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             if size == 0:
                 await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
                 return
-            if size > MAX_INPUT_BYTES:
-                await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
+            if size > LOCAL_INPUT_BYTES:
+                await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(LOCAL_INPUT_BYTES)}. Detection runs locally."), mention_author=False)
                 return
             status = await ctx.reply(view=info_view("⏳ Analyzing source", f"**File** · `{filename[:64]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
             start_time = time.monotonic()
@@ -3147,8 +3186,8 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 filename = Path(attachment.filename).name
                 if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
                     raise ValueError("Supported attachment types are .lua, .luau, and .txt.")
-                if attachment.size > MAX_INPUT_BYTES:
-                    raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+                if attachment.size > LOCAL_INPUT_BYTES:
+                    raise ValueError(f"Source exceeds the {_human_size(LOCAL_INPUT_BYTES)} input limit (the Env Logger runs locally).")
             elif _looks_like_url_argument(source_argument):
                 source_url = _command_input_url(source_argument)
                 source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
@@ -3162,13 +3201,13 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                     size = input_path.stat().st_size
                     if size == 0:
                         raise ValueError("The supplied file contains no data.")
-                    if size > MAX_INPUT_BYTES:
-                        raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+                    if size > LOCAL_INPUT_BYTES:
+                        raise ValueError(f"Source exceeds the {_human_size(LOCAL_INPUT_BYTES)} input limit (the Env Logger runs locally).")
                 elif _looks_like_url_argument(source_argument):
                     saved_name, size, _note = await asyncio.to_thread(_download_command_source, source_url, input_path)
                     filename = saved_name or filename
-                    if size > MAX_INPUT_BYTES:
-                        raise ValueError(f"Source exceeds the {_human_size(MAX_INPUT_BYTES)} input limit.")
+                    if size > LOCAL_INPUT_BYTES:
+                        raise ValueError(f"Source exceeds the {_human_size(LOCAL_INPUT_BYTES)} input limit (the Env Logger runs locally).")
                 else:
                     source_text = _unwrap_lua_code_block(source_argument)
                     input_path.write_text(source_text, encoding="utf-8")
@@ -3388,7 +3427,14 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.reply(view=info_view("Command cooldown", "Please wait a moment before trying again."), mention_author=False)
         return
-    print(f"Command error: {type(error).__name__}: {error}", flush=True)
+    original = getattr(error, "original", error)
+    print(f"Command error: {type(original).__name__}: {original}", flush=True)
+    if _is_size_limit_error(original):
+        try:
+            await ctx.reply(view=error_view("Input too large", str(original)[:400]), mention_author=False)
+        except discord.HTTPException:
+            pass
+        return
     try:
         await ctx.reply(view=error_view("Command failed", "Something went wrong. Check the service logs."), mention_author=False)
     except discord.HTTPException:
