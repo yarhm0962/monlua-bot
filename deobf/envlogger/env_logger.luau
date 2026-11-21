@@ -15266,6 +15266,9 @@ function oxygen.dumpfile(inpath, outpath)
     local resume_args = {}
     local main_dead = false
     local ok, rerr = _xpcall(function()
+        if _type(chunk) ~= "function" then
+            return
+        end
         local co = _cor.create(chunk)
         if _sethook then
             local count = 0

@@ -3226,7 +3226,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 final_text = await asyncio.to_thread(_finish_output, raw_dump, "-- Deobfuscated by MonLua [discord.gg/EdrQjndmAW]")
                 notes = stdout_text.strip()
                 if notes:
-                    final_text += "\n--[ [Env Logger notes]\n" + notes[:1200] + "\n]]\n"
+                    final_text += "\n-- [Env Logger notes]\n" + notes[:1200] + "\n]\n"
                 output_path = Path(directory) / f"envlog_{Path(filename).stem}.lua"
                 await asyncio.to_thread(output_path.write_text, final_text, encoding="utf-8", newline="\n")
                 out_text = final_text
