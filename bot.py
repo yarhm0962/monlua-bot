@@ -303,7 +303,7 @@ class _LoggedLayoutView(discord.ui.LayoutView):
         print(f"View error for {item} in {type(self).__name__}: {error!r}\n{traceback.format_exc()}", flush=True)
 
 
-def info_view(title: str, body: str, color: int = 0x5865F2, footer: str = "") -> discord.ui.LayoutView:
+def info_view(title: str, body: str, color: int = 0x9C7CFF, footer: str = "") -> discord.ui.LayoutView:
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=color)
     container.add_item(discord.ui.TextDisplay(f"## {title}"))
@@ -379,14 +379,14 @@ def _strip_lua_comments(source: str) -> str:
     out = []
     i, n = 0, len(source)
     line_start = 0
-    marker = "-- [[ Deobfuscated by MonLua ]]"
     newline = chr(10)
     while i < n:
         if source.startswith("--", i):
             line_end = source.find(newline, i)
             if line_end < 0:
                 line_end = n
-            if source[line_start:i].strip() == "" and source[i:line_end].strip() == marker:
+            stripped = source[i:line_end].strip()
+            if source[line_start:i].strip() == "" and stripped.startswith("-- [[ Deobfuscated by") and stripped.endswith("]]"):
                 i = line_end + (1 if line_end < n else 0)
                 line_start = i
                 continue
@@ -447,7 +447,7 @@ def _beautify_lua(source: str) -> str:
         return ""
     if len(body) > MAX_FORMAT_BYTES:
         return body
-    stylua = shutil.which("stylua")
+    stylua = _resolve_stylua() or shutil.which("stylua")
     if stylua:
         try:
             proc = subprocess.run(
@@ -469,11 +469,15 @@ def _beautify_lua(source: str) -> str:
     return body
 
 
-def _prepare_deobfuscated_output(source: str) -> str:
-    """Enforce one MonLua header, remove all other comments, and beautify code."""
+def _finish_output(source: str, header: str) -> str:
+    """Keep one provenance header, remove all other comments, and beautify the code."""
     body = _strip_lua_comments(source.lstrip("\ufeff"))
     formatted = _beautify_lua(body)
-    return "-- [[ Deobfuscated by MonLua ]]\n\n" + formatted.rstrip() + "\n"
+    return f"{header}\n\n{formatted.rstrip()}\n"
+
+
+def _prepare_deobfuscated_output(source: str) -> str:
+    return _finish_output(source, "-- [[ Deobfuscated by LuaRN ]]")
 
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
@@ -819,16 +823,18 @@ def _online_action_row(online: tuple[str, str, str]) -> discord.ui.ActionRow:
     return row
 
 
-def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", online_copy=None) -> discord.ui.LayoutView:
+def result_view(filename: str, label: str, size: int, code_text, file_name, elapsed: str = "", online_copy=None, source_name: str = "") -> discord.ui.LayoutView:
     """Create a compact result card with a clear hierarchy on narrow screens."""
     view = _LoggedLayoutView()
     container = discord.ui.Container(accent_color=0x57F287)
     container.add_item(discord.ui.TextDisplay(f"## ✅ {label}"))
-    summary = f"**Output size** · {_human_size(size)}"
+    output_name = (file_name or filename or "").strip()
+    summary = f"**Output** · `{output_name[:64]}` · {_human_size(size)}"
+    if source_name and source_name.strip() and source_name.strip() != output_name:
+        summary += f"\n**Input** · `{source_name.strip()[:64]}`"
     if elapsed:
         summary += f"\n**Time** · {elapsed}"
     container.add_item(discord.ui.TextDisplay(summary))
-    container.add_item(discord.ui.TextDisplay(f"-# Source: `{filename[:64]}`"))
     container.add_item(discord.ui.Separator())
     if code_text is not None:
         container.add_item(discord.ui.TextDisplay(f"```lua\n{_fit_text(code_text, 72)}\n```"))
@@ -846,13 +852,14 @@ def result_view(filename: str, label: str, size: int, code_text, file_name, elap
 async def _deliver_deobf_output(
     ctx,
     status,
-    filename: str,
+    source_name: str,
     label: str,
     output_path: Path,
     output_size: int,
     out_text: Optional[str],
     elapsed: str,
 ) -> bool:
+    out_name = output_path.name
     upload_limit = int(getattr(getattr(ctx, "guild", None), "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
     modes = []
     if output_size <= 1600 and out_text is not None and chr(96) * 3 not in out_text:
@@ -867,23 +874,23 @@ async def _deliver_deobf_output(
         try:
             if mode == "inline":
                 await ctx.reply(
-                    view=result_view(filename, label, output_size, out_text.rstrip(), None, elapsed),
+                    view=result_view(out_name, label, output_size, out_text.rstrip(), None, elapsed, source_name=source_name),
                     mention_author=False,
                 )
             elif mode == "attachment":
                 await ctx.reply(
-                    view=result_view(filename, label, output_size, None, output_path.name, elapsed),
-                    file=discord.File(str(output_path), filename=output_path.name),
+                    view=result_view(out_name, label, output_size, None, out_name, elapsed, source_name=source_name),
+                    file=discord.File(str(output_path), filename=out_name),
                     mention_author=False,
                 )
             else:
                 if out_text is None:
                     out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                online = await asyncio.to_thread(_upload_output, out_text.rstrip(), Path(filename).stem)
+                online = await asyncio.to_thread(_upload_output, out_text.rstrip(), Path(out_name).stem)
                 if not online[1]:
                     raise RuntimeError("The online output service did not return a complete output link.")
                 await ctx.reply(
-                    view=result_view(filename, label, output_size, None, None, elapsed, online_copy=online),
+                    view=result_view(out_name, label, output_size, None, None, elapsed, online_copy=online, source_name=source_name),
                     mention_author=False,
                 )
             break
@@ -905,7 +912,7 @@ async def _deliver_deobf_output(
         try:
             await status.edit(
                 content=None,
-                view=info_view("Output delivered", f"**{label}** · {_human_size(output_size)}\nThe output was sent above.", color=0x57F287),
+                view=info_view("✅ Output delivered", f"**{label}** · {_human_size(output_size)}\nThe output was sent above.", color=0x57F287),
             )
         except discord.HTTPException:
             pass
@@ -2337,7 +2344,7 @@ async def _await_with_progress(
     status,
     base_text: str,
     coro,
-    heading: str = "Processing source",
+    heading: str = "⏳ Processing source",
     interval: int = 15,
 ):
     """Await coro while refreshing the status message with a live elapsed timer.
@@ -2430,7 +2437,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
         return
 
     status = await ctx.reply(
-        view=info_view("Request queued", f"**Engine** · {label}\n**Source** · `{filename[:64]}`\nWaiting for a free slot."),
+        view=info_view("⏳ Request queued", f"**Engine** · {label}\n**Source** · `{filename[:64]}`\nWaiting for a free slot."),
         mention_author=False,
     )
 
@@ -2459,7 +2466,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                 else:
                     filename, size, fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
 
-                await status.edit(content=None, view=info_view("Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + ""))
+                await status.edit(content=None, view=info_view("⏳ Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + ""))
                 print(f"selected engine={label}; source scan completed before engine selection", flush=True)
 
                 wait_note = ""
@@ -2469,7 +2476,7 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     wait_note = " MoonVeil recovery includes isolated probing and may take several minutes."
                 elif input_path.stat().st_size > 1024 * 1024:
                     wait_note = " Large file: this can take a few minutes."
-                await status.edit(content=None, view=info_view("Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}"))
+                await status.edit(content=None, view=info_view("⏳ Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}"))
                 start_time = time.monotonic()
                 # result cache: an identical file + engine re-run is instant
                 cache_key = await asyncio.to_thread(_cache_key, engine, input_path)
@@ -2482,13 +2489,13 @@ async def process_input(ctx: commands.Context, engine: str, url: str = "", prese
                     go_cloud = engine != "moonveil_v145" and size >= cloud_min
                     if go_cloud and cloud_runner_configured():
                         try:
-                            await status.edit(content=None, view=info_view("Cloud processing", f"Running `{filename[:64]}` on the cloud runner."))
+                            await status.edit(content=None, view=info_view("⏳ Cloud processing", f"Running `{filename[:64]}` on the cloud runner."))
                             async with cloud_slots:
                                 cloud_out = await _await_with_progress(
                                     status,
                                     f"Running `{filename[:64]}` on the cloud runner.\nElapsed · {elapsed}",
                                     asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
-                                    heading="Cloud processing",
+                                    heading="⏳ Cloud processing",
                                     interval=30,
                                 )
                             await asyncio.to_thread(output_path.write_bytes, cloud_out)
@@ -2635,7 +2642,7 @@ async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
             await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
             return
     status = await ctx.reply(
-        view=info_view("Scanning source", f"Checking `{filename[:64]}` against every detector."),
+        view=info_view("⏳ Scanning source", f"Checking `{filename[:64]}` against every detector."),
         mention_author=False,
     )
     try:
@@ -2706,7 +2713,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         return
 
     url = _command_input_url(url)
-    status = await ctx.reply(view=info_view("Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
+    status = await ctx.reply(view=info_view("⏳ Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
     temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
     try:
         filename, size, loader_depth, fetch_note = await asyncio.to_thread(_download_get_source, url, temporary)
@@ -2793,7 +2800,7 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
             if size > MAX_INPUT_BYTES:
                 await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
                 return
-            status = await ctx.reply(view=info_view("Analyzing source", f"**File** · `{filename[:64]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
+            status = await ctx.reply(view=info_view("⏳ Analyzing source", f"**File** · `{filename[:64]}`\n**Size** · {_human_size(size)}\nComparing the source structure against supported engines."), mention_author=False)
             start_time = time.monotonic()
             try:
                 async with job_slots:
@@ -2964,7 +2971,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
         return
 
     status = await ctx.reply(
-        view=info_view("Env Logger", "Running your script in a sandbox and recording everything it does."),
+        view=info_view("⏳ Env Logger", "Running your script in a sandbox and recording everything it does."),
         mention_author=False,
     )
     try:
@@ -3010,18 +3017,20 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                     detail = (stderr_text or stdout_text or "").strip()[-700:] or "no diagnostic output"
                     raise RuntimeError(f"The Env Logger run failed: {detail}")
 
+                raw_dump = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                final_text = await asyncio.to_thread(_finish_output, raw_dump, "-- [[ Env Logger output ]]")
                 notes = stdout_text.strip()
                 if notes:
-                    with open(output_path, "a", encoding="utf-8", errors="replace") as handle:
-                        handle.write("\n\n--[ [Env Logger notes]\n" + notes[:1200] + "\n]]\n")
-
-                out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
+                    final_text += "\n--[ [Env Logger notes]\n" + notes[:1200] + "\n]]\n"
+                output_path = Path(directory) / f"envlog_{Path(filename).stem}.lua"
+                await asyncio.to_thread(output_path.write_text, final_text, encoding="utf-8", newline="\n")
+                out_text = final_text
                 output_size = output_path.stat().st_size
 
         delivered = await _deliver_deobf_output(
             ctx,
             status,
-            f"envlog_{Path(filename).stem}.lua",
+            filename,
             "Env Logger",
             output_path,
             output_size,
