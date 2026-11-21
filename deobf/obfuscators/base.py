@@ -55,7 +55,7 @@ class Job:
 
     def credit_header(self):
         """First lines of a result file: the credit and the detected obfuscator."""
-        return "-- [[ Deobfuscated by LuaRN ]]\n"
+        return "-- [[ Deobfuscated by MonLua [discord.gg/EdrQjndmAW] ]]\n"
 
     @property
     def base(self):

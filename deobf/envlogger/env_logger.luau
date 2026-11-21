@@ -772,16 +772,38 @@ local function get_active_spied_blocks(line_num)
     if not st.parsed_blocks then
         return active
     end
-    for _, b in _ipairs(st.parsed_blocks) do
-        if line_num >= b.start_line and line_num <= b.end_line then
+    local idx = st._spied_index
+    if not idx then
+        idx = {}
+        for _, b in _ipairs(st.parsed_blocks) do
             if b.cond and is_spied(b.cond) then
-                table.insert(active, b)
+                local to = b.end_line or b.start_line
+                if to > b.start_line + 100000 then
+                    to = b.start_line + 100000
+                end
+                for ln = b.start_line, to do
+                    local bucket = idx[ln]
+                    if not bucket then
+                        bucket = {}
+                        idx[ln] = bucket
+                    end
+                    table.insert(bucket, b)
+                end
             end
         end
+        for _, bucket in _pairs(idx) do
+            table.sort(bucket, function(x, y)
+                return x.start_line < y.start_line
+            end)
+        end
+        st._spied_index = idx
     end
-    table.sort(active, function(x, y)
-        return x.start_line < y.start_line
-    end)
+    local bucket = idx[line_num]
+    if bucket then
+        for _, b in _ipairs(bucket) do
+            table.insert(active, b)
+        end
+    end
     return active
 end
 local function get_current_script_line()
@@ -884,6 +906,7 @@ st = {
     current_namecall = "Index",
     source_lines = {},
     var_map = {},
+    varmap_epoch = 0,
     spied_vars = {},
     parsed_blocks = {},
     _renv = nil,
@@ -2593,7 +2616,12 @@ local function out(str, noind)
                 local wrapped = clean
                 for i = #active_blocks, 1, -1 do
                     local block = active_blocks[i]
-                    local cond_str = translate_tokens(block.cond)
+                    local cond_str = block._cond_str
+                    if not cond_str or block._cond_epoch ~= st.varmap_epoch then
+                        cond_str = translate_tokens(block.cond)
+                        block._cond_str = cond_str
+                        block._cond_epoch = st.varmap_epoch
+                    end
                 if block.type == "while" then
                     wrapped = string.format("while %s do\n    %s\nend", cond_str, wrapped:gsub("\n", "\n    "))
                 elseif block.type == "if" then
@@ -2656,9 +2684,8 @@ local beautify
 local function saveout(fname)
     local raw = getout()
     local clean = cleanpath(raw)
-    local pretty = beautify(clean)
     local ok = _pcall(function()
-        fs.writeFile(fname or cfg.outfile, pretty)
+        fs.writeFile(fname or cfg.outfile, clean)
     end)
     return ok
 end
@@ -3205,6 +3232,7 @@ local function mkvar(obj, hint, thint, mname)
             or line_content:match("^%s*([%w_]+)%s*=%s*")
         if var_name then
             st.var_map[var_name] = nm
+            st.varmap_epoch = (st.varmap_epoch or 0) + 1
         end
     end
 
@@ -7679,6 +7707,7 @@ mkpx = function(hint, isroot, parent)
                         local vname = mkvar(res_px, var_name)
                         st.spied_vars[var_name] = true
                         st.var_map[var_name] = vname
+                            st.varmap_epoch = (st.varmap_epoch or 0) + 1
                         local rhs_tokens = get_rhs_tokens_for_line(line_num)
                         local rhs_expr
                         if rhs_tokens then
@@ -7720,6 +7749,7 @@ mkpx = function(hint, isroot, parent)
                             local vname = mkvar(res_px, var_name)
                             st.spied_vars[var_name] = true
                             st.var_map[var_name] = vname
+                            st.varmap_epoch = (st.varmap_epoch or 0) + 1
                             local rhs_tokens = get_rhs_tokens_for_line(line_num)
                             local rhs_expr
                             if rhs_tokens then
@@ -14684,6 +14714,7 @@ function oxygen.reset()
         current_namecall = "Index",
         source_lines = {},
         var_map = {},
+    varmap_epoch = 0,
         spied_vars = {},
         parsed_blocks = {},
         _renv = nil,

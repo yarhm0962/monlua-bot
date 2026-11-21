@@ -386,7 +386,10 @@ def _strip_lua_comments(source: str) -> str:
             if line_end < 0:
                 line_end = n
             stripped = source[i:line_end].strip()
-            if source[line_start:i].strip() == "" and stripped.startswith("-- [[ Deobfuscated by") and stripped.endswith("]]"):
+            if source[line_start:i].strip() == "" and (
+                (stripped.startswith("-- [[ Deobfuscated by") and stripped.endswith("]]"))
+                or (stripped.startswith("-- Deobfuscated by MonLua") and stripped.endswith("]"))
+            ):
                 i = line_end + (1 if line_end < n else 0)
                 line_start = i
                 continue
@@ -477,7 +480,7 @@ def _finish_output(source: str, header: str) -> str:
 
 
 def _prepare_deobfuscated_output(source: str) -> str:
-    return _finish_output(source, "-- [[ Deobfuscated by LuaRN ]]")
+    return _finish_output(source, "-- Deobfuscated by MonLua [discord.gg/EdrQjndmAW]")
 
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
@@ -3018,7 +3021,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                     raise RuntimeError(f"The Env Logger run failed: {detail}")
 
                 raw_dump = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                final_text = await asyncio.to_thread(_finish_output, raw_dump, "-- [[ Env Logger output ]]")
+                final_text = await asyncio.to_thread(_finish_output, raw_dump, "-- Deobfuscated by MonLua [discord.gg/EdrQjndmAW]")
                 notes = stdout_text.strip()
                 if notes:
                     final_text += "\n--[ [Env Logger notes]\n" + notes[:1200] + "\n]]\n"
