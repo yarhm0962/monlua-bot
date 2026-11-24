@@ -12,7 +12,6 @@ import platform
 import re
 import shutil
 import signal
-import tarfile
 import time
 import socket
 import subprocess
@@ -25,8 +24,6 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Optional
-from types import SimpleNamespace
-from collections import OrderedDict
 from datetime import datetime
 
 import discord
@@ -53,76 +50,22 @@ ENVLOGGER_APIDUMP = ENVLOGGER_DIR / "core" / "io" / "apidump.json"
 LUNE_BIN = ENVLOGGER_DIR / "bin" / "lune"
 ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "300"))))
 SUPPORTED = {
-    "luraph_v143": {"label": "Luraph v14.3", "command": ".do", "status": "Recovery: blob decode, bytecode deserialization with bias auto-detection, and structured CFG output. Deeply virtualized builds are still in research."},
-    "luraph_v147": {"label": "Luraph v14.7", "command": ".do", "status": "Dedicated v14.7 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
-    "luraph_v148": {"label": "Luraph v14.8", "command": ".do", "status": "Dedicated v14.8 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
-    "luraph_v149": {"label": "Luraph v14.9", "command": ".do", "status": "Dedicated v14.9 engine on the vendored LuraphOpenSource stack: version-traced devirtualization through the bundled Luau runtime."},
-    "luraph_v15": {"label": "Luraph v15", "command": ".do"},
-    "luraph_v151": {"label": "Luraph v15.1", "command": ".do"},
-    "moonsec_v3": {"label": "MoonSec V3", "command": ".do"},
-    "centurion": {"label": "Centurion", "command": ".do"},
-    "moonveil_v145": {"label": "MoonVeil v1.4.5", "command": ".do"},
-    "ironbrew1": {"label": "IronBrew1", "command": ".do"},
-    "ironbrew2": {"label": "IronBrew2", "command": ".do"},
-    "ironveil_v1": {"label": "Ironveil v1", "command": ".do"},
-    "77fuscator": {"label": "77fuscator", "command": ".do"},
-    "fulcrum": {"label": "Fulcrum Deobfuscator", "command": ".do", "status": "Full recovery: two-stage static engine (unflatten, fold/rename, syntax heal), output verified with the bundled Luau compiler before delivery. Detection first."},
-        "jayfuscator": {"label": "Jayfuscator", "command": ".do", "available": False, "status": "Detection is available; recovery is awaiting validation."},
+    "luraph_v143": {"label": "Luraph v14.3"},
+    "luraph_v147": {"label": "Luraph v14.7"},
+    "luraph_v148": {"label": "Luraph v14.8"},
+    "luraph_v149": {"label": "Luraph v14.9"},
+    "luraph_v15": {"label": "Luraph v15"},
+    "luraph_v151": {"label": "Luraph v15.1"},
+    "moonsec_v3": {"label": "MoonSec V3"},
+    "centurion": {"label": "Centurion"},
+    "moonveil_v145": {"label": "MoonVeil v1.4.5"},
+    "ironbrew1": {"label": "IronBrew1"},
+    "ironbrew2": {"label": "IronBrew2"},
+    "ironveil_v1": {"label": "Ironveil v1"},
+    "77fuscator": {"label": "77fuscator"},
+    "fulcrum": {"label": "Fulcrum Deobfuscator"},
+    "jayfuscator": {"label": "Jayfuscator"},
 }
-
-
-def _engine_is_available(engine: str) -> bool:
-    return bool(SUPPORTED.get(engine, {}).get("available", True))
-
-V151_DIR = DEOB_DIR / "v151"
-V151_SCRIPT = V151_DIR / "deob.js"
-V151_NODE_ARCHIVE = V151_DIR / "vendor" / "node-v20.19.5-linux-x64.tar.gz"
-V151_NODE_DIRNAME = "node-v20.19.5-linux-x64"
-_node_bin: Optional[str] = None
-
-
-def resolve_node() -> str:
-    """Path to a node binary: system node if present, else the vendored runtime."""
-    global _node_bin
-    if _node_bin:
-        return _node_bin
-    found = shutil.which("node")
-    if found:
-        _node_bin = found
-        return _node_bin
-    local_node = ROOT / ".runtime" / "node" / "bin" / "node"
-    if local_node.is_file():
-        _node_bin = str(local_node)
-        return _node_bin
-    if not V151_NODE_ARCHIVE.is_file():
-        raise RuntimeError("vendored node runtime archive is missing")
-    target = Path(tempfile.gettempdir()) / "monlua-node"
-    node_exe = target / V151_NODE_DIRNAME / "bin" / "node"
-    if not node_exe.is_file():
-        target.mkdir(parents=True, exist_ok=True)
-        try:
-            with tarfile.open(V151_NODE_ARCHIVE, "r:gz") as archive:
-                archive.extractall(target, filter="data")
-        except TypeError:
-            with tarfile.open(V151_NODE_ARCHIVE, "r:gz") as archive:
-                archive.extractall(target)
-    if not node_exe.is_file():
-        raise RuntimeError("could not unpack the vendored node runtime")
-    node_exe.chmod(0o755)
-    _node_bin = str(node_exe)
-    return _node_bin
-
-
-def _v151_process_env() -> dict[str, str]:
-    process_env = dict(os.environ)
-    process_env.pop("DEOB_FAST", None)
-    process_env["DEOB_PY_CANDIDATES"] = "python:1,python:2,python:3"
-    process_env["DEOB_SEQUENTIAL_CANDIDATES"] = "1"
-    process_env["DEOB_REQUIRE_COMPLETE"] = "1"
-    process_env["DEOB_LUAU_MEM_KB"] = os.getenv("DEOB_LUAU_MEM_KB", "196608")
-    process_env["PYTHON_BIN"] = PYTHON
-    process_env["LURAPH_TOLERANT_LIFT"] = "1"
-    return process_env
 
 
 CHANNEL_CONFIG_PATH = Path(os.getenv("CHANNEL_CONFIG_PATH", str(ROOT / "channel_restrictions.json"))).expanduser()
@@ -400,16 +343,6 @@ GH_TOKEN_PLACEHOLDERS = ("placeholder", "replace_me", "your_token", "your-token"
 def cloud_runner_configured() -> bool:
     token = GH_DISPATCH_TOKEN.lower()
     return len(token) >= 20 and not any(marker in token for marker in GH_TOKEN_PLACEHOLDERS)
-CLOUD_V151_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_V151_MIN_BYTES", "100000")))
-CLOUD_OTHER_MIN_BYTES = max(128_000, int(os.getenv("CLOUD_OTHER_MIN_BYTES", "131072")))
-CLOUD_FULCRUM_MIN_BYTES = max(64_000, int(os.getenv("CLOUD_FULCRUM_MIN_BYTES", "100000")))
-CLOUD_WAIT_SECONDS = max(60, min(1800, int(os.getenv("CLOUD_WAIT_SECONDS", "1500"))))
-CLOUD_MIN_BYTES = {"luraph_v151": CLOUD_V151_MIN_BYTES, "fulcrum": CLOUD_FULCRUM_MIN_BYTES}
-CLOUD_POLL_SECONDS = max(3, min(20, int(os.getenv("CLOUD_POLL_SECONDS", "5"))))
-cloud_slots = asyncio.Semaphore(1)
-_RESULT_CACHE: OrderedDict = OrderedDict()
-_RESULT_CACHE_BYTES = 0
-_RESULT_CACHE_MAX_BYTES = 32 * 1024 * 1024
 
 
 class _LoggedLayoutView(discord.ui.LayoutView):
@@ -448,36 +381,28 @@ def _fit_text(value, width: int = 64) -> str:
 
 
 def engines_body() -> str:
-    engine_names = [
-        f"• **{spec['label']}**" + (" — detection only; deobfuscation unavailable" if not _engine_is_available(engine) else "")
-        for engine, spec in SUPPORTED.items()
-        if engine not in ("moonveil_v145", "ironbrew1", "ironbrew2")
+    lines = [
+        "**DETECTION COVERAGE**",
+        "• Luraph v14.3, v14.7, v14.8, v14.9, v15, v15.1",
+        "• MoonSec V3",
+        "• Centurion",
+        "• MoonVeil v1.4.5 (v2.1.1 recognized)",
+        "• IronBrew1, IronBrew2",
+        "• Ironveil v1",
+        "• 77fuscator",
+        "• Fulcrum Deobfuscator",
+        "• Jayfuscator",
+        "",
+        "**ENV LOGGER**",
+        "• .l with a Lua file, raw URL, or pasted code. Runs the script in a sandbox and records decoded strings, loadstring payloads, _G writes, remotes and links.",
+        "",
+        "**COMMANDS**",
+        "• .detect or .d. Identifies the obfuscator.",
+        "• .beautify or .b. Formats source.",
+        "• .get. Fetches raw source and resolves embedded loaders.",
     ]
-    engine_names.append("• **MoonVeil** (choose a version)")
-    engines = "\n".join(engine_names)
-    return (
-        "**DEOBFUSCATION ENGINES**\n"
-        + engines
-        + "\n\n**IRONBREW VERSIONS**\n"
-        + "• IronBrew1 — version 1 recovery engine\n"
-        + "• IronBrew2 — version 2 recovery engine\n"
-        + "\n**MOONVEIL VERSIONS**\n"
-        + "• v1.4.5 — fully supported\n"
-        + "• v2.1.1 — recognized, but its deobfuscation engine is not included yet\n"
-        + "\n**UNIFIED COMMANDS**\n"
-        + "• .do — shortcut command\n"
-        + "• .deobf — full command name\n"
-        + "Both commands open the same engine selector and processing flow.\n\n"
-        + "**SOURCE TOOLS**\n"
-        + "• .detect / .d — scan a file and identify its likely engine\n"
-        + "• .get <url or file> — fetch raw source (or attach one) and resolve supported static loader links\n"
-        + "• .beautify / .b — format Lua or Luau files, raw links, or pasted code\n"
-        + "• .deobfs — display this engine reference\n"
-        + "• .help — display the command guide\n\n"
-        + "**INPUT FORMAT**\n"
-        + "Attach one .lua, .luau, or .txt file to the command, or provide a direct raw-file URL.\n"
-        + "Use one source per command. Large jobs may take longer depending on VM complexity."
-    )
+    return "\n".join(lines)
+
 
 def _is_size_limit_error(exc: BaseException) -> bool:
     """True for input-size rejections, so generic handlers show a clear card."""
@@ -612,8 +537,6 @@ def _finish_output(source: str, header: str) -> str:
     return f"{header}\n\n{formatted.rstrip()}\n"
 
 
-def _prepare_deobfuscated_output(source: str) -> str:
-    return _finish_output(source, "-- Deobfuscated by MonLua [discord.gg/EdrQjndmAW]")
 
 
 PASTEFY_API_URL = "https://pastefy.app/api/v2/paste"
@@ -1086,10 +1009,9 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
 DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator", "fulcrum")
 
 
-def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None, owner_id: Optional[int] = None) -> discord.ui.LayoutView:
+def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
     """Report card for `.detect` (Components V2): the identified engine with
-    its confidence, the signals behind the score, and the one-click
-    Deobfuscate button when the best match is 100% on a supported engine."""
+    its confidence and the signals behind the score."""
     rows = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
     general = next(((c, l, e) for n, c, l, e in rows if n in ("obfuscated", "plain")), None)
     engines = [(n, c, l, e) for n, c, l, e in rows if n not in ("obfuscated", "plain")]
@@ -1107,9 +1029,6 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
         title = "### \u2139\ufe0f No obfuscation detected"
     else:
         title = "### \u2753 Unknown obfuscator"
-    one_click = None
-    if source is not None and matched and best_conf >= 0.999 and best_name in SUPPORTED and _engine_is_available(best_name):
-        one_click = (best_name, source)
     head = f"-# Source: `{filename[:64]}`"
     if elapsed:
         head += f" \u00b7 \u23f1\ufe0f {elapsed}"
@@ -1140,556 +1059,14 @@ def detect_view(filename: str, rows, basis: str, elapsed: str = "", source=None,
     if ev:
         shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
         body.append(f"-# Evidence: {shown}")
-    stats = ("\u2699\ufe0f Button below deobfuscates with this engine" if one_click
-             else "\U0001f4a1 `.detect` identifies only \u2014 use .do or .deobf to choose an engine")
-    body.append(f"-# {stats}")
+    body.append("-# \U0001f4a1 .detect identifies only. Run .l with the file to trace it in the Env Logger")
     view = _LoggedLayoutView()
-    if one_click:
-        view.timeout = None          # keep the button usable for the process lifetime
     container = discord.ui.Container()
     container.add_item(discord.ui.TextDisplay(f"{title}\n{head}"))
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
     container.add_item(discord.ui.TextDisplay(_fit_text("\n".join(body))))
-    if one_click:
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.ActionRow(_DeobfuscateButton(*one_click, owner_id=owner_id)))
     view.add_item(container)
     return view
-
-
-class _DetectInvoker:
-    def __init__(self, channel, owner_id: Optional[int] = None):
-        self.channel = channel
-        self.guild = getattr(channel, "guild", None)
-        self.author = SimpleNamespace(id=owner_id)
-        self.message = SimpleNamespace(attachments=[])
-
-    async def reply(self, content=None, view=None, file=None, mention_author=False):
-        return await self.channel.send(content, view=view, file=file)
-
-
-class _DeobfuscateButton(discord.ui.Button):
-    def __init__(self, engine: str, source: tuple, owner_id: Optional[int] = None):
-        super().__init__(label="Deobfuscate", emoji="⚙️", style=discord.ButtonStyle.success, custom_id="deobf_run")
-        self._engine = engine
-        self._source = source
-        self._owner_id = owner_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        if self._owner_id is not None and interaction.user.id != self._owner_id:
-            await interaction.response.send_message("Only the person who ran the detection command can use this control.", ephemeral=True)
-            return
-        if self.disabled:
-            await interaction.response.send_message("This deobfuscation request has already been opened.", ephemeral=True)
-            return
-        try:
-            view = _ConfirmDeobfView(
-                self._engine,
-                self._source,
-                interaction.message,
-                self.view,
-                owner_id=self._owner_id,
-            )
-        except Exception:
-            print(f"Deobfuscate button: confirm view failed: {traceback.format_exc()}", flush=True)
-            await interaction.response.send_message(
-                view=error_view("Confirmation unavailable", "Run .do or .deobf to start a new request."),
-                ephemeral=True,
-            )
-            return
-        self.disabled = True
-        await interaction.response.edit_message(view=self.view)
-        try:
-            message = await interaction.followup.send(view=view, ephemeral=True, wait=True)
-            view.message = message
-        except discord.HTTPException as exc:
-            print(f"Deobfuscate confirmation delivery failed: {type(exc).__name__}: {exc}", flush=True)
-
-
-class _ConfirmDeobfView(discord.ui.LayoutView):
-    def __init__(self, engine: str, source: tuple, detect_message=None, detect_layout=None, ctx=None, owner_id: Optional[int] = None):
-        super().__init__(timeout=300)
-        self._engine = engine
-        self._source = source
-        self._detect_message = detect_message
-        self._detect_layout = detect_layout
-        self._ctx = ctx
-        self.owner_id = owner_id or getattr(getattr(ctx, "author", None), "id", None)
-        self.claimed = False
-        self.message = None
-        label = SUPPORTED[engine]["label"]
-        source_name = _source_display_name(source)
-        container = discord.ui.Container(accent_color=0x5865F2)
-        container.add_item(discord.ui.TextDisplay("## Confirm deobfuscation"))
-        container.add_item(discord.ui.TextDisplay(f"**Engine** · {label}\n**Source** · {str(source_name)[:120]}"))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_ConfirmDeobfButton(), _CancelDeobfButton()))
-        self.add_item(container)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if self.owner_id is not None and interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Only the person who started this request can use these controls.", ephemeral=True)
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        if self.message is not None:
-            try:
-                await self.message.delete()
-            except discord.HTTPException as exc:
-                print(f"Expired confirmation could not be deleted: {type(exc).__name__}: {exc}", flush=True)
-            finally:
-                self.message = None
-
-
-class _ConfirmDeobfButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Continue", style=discord.ButtonStyle.success, custom_id="deobf_confirm")
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        parent = self.view
-        if not isinstance(parent, _ConfirmDeobfView) or parent.claimed:
-            await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
-            return
-        parent.claimed = True
-        parent.stop()
-        for item in parent.walk_children():
-            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
-                item.disabled = True
-        accepted_message_shown = False
-        try:
-            await interaction.response.edit_message(
-                content=None,
-                view=info_view("Request accepted", "Engine locked in, the job is starting."),
-            )
-            accepted_message_shown = True
-        except discord.HTTPException:
-            if not interaction.response.is_done():
-                try:
-                    await interaction.response.defer()
-                except discord.HTTPException:
-                    pass
-        if accepted_message_shown:
-            _schedule_request_accepted_delete(interaction)
-        if parent._detect_message is not None and parent._detect_layout is not None:
-            try:
-                for item in parent._detect_layout.walk_children():
-                    if isinstance(item, discord.ui.Button) and item.custom_id == "deobf_run":
-                        item.disabled = True
-                await parent._detect_message.edit(view=parent._detect_layout)
-            except discord.HTTPException:
-                pass
-        try:
-            source = parent._source
-            source_url = source[1] if source and source[0] == "url" else ""
-            preset = _source_preset(source)
-            if parent._ctx is not None:
-                await process_input(
-                    parent._ctx,
-                    parent._engine,
-                    url=source_url if preset is None else "",
-                    preset=preset,
-                )
-            else:
-                invoker = _DetectInvoker(interaction.channel, owner_id=parent.owner_id)
-                await process_input(
-                    invoker,
-                    parent._engine,
-                    url=source_url if preset is None else "",
-                    preset=preset,
-                )
-        except Exception as exc:
-            print(f"Deobfuscate button job failed: {type(exc).__name__}: {exc}", flush=True)
-            try:
-                if _is_size_limit_error(exc):
-                    await interaction.channel.send(view=error_view("Input too large", str(exc)[:400]))
-                else:
-                    await interaction.channel.send(view=error_view("Something went wrong", str(exc)[:400] or "Unknown error."))
-            except discord.HTTPException:
-                pass
-
-
-class _CancelDeobfButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="deobf_cancel")
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        parent = self.view
-        if isinstance(parent, _ConfirmDeobfView):
-            if parent.claimed:
-                await interaction.response.send_message("This confirmation has already been submitted.", ephemeral=True)
-                return
-            parent.claimed = True
-            parent.stop()
-        await interaction.response.edit_message(
-            content=None,
-            view=info_view("Cancelled", "No job was started."),
-        )
-
-
-def _source_display_name(source: Optional[tuple]) -> str:
-    if not source:
-        return "No source attached"
-    if source[0] == "attachment":
-        return str(source[1])
-    if source[0] == "url" and len(source) >= 3:
-        return str(source[2])
-    return str(source[1])
-
-
-def _source_preset(source: Optional[tuple]):
-    if not source:
-        return None
-    if source[0] == "attachment" and len(source) >= 3 and isinstance(source[2], (bytes, bytearray)):
-        return str(source[1]), bytes(source[2])
-    if source[0] == "url" and len(source) >= 4 and isinstance(source[3], (bytes, bytearray)):
-        return str(source[2]), bytes(source[3])
-    return None
-
-
-def _recommended_engine(rows) -> Optional[str]:
-    matches = [
-        (float(confidence), name)
-        for name, confidence, _label, _evidence in rows
-        if name in SUPPORTED and _engine_is_available(name) and float(confidence) >= 0.75
-    ]
-    return max(matches, default=(0.0, None))[1]
-
-
-def _unavailable_engine_match(rows) -> Optional[tuple[str, float]]:
-    matches = [
-        (float(confidence), name)
-        for name, confidence, _label, _evidence in rows
-        if name in SUPPORTED and not _engine_is_available(name) and float(confidence) >= 0.75
-    ]
-    if not matches:
-        return None
-    confidence, engine = max(matches)
-    return engine, confidence
-
-
-def _engine_select_options(recommended_engine: Optional[str] = None):
-    options = []
-    for engine, spec in SUPPORTED.items():
-        available = _engine_is_available(engine)
-        if engine == "moonveil_v145":
-            value = "moonveil"
-            label = "MoonVeil"
-            description = "Open the MoonVeil version selector."
-        else:
-            value = engine
-            label = spec["label"]
-            description = f"Use the existing {spec['label']} engine."
-        if not available:
-            continue
-        if engine == recommended_engine:
-            label = f"{label} (Recommended)"
-            description = f"Recommended for the detected {spec['label']} obfuscator."
-        options.append(discord.SelectOption(label=label, value=value, description=description))
-    recommended_value = "moonveil" if recommended_engine == "moonveil_v145" else recommended_engine
-    if recommended_value:
-        options.sort(key=lambda option: 0 if option.value == recommended_value else 1)
-    return options
-
-
-class _EnginePickerView(discord.ui.LayoutView):
-    def __init__(
-        self,
-        ctx,
-        source: Optional[tuple],
-        recommended_engine: Optional[str] = None,
-        scan_note: str = "",
-    ):
-        super().__init__(timeout=300)
-        self.ctx = ctx
-        self.source = source
-        self.recommended_engine = recommended_engine
-        self.owner_id = ctx.author.id
-        self.message = None
-        self.claimed = False
-        source_name = _source_display_name(source)
-        container = discord.ui.Container(accent_color=0x5865F2)
-        container.add_item(discord.ui.TextDisplay("## Select An Engine"))
-        details = [f"Source · {str(source_name)[:120]}"]
-        if scan_note:
-            details.append(scan_note)
-        container.add_item(discord.ui.TextDisplay("Choose an engine from the list below.\n" + "\n".join(details)))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(_EngineSelect(recommended_engine)))
-        unavailable_engines = [
-            (engine, spec) for engine, spec in SUPPORTED.items()
-            if not _engine_is_available(engine)
-        ]
-        for start in range(0, len(unavailable_engines), 5):
-            unavailable_buttons = [
-                discord.ui.Button(
-                    label=f"{spec['label']} · unavailable",
-                    style=discord.ButtonStyle.secondary,
-                    custom_id=f"engine_unavailable_{engine}",
-                    disabled=True,
-                )
-                for engine, spec in unavailable_engines[start:start + 5]
-            ]
-            container.add_item(discord.ui.ActionRow(*unavailable_buttons))
-        self.add_item(container)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Only the person who ran this command can select an engine.", ephemeral=True)
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        if self.message is not None:
-            try:
-                await self.message.delete()
-            except discord.HTTPException as exc:
-                print(f"Expired engine selector could not be deleted: {type(exc).__name__}: {exc}", flush=True)
-            finally:
-                self.message = None
-
-
-class _MoonVeilVersionView(discord.ui.LayoutView):
-    def __init__(self, ctx, source: tuple, owner_id: int):
-        super().__init__(timeout=300)
-        self.ctx = ctx
-        self.source = source
-        self.owner_id = owner_id
-        self.message = None
-        self.claimed = False
-        container = discord.ui.Container(accent_color=0x5865F2)
-        container.add_item(discord.ui.TextDisplay("## MoonLua · MoonVeil version"))
-        container.add_item(discord.ui.TextDisplay(
-            "Choose the MoonVeil version that matches the source file.\n"
-            "**v1.4.5** is fully integrated. **v2.1.1** is recognized, but its "
-            "deobfuscator engine is not present in this project."
-        ))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(
-            _MoonVeilVersionButton("1.4.5", engine="moonveil_v145"),
-            _MoonVeilVersionButton("2.1.1"),
-        ))
-        self.add_item(container)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(
-                "Only the person who started this request can select a MoonVeil version.",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        if self.message is not None:
-            try:
-                await self.message.delete()
-            except discord.HTTPException as exc:
-                print(f"Expired MoonVeil version selector could not be deleted: {type(exc).__name__}: {exc}", flush=True)
-            finally:
-                self.message = None
-
-
-class _MoonVeilVersionButton(discord.ui.Button):
-    def __init__(self, version: str, engine: Optional[str] = None):
-        available = engine is not None
-        label = f"v{version}" if available else f"v{version} · not ready"
-        super().__init__(
-            label=label,
-            style=discord.ButtonStyle.success if available else discord.ButtonStyle.secondary,
-            custom_id=f"moonveil_version_{version.replace('.', '_')}",
-            disabled=not available,
-        )
-        self.engine = engine
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        parent = self.view
-        if not isinstance(parent, _MoonVeilVersionView):
-            await interaction.response.send_message(
-                "This MoonVeil version selector is no longer active.",
-                ephemeral=True,
-            )
-            return
-        if parent.claimed:
-            await interaction.response.send_message(
-                "A MoonVeil version has already been selected for this request.",
-                ephemeral=True,
-            )
-            return
-        parent.claimed = True
-        parent.stop()
-        if self.engine is None:
-            await interaction.response.edit_message(
-                content=None,
-                view=info_view(
-                    "MoonVeil v2.1.1 is not available yet",
-                    "MoonVeil v2.1.1 has no working deobfuscator yet, so nothing was started.\n\nMoonVeil v1.4.5 still works for v1.4.5 inputs.",
-                    color=0xFAA61A,
-                ),
-            )
-            return
-        confirm = _ConfirmDeobfView(
-            self.engine,
-            parent.source,
-            ctx=parent.ctx,
-            owner_id=parent.owner_id,
-        )
-        confirm.message = interaction.message
-        await interaction.response.edit_message(content=None, view=confirm)
-
-
-class _EngineSelect(discord.ui.Select):
-    def __init__(self, recommended_engine: Optional[str] = None):
-        super().__init__(
-            placeholder="Recommended engine appears first" if recommended_engine else "Choose a deobfuscation engine",
-            min_values=1,
-            max_values=1,
-            options=_engine_select_options(recommended_engine),
-            custom_id="deobf_engine_select",
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        parent = self.view
-        if not isinstance(parent, _EnginePickerView):
-            await interaction.response.send_message("This engine selector is no longer active.", ephemeral=True)
-            return
-        if parent.claimed:
-            await interaction.response.send_message("An engine has already been selected for this request.", ephemeral=True)
-            return
-        parent.claimed = True
-        parent.stop()
-        engine = self.values[0]
-        if parent.source is None:
-            await interaction.response.edit_message(
-                content=None,
-                view=info_view(
-                    "Source file required",
-                    "Run .do or .deobf again with a .lua, .luau, or .txt file attached, or a raw file URL.",
-                    color=0xFAA61A,
-                ),
-            )
-            return
-        if engine == "moonveil":
-            version_view = _MoonVeilVersionView(
-                parent.ctx,
-                parent.source,
-                parent.owner_id,
-            )
-            await interaction.response.edit_message(
-                content=None,
-                view=info_view(
-                    "MoonVeil version selector",
-                    "Pick a version in the message below.",
-                ),
-            )
-            try:
-                version_view.message = await interaction.followup.send(
-                    view=version_view,
-                    wait=True,
-                )
-            except discord.HTTPException as exc:
-                print(f"MoonVeil version selector delivery failed: {type(exc).__name__}: {exc}", flush=True)
-                try:
-                    await interaction.followup.send(
-                        view=error_view(
-                            "Version selector unavailable",
-                            "Discord could not deliver the version selector. Run .do again to retry.",
-                        ),
-                        ephemeral=True,
-                    )
-                except discord.HTTPException:
-                    pass
-            return
-        confirm = _ConfirmDeobfView(
-            engine,
-            parent.source,
-            ctx=parent.ctx,
-            owner_id=parent.owner_id,
-        )
-        confirm.message = interaction.message
-        await interaction.response.edit_message(content=None, view=confirm)
-
-
-@bot.listen("on_interaction")
-async def _log_component_clicks(interaction: discord.Interaction) -> None:
-    """Every button click is logged, so a dead interaction is never silent."""
-    if interaction.type is not discord.InteractionType.component:
-        return
-    data = interaction.data or {}
-    print(f"component-click: custom_id={data.get('custom_id')} "
-          f"message={getattr(interaction.message, 'id', None)}", flush=True)
-
-
-def runtime_status(engine: Optional[str] = None) -> tuple[bool, str]:
-    runtime_root = ROOT / ".runtime"
-    dotnet_root = runtime_root / "dotnet"
-    dotnet = dotnet_root / "dotnet"
-    if engine == "ironveil_v1":
-        script = runtime_root / "vendor" / "ironveil" / "deobfuscator" / "index.js"
-        node = shutil.which("node") or runtime_root / "node" / "bin" / "node"
-        missing = []
-        if not script.is_file():
-            missing.append("Ironveil v1 CLI")
-        if not Path(node).is_file() and not shutil.which("node"):
-            missing.append("Node.js runtime")
-        return (not missing, ", ".join(missing) if missing else "Ironveil v1 and Node.js are ready")
-    if engine == "77fuscator":
-        app = runtime_root / "77fuscator" / "deobfuscator.dll"
-        java = shutil.which("java") or runtime_root / "java" / "bin" / "java"
-        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
-        missing = []
-        for path in (dotnet, app, DEOB_DIR / "bin" / "unluac.jar"):
-            if not path.is_file():
-                missing.append(str(path))
-        if not Path(java).is_file() and not shutil.which("java"):
-            missing.append("Java runtime")
-        if not shared.is_dir() or not any(path.name.startswith("8.") for path in shared.iterdir()):
-            missing.append(".NET 8 runtime")
-        return (not missing, ", ".join(missing) if missing else "77fuscator, .NET 8, Java, and unluac are ready")
-    if engine == "ironbrew2":
-        app_dir = runtime_root / "vendor" / "ironbrew2"
-        native = app_dir / "runtimes" / "linux-x64" / "native" / "liblua54.so"
-        shared = dotnet_root / "shared" / "Microsoft.NETCore.App"
-        required = (
-            dotnet,
-            app_dir / "LuaAnalysis.Ironbrew2.dll",
-            app_dir / "LuaAnalysis.Ironbrew2.deps.json",
-            app_dir / "LuaAnalysis.Ironbrew2.runtimeconfig.json",
-            app_dir / "LuaAnalysis.Common.dll",
-            native,
-        )
-        missing = [str(path) for path in required if not path.is_file()]
-        if not shared.is_dir() or not any(path.name.startswith("9.") for path in shared.iterdir()):
-            missing.append(".NET 9 runtime")
-        if not (os.getenv("ORACLE") or os.getenv("IRONBREW2_ORACLE_KEY")):
-            missing.append("ORACLE environment variable")
-        return (not missing, ", ".join(missing) if missing else "IronBrew2, .NET 9, Oracle, and Linux native runtime are ready")
-    suffix = ".exe" if os.name == "nt" else ""
-    required = [
-        DEOB_DIR / "bin" / f"luau{suffix}",
-        DEOB_DIR / "bin" / f"luau-ast{suffix}",
-        DEOB_SCRIPT,
-    ]
-    executables = [
-        DEOB_DIR / "bin" / f"luau{suffix}",
-        DEOB_DIR / "bin" / f"luau-ast{suffix}",
-    ]
-    if engine == "luraph_v151":
-        required.extend((
-            V151_SCRIPT,
-            V151_DIR / "bin" / f"luau{suffix}",
-            V151_DIR / "bin" / f"luau-ast{suffix}",
-        ))
-        executables.extend((
-            V151_DIR / "bin" / f"luau{suffix}",
-            V151_DIR / "bin" / f"luau-ast{suffix}",
-        ))
-        if not shutil.which("node") and not V151_NODE_ARCHIVE.is_file():
-            return False, "Node.js 18+ is unavailable and the vendored Node runtime archive is missing."
-    missing = [str(p) for p in required if not p.is_file()]
-    if os.name != "nt":
-        missing.extend(str(p) for p in executables if p.is_file() and not os.access(p, os.X_OK))
-    return (not missing, ", ".join(missing) if missing else ", ".join(map(str, required)))
 
 
 def _normalize_get_url(url: str) -> str:
@@ -2139,34 +1516,6 @@ def _download_command_source(url: str, destination: Path) -> tuple[str, int, Opt
     return filename, size, None
 
 
-async def _scan_engine(source_path: Path) -> tuple[Optional[str], str]:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            PYTHON, str(DEOB_SCRIPT), str(source_path), "--detect", "--no-pypy",
-            cwd=str(DEOB_DIR), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
-    except asyncio.TimeoutError:
-        return None, "The source scan timed out."
-    except OSError as exc:
-        return None, f"Could not start the source scanner: {exc}"
-    output = stdout.decode("utf-8", errors="replace").strip()
-    if proc.returncode != 0 or not output:
-        detail = stderr.decode("utf-8", errors="replace").strip()
-        return None, detail[-700:] or "The source scanner could not identify this script."
-    parts = output.split("\t", 2)
-    if len(parts) < 3:
-        return None, "The scanner returned an unrecognized result."
-    engine_name, confidence_text, _label = parts
-    try:
-        confidence = float(confidence_text) if confidence_text != "forced" else 1.0
-    except ValueError:
-        confidence = 0.0
-    if engine_name not in SUPPORTED or confidence < 0.75:
-        return None, f"Detected engine: {engine_name}; confidence: {confidence:.2f}."
-    return engine_name, f"Detected {SUPPORTED[engine_name]['label']} (confidence {confidence:.2f})."
-
-
 async def _detect_scores(source_path: Path) -> tuple[list[tuple[str, float, str, list[str]]], str]:
     """Score every engine against the file:
     [(name, confidence, label, evidence), ...], best first."""
@@ -2334,540 +1683,18 @@ def _gh_api(method: str, path: str, *, body=None, accept: str = "application/vnd
         return exc.code, exc.read()
 
 
-def _cloud_upload_input(job_id: str, data: bytes) -> None:
-    body = {"message": f"input {job_id}", "content": base64.b64encode(data).decode("ascii")}
-    code, resp = _gh_api("PUT", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input", body=body)
-    if code not in (200, 201):
-        raise RuntimeError(f"input upload failed: HTTP {code}: {resp[:200]!r}")
-
-
-def _cloud_dispatch(engine: str, job_id: str) -> None:
-    code, resp = _gh_api(
-        "POST", f"/repos/{GH_JOBS_REPO}/actions/workflows/deobf.yml/dispatches",
-        body={"ref": "main", "inputs": {"engine": engine, "job_id": job_id}})
-    if code != 204:
-        raise RuntimeError(f"dispatch failed: HTTP {code}: {resp[:200]!r}")
-
-
-def _cloud_failure_reason(run_id) -> str:
-    """The engine's own error lines from a failed cloud run, for the user message."""
-    try:
-        code, resp = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/runs/{run_id}/jobs?per_page=5")
-        if code != 200:
-            return ""
-        jobs = json.loads(resp.decode("utf-8", errors="replace")).get("jobs", [])
-    except (ValueError, KeyError, TypeError):
-        return ""
-    for job in jobs:
-        if job.get("conclusion") != "failure" or not job.get("id"):
-            continue
-        lcode, log = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/actions/jobs/{job['id']}/logs", accept="text/plain")
-        if lcode != 200 or not log:
-            return ""
-        lines = [line for line in log.decode("utf-8", errors="replace").splitlines() if line.strip()]
-        interesting = [line for line in lines if ("[!]" in line or "Traceback" in line or "error" in line.lower() or "failed" in line.lower() or "timeout" in line.lower())]
-        tail = interesting[-6:] if interesting else lines[-4:]
-        cleaned = []
-        for line in tail:
-            line = re.sub(r"^\S*Z?\s*", "", line.split("##[", 1)[-1] if "##[" in line else line)
-            cleaned.append(line.strip()[:200])
-        return " | ".join(item for item in cleaned if item)
-    return ""
-
-
-def _cloud_fetch_result(job_id: str) -> bytes:
-    code, out = _gh_api(
-        "GET", f"/repos/{GH_JOBS_REPO}/contents/results/{job_id}.luau?ref=result/{job_id}",
-        accept="application/vnd.github.raw")
-    if code == 200 and out:
-        return out
-    # large outputs: read the blob directly
-    code2, meta = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/contents/results/{job_id}.luau?ref=result/{job_id}")
-    if code2 == 200:
-        try:
-            sha = json.loads(meta.decode("utf-8", errors="replace")).get("sha", "")
-        except ValueError:
-            sha = ""
-        if sha:
-            code3, blob = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/git/blobs/{sha}")
-            if code3 == 200:
-                try:
-                    return base64.b64decode(json.loads(blob.decode("utf-8", errors="replace"))["content"])
-                except (ValueError, KeyError):
-                    pass
-    raise RuntimeError(f"result fetch failed: HTTP {code}")
-
-
-def _cloud_cleanup(job_id: str) -> None:
-    try:
-        code, meta = _gh_api("GET", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input?ref=main")
-        if code == 200:
-            sha = json.loads(meta.decode("utf-8", errors="replace")).get("sha", "")
-            if sha:
-                _gh_api("DELETE", f"/repos/{GH_JOBS_REPO}/contents/jobs/{job_id}.input",
-                        body={"message": f"cleanup {job_id}", "sha": sha})
-    except Exception:
-        pass
-    _gh_api("DELETE", f"/repos/{GH_JOBS_REPO}/git/refs/heads/result/{job_id}")
-
-
-def _cloud_deobfuscate(engine: str, input_path: Path, wait_seconds: int) -> bytes:
-    if not cloud_runner_configured():
-        raise RuntimeError("the remote runner token is missing or still a placeholder")
-    job_id = os.urandom(8).hex()
-    uploaded = False
-    try:
-        _cloud_upload_input(job_id, input_path.read_bytes())
-        uploaded = True
-        dispatch_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        _cloud_dispatch(engine, job_id)
-        deadline = time.monotonic() + wait_seconds
-        result_ref = f"/repos/{GH_JOBS_REPO}/git/ref/heads/result/{job_id}"
-        runs_ref = f"/repos/{GH_JOBS_REPO}/actions/runs?event=workflow_dispatch&per_page=5"
-        run_checked = False
-        while time.monotonic() < deadline:
-            code, response = _gh_api("GET", result_ref)
-            if code == 200:
-                result = _cloud_fetch_result(job_id)
-                if not result:
-                    raise RuntimeError("the cloud runner created an empty result file")
-                return result
-            if code not in (404, 409):
-                detail = response.decode("utf-8", errors="replace")[:240]
-                raise RuntimeError(f"could not check cloud result status: HTTP {code}: {detail}")
-            if not run_checked:
-                rcode, rresp = _gh_api("GET", runs_ref)
-                if rcode == 200:
-                    try:
-                        runs = json.loads(rresp.decode("utf-8", errors="replace")).get("workflow_runs", [])
-                        for run in runs:
-                            if run.get("created_at", "") >= dispatch_at:
-                                if run.get("status") == "completed":
-                                    run_checked = True
-                                    if run.get("conclusion") != "success":
-                                        raise RuntimeError(
-                                            "the cloud runner failed for this job ("
-                                            f"{run.get('conclusion')}); see {run.get('html_url')}"
-                                        )
-                    except ValueError:
-                        pass
-            time.sleep(CLOUD_POLL_SECONDS)
-        raise RuntimeError("the cloud runner did not publish this job's result before the deadline")
-    finally:
-        if uploaded:
-            try:
-                _cloud_cleanup(job_id)
-            except Exception as exc:
-                print(f"Cloud job cleanup failed ({job_id}): {type(exc).__name__}: {exc}", flush=True)
-
-def _cache_key(engine: str, input_path: Path) -> tuple[str, str]:
-    try:
-        digest = hashlib.sha256()
-        with open(input_path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b""):
-                digest.update(chunk)
-        return engine, digest.hexdigest()
-    except OSError:
-        return ("", "")
-
-
-def _result_cache_store(key: tuple[str, str], data: bytes) -> None:
-    global _RESULT_CACHE_BYTES
-    if not key[0] or not data or len(data) > MAX_OUTPUT_BYTES:
-        return
-    if key in _RESULT_CACHE:
-        _RESULT_CACHE_BYTES -= len(_RESULT_CACHE.pop(key))
-    while _RESULT_CACHE and _RESULT_CACHE_BYTES + len(data) > _RESULT_CACHE_MAX_BYTES:
-        _, old = _RESULT_CACHE.popitem(last=False)
-        _RESULT_CACHE_BYTES -= len(old)
-    _RESULT_CACHE[key] = data
-    _RESULT_CACHE_BYTES += len(data)
-
-
-def result_embed(filename: str, label: str, size: int, desc: str, file_note: bool) -> discord.Embed:
-    embed = discord.Embed(title=filename, color=0x57F287, description=desc[:4000])
-    embed.add_field(name="Engine", value=label, inline=True)
-    embed.add_field(name="Size", value=f"{size:,} bytes", inline=True)
-    embed.set_footer(text="Output attached." if file_note else "Review before running.")
-    return embed
-
-
-async def _await_with_progress(
-    status,
-    base_text: str,
-    coro,
-    heading: str = "⏳ Processing source",
-    interval: int = 15,
-):
-    """Await coro while refreshing the status message with a live elapsed timer.
-
-    The timer stops as soon as coro settles so later status edits always win."""
-    started = time.monotonic()
-    stopped = False
-
-    async def refresh():
-        nonlocal stopped
-        while not stopped:
-            await asyncio.sleep(interval)
-            if stopped:
-                return
-            seconds = max(1, int(time.monotonic() - started))
-            elapsed = f"{seconds}s" if seconds < 120 else f"{seconds // 60}m {seconds % 60}s"
-            try:
-                await status.edit(content=None, view=info_view(heading, base_text.replace("{elapsed}", elapsed)))
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                return
-
-    timer = asyncio.create_task(refresh())
-    try:
-        return await coro
-    finally:
-        stopped = True
-        timer.cancel()
-
-
-async def process_input(ctx: commands.Context, engine: str, url: str = "", preset=None) -> None:
-    if engine not in SUPPORTED or not _engine_is_available(engine):
-        await ctx.reply(view=info_view("Engine unavailable", SUPPORTED.get(engine, {}).get("status", "This deobfuscation engine is not available yet.")), mention_author=False)
-        return
-    spec = SUPPORTED[engine]
-    label = spec["label"]
-    attachments = ctx.message.attachments
-    if preset is not None:
-        # the .detect one-click button re-runs a source already held in memory
-        filename, preset_bytes = preset
-        attachment = None
-        source_url = ""
-    elif attachments and url.strip():
-        await ctx.reply(view=info_view("Choose one source", "Attach one file or give a raw URL, not both."), mention_author=False)
-        return
-    if len(attachments) > 1:
-        await ctx.reply(view=info_view("Single-file processing", "Attach one file per request."), mention_author=False)
-        return
-    if preset is None:
-        attachment = attachments[0] if attachments else None
-        source_url = _command_input_url(url)
-        preset_bytes = None
-    if preset is None and attachment is None and not source_url:
-        await ctx.reply(
-            view=info_view(
-                "Source file required",
-                f"Attach one `.lua`, `.luau`, or `.txt` file, or provide a direct raw-file URL.\n\nExample\n`{spec['command']} https://example.com/raw/script.lua`"
-            ),
-            mention_author=False,
-        )
-        return
-
-    if preset is not None:
-        pass
-    elif attachment is not None:
-        filename = Path(attachment.filename).name
-        if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=error_view("Unsupported file type", "Use `.lua`, `.luau`, or `.txt`."), mention_author=False)
-            return
-        if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
-            return
-    else:
-        try:
-            source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
-        except ValueError as exc:
-            await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
-            return
-
-    runtime_ok, runtime_detail = runtime_status(engine)
-    if not runtime_ok:
-        await ctx.reply(
-            view=error_view(
-                "Engine runtime unavailable",
-                f"The {label} runtime is not ready.\n\nMissing\n{runtime_detail}\n\nCheck the build logs, then retry."
-            ),
-            mention_author=False,
-        )
-        return
-
-    status = await ctx.reply(
-        view=info_view("⏳ Request queued", f"**Engine** · {label}\n**Source** · `{filename[:64]}`\nWaiting for a free slot."),
-        mention_author=False,
-    )
-
-    async with job_slots:
-        with tempfile.TemporaryDirectory(prefix="deobf_bot_") as temp:
-            workdir = Path(temp)
-            input_path = workdir / filename
-            output_path = workdir / f"{Path(filename).stem}_deobfuscated.luau"
-            try:
-                fetch_note = None
-                if preset_bytes is not None:
-                    input_path.write_bytes(preset_bytes)
-                    size = input_path.stat().st_size
-                    if size == 0:
-                        await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
-                        return
-                elif attachment is not None:
-                    await attachment.save(input_path)
-                    size = input_path.stat().st_size
-                    if size == 0:
-                        await ctx.reply(view=error_view("Empty source file", "The file contains no data."), mention_author=False)
-                        return
-                    if size > MAX_INPUT_BYTES:
-                        await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
-                        return
-                else:
-                    filename, size, fetch_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
-
-                await status.edit(content=None, view=info_view("⏳ Preparing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}" + (f"\n**Note** · {fetch_note}" if fetch_note else "") + ""))
-                print(f"selected engine={label}; source scan completed before engine selection", flush=True)
-
-                wait_note = ""
-                if engine == "luraph_v151":
-                    wait_note = " This engine can take a few minutes on bigger files."
-                elif engine == "moonveil_v145":
-                    wait_note = " MoonVeil recovery includes isolated probing and may take several minutes."
-                elif input_path.stat().st_size > 1024 * 1024:
-                    wait_note = " Large file: this can take a few minutes."
-                await status.edit(content=None, view=info_view("⏳ Processing source", f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}"))
-                start_time = time.monotonic()
-                # result cache: an identical file + engine re-run is instant
-                cache_key = await asyncio.to_thread(_cache_key, engine, input_path)
-                cached = _RESULT_CACHE.get(cache_key) if cache_key[0] else None
-                if cached is not None:
-                    _RESULT_CACHE.move_to_end(cache_key)
-                    await asyncio.to_thread(output_path.write_bytes, cached)
-                else:
-                    cloud_min = CLOUD_MIN_BYTES.get(engine, CLOUD_OTHER_MIN_BYTES)
-                    go_cloud = engine != "moonveil_v145" and size >= cloud_min
-                    if go_cloud and cloud_runner_configured():
-                        try:
-                            await status.edit(content=None, view=info_view("⏳ Cloud processing", f"Running `{filename[:64]}` on the cloud runner."))
-                            async with cloud_slots:
-                                cloud_out = await _await_with_progress(
-                                    status,
-                                    f"Running `{filename[:64]}` on the cloud runner.\nElapsed · {{elapsed}}",
-                                    asyncio.to_thread(_cloud_deobfuscate, engine, input_path, CLOUD_WAIT_SECONDS),
-                                    heading="⏳ Cloud processing",
-                                    interval=30,
-                                )
-                            await asyncio.to_thread(output_path.write_bytes, cloud_out)
-                        except Exception as exc:
-                            print(f"Cloud runner failed ({label}, {filename}): {type(exc).__name__}: {exc}", flush=True)
-                            await status.edit(content=None, view=info_view("Using local engine", f"Cloud run failed: {str(exc)[:180]}\nFalling back to the local engine.", color=0xFAA61A))
-                    if not output_path.is_file():
-                        if size > LOCAL_INPUT_BYTES:
-                            await status.edit(content=None, view=error_view(
-                                "File too large for the local engine",
-                                f"This file is {_human_size(size)}; the local {label} engine handles up to {_human_size(LOCAL_INPUT_BYTES)}. "
-                                "Bigger sources are processed on the cloud runner.",
-                            ))
-                            return
-                        process_env = None
-                        if engine == "luraph_v151":
-                            try:
-                                node_bin = await asyncio.to_thread(resolve_node)
-                            except Exception as exc:
-                                await status.edit(content=None, view=error_view("Luraph v15.1 runtime unavailable", str(exc)))
-                                return
-                            node_input = workdir / f"{Path(filename).stem}.lua"
-                            if input_path != node_input:
-                                await asyncio.to_thread(shutil.copyfile, input_path, node_input)
-                            command = [node_bin, "--max-old-space-size=192", str(V151_SCRIPT), str(node_input), "-o", str(output_path), "--timeout", str(max(150, JOB_TIMEOUT - 30)), "--plugin", "luraph_v15"]
-                            process_env = _v151_process_env()
-                        else:
-                            command = [PYTHON, str(DEOB_SCRIPT), str(input_path), "--obfuscator", engine,
-                                       "--output", str(output_path), "--timeout", str(JOB_TIMEOUT)]
-                        print(f"job start: engine={label} file={filename} bytes={input_path.stat().st_size} bot_rss={_self_rss_mb()}MB", flush=True)
-                        try:
-                            returncode, stdout, stderr = await _await_with_progress(
-                                status,
-                                f"**Engine** · {label}\n**Input** · {_human_size(size)}\n{wait_note or 'The engine is running.'}" + "\nElapsed · {elapsed}",
-                                _run_process(command, JOB_TIMEOUT + 15, env=process_env),
-                            )
-                        except asyncio.TimeoutError:
-                            await status.edit(content=None, view=error_view("Processing timed out", f"Over the {JOB_TIMEOUT}s limit. Try a smaller input or retry later."))
-                            return
-                        except JobMemoryExceeded as exc:
-                            print(f"Job stopped at the memory ceiling ({label}, {filename}): {exc}", flush=True)
-                            await status.edit(content=None, view=error_view("Memory limit reached", f"Over the memory budget ({exc}). The job was stopped."))
-                            return
-
-                        if returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
-                            detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
-                            try:
-                                await status.edit(content=None, view=error_view(
-                                    f"Deobfuscation failed on `{filename}`",
-                                    (detail[-400:] or "No diagnostic output.") + "\n\nThe script structure may not be supported.",
-                                ))
-                            except discord.HTTPException:
-                                await status.edit(content=None, view=error_view("Deobfuscation failed", (detail[-600:] or "No diagnostic output.") + "\nThis structure may not be supported."))
-                            print(f"Deobfuscation failed ({label}, {filename}): {detail[-2000:]}", flush=True)
-                            return
-
-                if cached is None:
-                    raw_output = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                    out_text = await asyncio.to_thread(_prepare_deobfuscated_output, raw_output)
-                    await asyncio.to_thread(output_path.write_text, out_text, encoding="utf-8", newline="\n")
-                    output_size = output_path.stat().st_size
-                    if output_size > MAX_OUTPUT_BYTES:
-                        await status.edit(content=None, view=error_view("Output limit exceeded", f"Output is {_human_size(output_size)}, over the {_human_size(MAX_OUTPUT_BYTES)} limit."))
-                        return
-                    cached_output = await asyncio.to_thread(output_path.read_bytes)
-                    _result_cache_store(cache_key, cached_output)
-                else:
-                    out_text = None
-                    output_size = output_path.stat().st_size
-                elapsed_seconds = max(1, int(time.monotonic() - start_time))
-                elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
-                if output_size <= 1600 and out_text is None:
-                    out_text = await asyncio.to_thread(output_path.read_text, encoding="utf-8", errors="replace")
-                delivered = await _deliver_deobf_output(
-                    ctx,
-                    status,
-                    filename,
-                    label,
-                    output_path,
-                    output_size,
-                    out_text,
-                    elapsed,
-                )
-                if not delivered:
-                    return
-            except ValueError as exc:
-                message = str(exc)
-                if status:
-                    await status.edit(content=None, view=error_view("Input could not be processed", message[:900]))
-                else:
-                    await ctx.reply(view=error_view("Input could not be processed", message[:900]), mention_author=False)
-            except discord.Forbidden:
-                print("Discord permission error: cannot read/send messages or attachments.", flush=True)
-                if status:
-                    try:
-                        await status.edit(content=None, view=error_view("Missing Discord permissions", "The bot needs Read, Send and Attach permissions here."))
-                    except discord.HTTPException:
-                        pass
-            except discord.HTTPException as exc:
-                if status:
-                    try:
-                        await status.edit(content=None, view=error_view("Discord could not send the result", str(exc)[:700]))
-                    except discord.HTTPException:
-                        pass
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                print(f"Unexpected job error: {type(exc).__name__}: {exc}", flush=True)
-                message = f"{type(exc).__name__}: {exc}"
-                if status:
-                    try:
-                        await status.edit(content=None, view=error_view("Unexpected processing error", message[:700]))
-                    except discord.HTTPException:
-                        pass
-                else:
-                    await ctx.reply(view=error_view("Unexpected processing error", message[:700]), mention_author=False)
-
 @bot.command(name="do", aliases=["deobf"])
 async def deobfuscate_command(ctx: commands.Context, *, url: str = "") -> None:
-    attachments = ctx.message.attachments
-    source_url = _command_input_url(url or "")
-    if attachments and source_url:
-        await ctx.reply(view=error_view("Choose one source", "Attach one file or provide a raw-file URL, not both."), mention_author=False)
-        return
-    if len(attachments) > 1:
-        await ctx.reply(view=error_view("Single-file processing", "Attach one file per request."), mention_author=False)
-        return
-    attachment = attachments[0] if attachments else None
-    if attachment is None and not source_url:
-        await ctx.reply(
-            view=info_view(
-                "Source file required",
-                "Attach one .lua, .luau, or .txt file, or provide a direct raw-file URL. The source is scanned before the engine selector appears.",
-                color=0xFAA61A,
-            ),
-            mention_author=False,
-        )
-        return
-    if attachment is not None:
-        filename = Path(attachment.filename).name
-        if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-            await ctx.reply(view=error_view("Unsupported file type", "Use .lua, .luau, or .txt."), mention_author=False)
-            return
-        if attachment.size > MAX_INPUT_BYTES:
-            await ctx.reply(view=error_view("Input too large", f"Maximum input size: {_human_size(MAX_INPUT_BYTES)}."), mention_author=False)
-            return
-    else:
-        try:
-            source_url, filename = _validate_public_url(source_url, allow_any_ext=True)
-        except ValueError as exc:
-            await ctx.reply(view=error_view("Invalid source URL", str(exc)), mention_author=False)
-            return
-    status = await ctx.reply(
-        view=info_view("⏳ Scanning source", f"Checking `{filename[:64]}` against every detector."),
+    """The per-obfuscator deobfuscation engines were removed; detection and the Env Logger remain."""
+    await ctx.reply(
+        view=info_view(
+            "Deobfuscation engines removed",
+            "MonLua no longer runs the per-obfuscator deobfuscation engines.\n"
+            "Use .detect or .d to identify the obfuscator.\n"
+            "Use .l with the file to run it in the sandbox and record everything it does.",
+        ),
         mention_author=False,
     )
-    try:
-        with tempfile.TemporaryDirectory(prefix="deobf_scan_") as directory:
-            input_path = Path(directory) / filename
-            if attachment is not None:
-                await attachment.save(input_path)
-                size = input_path.stat().st_size
-                if size == 0:
-                    raise ValueError("The supplied file contains no data.")
-                if size > MAX_INPUT_BYTES:
-                    raise ValueError(f"Input exceeds the {_human_size(MAX_INPUT_BYTES)} upload limit.")
-            else:
-                filename, size, _scan_note = await asyncio.to_thread(_download_command_source, source_url, input_path)
-            scan_skipped = size > LOCAL_INPUT_BYTES
-            if scan_skipped:
-                rows, detected_engine = [], None
-            else:
-                rows, _basis = await _detect_scores(input_path)
-                detected_engine = _recommended_engine(rows)
-            source_bytes = await asyncio.to_thread(input_path.read_bytes)
-            if attachment is not None:
-                source = ("attachment", filename, source_bytes)
-            else:
-                source = ("url", source_url, filename, source_bytes)
-        unavailable_match = _unavailable_engine_match(rows)
-        if detected_engine:
-            confidence = max(float(row[1]) for row in rows if row[0] == detected_engine)
-            scan_note = (
-                f"Detected **{SUPPORTED[detected_engine]['label']}** · "
-                f"**{int(round(confidence * 100))}%** confidence. "
-                "The recommended engine is marked and placed first."
-            )
-        elif unavailable_match:
-            unavailable_engine, confidence = unavailable_match
-            scan_note = (
-                f"Detected **{SUPPORTED[unavailable_engine]['label']}** · "
-                f"**{int(round(confidence * 100))}%** confidence. "
-                f"{SUPPORTED[unavailable_engine].get('status', 'Recovery is not available yet')} "
-                "The engine remains disabled in the selector."
-            )
-        else:
-            scan_note = (
-                "Scan complete. No supported engine matched the 75% confidence threshold. "
-                "Choose an available engine manually from the list."
-            )
-        if scan_skipped:
-            scan_note = "Large source: the detection scan runs locally, so it was skipped. Pick an engine from the list."
-        view = _EnginePickerView(ctx, source, detected_engine, scan_note)
-        view.message = status
-        await status.edit(content=None, view=view)
-    except (ValueError, OSError) as exc:
-        await status.edit(content=None, view=error_view("Source scan failed", str(exc)[:900]))
-    except asyncio.CancelledError:
-        raise
-    except discord.HTTPException:
-        raise
-    except Exception as exc:
-        print(f"Automatic engine scan failed: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
-        await status.edit(
-            content=None,
-            view=error_view(
-                "Source scan failed",
-                "Detection failed. Retry, or use .detect.",
-            ),
-        )
 
 
 @bot.command(name="get")
@@ -3020,15 +1847,8 @@ async def detect(ctx: commands.Context, *, url: str = "") -> None:
                 return
             elapsed_seconds = max(1, int(time.monotonic() - start_time))
             elapsed = f"{elapsed_seconds}s" if elapsed_seconds < 120 else f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s"
-            source = None
-            best = max(((confidence, name) for name, confidence, _label, _evidence in rows if name not in ("obfuscated", "plain", "generic")), default=(0.0, ""))
-            if best[0] >= 0.999 and best[1] in SUPPORTED:
-                if attachment is not None:
-                    source = ("attachment", filename, await asyncio.to_thread(input_path.read_bytes))
-                else:
-                    source = ("url", source_url)
             try:
-                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed, source=source, owner_id=ctx.author.id))
+                await status.edit(content=None, view=detect_view(filename, rows, basis, elapsed))
             except discord.HTTPException:
                 best_label = rows[0][2] if rows else "nothing"
                 best_pct = int(round(rows[0][1] * 100)) if rows else 0
@@ -3271,7 +2091,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
 
 @bot.command(name="deobfs", aliases=["deobfuscators", "engines"])
 async def deobfs(ctx: commands.Context) -> None:
-    await ctx.reply(view=info_view("Supported deobfuscators", engines_body()), mention_author=False)
+    await ctx.reply(view=info_view("MonLua engines", engines_body()), mention_author=False)
 
 
 @bot.command(name="help")
@@ -3281,11 +2101,11 @@ async def help_command(ctx: commands.Context) -> None:
         + "\n\n**INPUT EXAMPLES**\n"
         + "• `.detect` or `.d` with a file attached\n"
         + "• `.beautify` or `.b` followed by a raw Lua URL or pasted code\n"
-        + "• `.deobf https://example.com/raw/script.lua`\n"
-        + "• `.do` with a Lua file attached"
-        + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandbox)"
+        + "• `.l` with a Lua file attached (Env Logger: records remotes, strings, globals and actions in a sandbox)\n"
+        + "• `.get <url>` to fetch raw source or resolve embedded loaders"
     )
     await ctx.reply(view=info_view("GUIDE COMMANDS", body), mention_author=False)
+
 
 _tree_synced = False
 
@@ -3309,6 +2129,7 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     if not permissions or not (permissions.manage_guild or permissions.administrator):
         await interaction.response.send_message(view=error_view("Permission required", "Manage Server or Administrator permission required."), ephemeral=True)
         return
+    guild = interaction.guild
     if channel.guild.id != interaction.guild_id:
         await interaction.response.send_message(view=error_view("Invalid channel", "Choose a text channel from this server."), ephemeral=True)
         return
@@ -3316,6 +2137,26 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
     async with _channel_settings_lock:
         updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
         current = set(updated.get(guild_key, []))
+        # Deleted channels must not ride along in the saved allowlist.
+        pruned = {cid for cid in current if guild.get_channel(cid) is None}
+        current -= pruned
+        if guild.get_channel(channel.id) is None:
+            # The picked channel itself no longer exists: save nothing, just clean up.
+            updated[guild_key] = sorted(current)
+            if not updated[guild_key]:
+                updated.pop(guild_key, None)
+            try:
+                _persist_channel_restrictions(updated)
+            except OSError as exc:
+                print(f"Couldn't persist channel restriction: {type(exc).__name__}: {exc}", flush=True)
+                await interaction.response.send_message(view=error_view("Could not save setting", "Check the bot file permissions and try again."), ephemeral=True)
+                return
+            CHANNEL_RESTRICTIONS.clear()
+            CHANNEL_RESTRICTIONS.update(updated)
+            CHANNEL_CONFIG_LOAD_FAILED = False
+            cleaned = f" Cleaned {len(pruned)} deleted channel(s) from the saved list." if pruned else ""
+            await interaction.response.send_message(view=error_view("Channel no longer exists", f"{channel.mention} was deleted, so it was not saved.{cleaned}"), ephemeral=True)
+            return
         current.add(channel.id)
         updated[guild_key] = sorted(current)
         try:
@@ -3328,8 +2169,11 @@ async def set_channel_command(interaction: discord.Interaction, channel: discord
         CHANNEL_RESTRICTIONS.update(updated)
         CHANNEL_CONFIG_LOAD_FAILED = False
         configured_count = len(updated[guild_key])
-    await interaction.response.send_message(view=info_view("Command channel saved", f"Commands now allowed in {channel.mention}" + (f" and {configured_count - 1} more." if configured_count > 1 else ".") + "\nRun /set channel for another.", color=0x57F287), ephemeral=True)
+        pruned_count = len(pruned)
+    suffix = (f" Cleaned {pruned_count} deleted channel(s) from the saved list." if pruned_count else "")
+    await interaction.response.send_message(view=info_view("Command channel saved", f"Commands now allowed in {channel.mention}" + (f" and {configured_count - 1} more." if configured_count > 1 else ".") + "\nRun /set channel for another." + suffix, color=0x57F287), ephemeral=True)
     _schedule_channel_backup()
+
 
 
 remove_group = app_commands.Group(
@@ -3356,14 +2200,37 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
     if not permissions or not (permissions.manage_guild or permissions.administrator):
         await interaction.response.send_message(view=error_view("Permission required", "Manage Server or Administrator permission required."), ephemeral=True)
         return
+    guild = interaction.guild
     guild_key = str(interaction.guild_id)
     async with _channel_settings_lock:
-        current = set(CHANNEL_RESTRICTIONS.get(guild_key, []))
+        updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
+        current = set(updated.get(guild_key, []))
+        # Deleted channels must not ride along in the saved allowlist.
+        pruned = {cid for cid in current if guild.get_channel(cid) is None}
+        current -= pruned
         if channel.id not in current:
-            await interaction.response.send_message(view=info_view("Channel not configured", f"{channel.mention} is not configured here."), ephemeral=True)
+            if channel.id in pruned:
+                # The channel was already deleted from Discord; finish removing it from the saved list.
+                if current:
+                    updated[guild_key] = sorted(current)
+                else:
+                    updated.pop(guild_key, None)
+                try:
+                    _persist_channel_restrictions(updated)
+                except OSError as exc:
+                    print(f"Couldn't persist channel restriction removal: {type(exc).__name__}: {exc}", flush=True)
+                    await interaction.response.send_message(view=error_view("Could not save change", "The existing channel restriction is still active."), ephemeral=True)
+                    return
+                CHANNEL_RESTRICTIONS.clear()
+                CHANNEL_RESTRICTIONS.update(updated)
+                CHANNEL_CONFIG_LOAD_FAILED = False
+                extra = f" Also cleaned {len(pruned) - 1} other deleted channel(s)." if len(pruned) > 1 else ""
+                await interaction.response.send_message(view=info_view("Channel cleaned", f"{channel.mention} was deleted. Removed it from the saved list.{extra}", color=0x57F287), ephemeral=True)
+                _schedule_channel_backup()
+            else:
+                await interaction.response.send_message(view=info_view("Channel not configured", f"{channel.mention} is not configured here."), ephemeral=True)
             return
         current.remove(channel.id)
-        updated = {key: list(value) for key, value in CHANNEL_RESTRICTIONS.items()}
         if current:
             updated[guild_key] = sorted(current)
         else:
@@ -3378,12 +2245,16 @@ async def remove_set_channel_command(interaction: discord.Interaction, channel: 
         CHANNEL_RESTRICTIONS.update(updated)
         CHANNEL_CONFIG_LOAD_FAILED = False
         remaining = len(current)
+        pruned_count = len(pruned)
     if remaining:
         message = f"Removed {channel.mention}. Commands remain restricted to the other {remaining} configured channel(s)."
     else:
         message = f"Removed {channel.mention}. This server no longer has a command-channel restriction."
+    if pruned_count:
+        message += f" Also cleaned {pruned_count} deleted channel(s) from the saved list."
     await interaction.response.send_message(view=info_view("Command channel updated", message, color=0x57F287), ephemeral=True)
     _schedule_channel_backup()
+
 
 
 remove_group.add_command(remove_set_group)
@@ -3394,17 +2265,11 @@ bot.tree.add_command(remove_group)
 @bot.event
 async def on_ready() -> None:
     await _restore_channel_restrictions_remote()
-    ok, detail = runtime_status()
-    v151_ok, v151_detail = runtime_status("luraph_v151")
     print(f"Logged in as {bot.user} (ID: {bot.user.id})", flush=True)
-    if ok:
-        print(f"Native runtimes found: {detail}", flush=True)
+    if _env_logger_ready():
+        print("Env Logger runtime ready.", flush=True)
     else:
-        print(f"WARNING: native runtimes missing or not executable: {detail}", flush=True)
-    if v151_ok:
-        print(f"Luraph v15.1 runtime ready: {v151_detail}", flush=True)
-    else:
-        print(f"WARNING: .lrph15.1 unavailable: {v151_detail}", flush=True)
+        print("WARNING: Env Logger runtime missing or not executable.", flush=True)
     global _tree_synced
     if not _tree_synced:
         try:

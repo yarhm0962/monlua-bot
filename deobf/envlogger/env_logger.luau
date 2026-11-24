@@ -886,6 +886,7 @@ st = {
     rep_count = 0,
     cur_size = 0,
     lctr = 0,
+    cap_counts = {},
     getdesc_pending = nil,
     getchldrn_pending = nil,
     limit_hit = false,
@@ -3789,6 +3790,7 @@ hstr.char = function(...)
         end
         if all_nums and #args >= 3 then
             st.cap_strings[r] = true
+            st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
         end
     end
     if #r >= 4 and cfg.cap_str then
@@ -3804,7 +3806,19 @@ hstr.char = function(...)
             local prev = _ss(r, 1, 200)
             if not st.cap_strings[prev] then
                 st.cap_strings[prev] = true
+                st.cap_counts[prev] = 1
             end
+        end
+    end
+    return r
+end
+hstr.char = function(...)
+    local r = _sc(...)
+    if st and cfg.cap_str and _type(r) == "string" and #r >= 4 then
+        st.cap_strings[r] = true
+        st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
+        if r:match("https?://") then
+            table.insert(st.strrefs, { value = r, hint = "url_char" })
         end
     end
     return r
@@ -3820,8 +3834,22 @@ hstr.getn = function(s)
 end
 hstr.unpack = _su
 hstr.pack = _sp
-hstr.rep = _sr
-hstr.reverse = _sv
+hstr.rep = function(s, n, sep)
+    local r = _sr(s, n, sep)
+    if st and cfg.cap_str and _type(r) == "string" and #r >= 6 then
+        st.cap_strings[r] = true
+        st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
+    end
+    return r
+end
+hstr.reverse = function(s)
+    local r = _sv(s)
+    if st and cfg.cap_str and _type(r) == "string" and #r >= 6 then
+        st.cap_strings[r] = true
+        st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
+    end
+    return r
+end
 hstr.match = _sm
 hstr.find = _sf
 hstr.format = function(fmt, ...)
@@ -3838,6 +3866,7 @@ hstr.format = function(fmt, ...)
             table.insert(st.strrefs, { value = r, hint = "url_fmt" })
         end
         st.cap_strings[r] = true
+        st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
     end
     return r
 end
@@ -3875,9 +3904,16 @@ local function wrap_table_func(fname, f)
     end
 end
 htbl.concat = wrap_table_func("concat", function(t, sep)
-    local ok, r = _pcall(table.concat, t, sep or "")
+    local ok, r = _pcall(_sfo and table.concat or table.concat, t, sep or "")
     if not ok then
         return ""
+    end
+    if st and cfg.cap_str and _type(r) == "string" and #r >= 6 then
+        st.cap_strings[r] = true
+        st.cap_counts[r] = (st.cap_counts[r] or 0) + 1
+        if r:match("https?://") then
+            table.insert(st.strrefs, { value = r, hint = "url_concat" })
+        end
     end
     if _type(r) == "string" then
         local rl = #r
@@ -13818,6 +13854,7 @@ local hcor = {
 _G.bit = blib
 _G.bit32 = blib
 _G.string = hstr
+string = hstr
 _G.table = htbl
 _G.coroutine = hcor
 _G.math = math
@@ -14700,6 +14737,7 @@ function oxygen.reset()
         loopctr = 0,
         cap_consts = {},
         cap_strings = {},
+        cap_counts = {},
         sandbox = nil,
         vm_type = nil,
         t_start = _real_clock(),
@@ -15274,7 +15312,7 @@ function oxygen.dumpfile(inpath, outpath)
             local count = 0
             _sethook(co, function()
                 count = count + 1
-                if count > 20000000 then
+                if count > 80000000 then
                     _sethook(co, nil)
                     error("TIMEOUT: Instruction limit exceeded")
                 end
@@ -15373,13 +15411,41 @@ function oxygen.dumpfile(inpath, outpath)
     local seen_links = {}
     for _, ref in _ipairs(st.strrefs) do
         if
-            ref.hint == "url"
-            and ref.value
+            ref.value
             and not seen_links[ref.value]
             and (ref.value:match("^https?://") or ref.value:match("^www%."))
         then
             seen_links[ref.value] = true
-            table.insert(captured_links, "    " .. ref.value)
+            table.insert(captured_links, ref.value)
+        end
+    end
+    -- Decrypted-string recovery: emit the highest-frequency captures so the
+    -- output carries what the obfuscated payload actually decoded at runtime.
+    local ranked = {}
+    for s in _pairs(st.cap_strings) do
+        table.insert(ranked, { s = s, n = st.cap_counts[s] or 1 })
+    end
+    table.sort(ranked, function(a, b)
+        if a.n ~= b.n then
+            return a.n > b.n
+        end
+        return #a.s > #b.s
+    end)
+    local string_shown = math.min(#ranked, 200)
+    if string_shown > 0 then
+        out(string.format("RECOVERED STRINGS (%d of %d unique)", string_shown, #ranked))
+        for i = 1, string_shown do
+            local s = ranked[i].s
+            if #s > 400 then
+                s = _ss(s, 1, 400) .. "...(" .. tostring(#s) .. " chars)"
+            end
+            out("[" .. tostring(i) .. "] x" .. tostring(ranked[i].n) .. " " .. safestr(s))
+        end
+    end
+    if #captured_links > 0 then
+        out("CAPTURED LINKS")
+        for _, link in _ipairs(captured_links) do
+            out("    " .. link)
         end
     end
     table.insert(st.out, 1, "--[[ this file was generated by oxygen bot ]]")

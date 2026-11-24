@@ -51,112 +51,37 @@ class BotPerformanceRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(source), bot.MAX_FORMAT_BYTES)
         self.assertEqual(bot._beautify_lua(source), source.strip())
 
-    def test_unified_commands_and_all_engine_options_are_registered(self):
+    def test_detection_registry_lists_every_engine(self):
+        self.assertEqual(len(bot.SUPPORTED), 15)
+        for engine in ("ironveil_v1", "77fuscator", "ironbrew1", "ironbrew2", "luraph_v143", "luraph_v147", "luraph_v148", "luraph_v149", "luraph_v15", "luraph_v151", "moonsec_v3", "centurion", "moonveil_v145", "fulcrum", "jayfuscator"):
+            self.assertIn(engine, bot.SUPPORTED)
+        body = bot.engines_body()
+        for label in ("IronBrew1", "IronBrew2", "Jayfuscator", "Fulcrum Deobfuscator", "v14.7", "v14.9", "v14.3", "MoonSec V3", "Centurion", "MoonVeil", "ENV LOGGER", ".l"):
+            self.assertIn(label, body)
+        self.assertNotIn("SERVER SETTINGS", body)
+
+    def test_engine_commands_are_replaced_by_a_detection_notice(self):
         shortcut = bot.bot.get_command("do")
         self.assertIsNotNone(shortcut)
         self.assertIs(shortcut, bot.bot.get_command("deobf"))
-        self.assertEqual(len(bot.SUPPORTED), 15)
-        self.assertIn("ironveil_v1", bot.SUPPORTED)
-        self.assertIn("77fuscator", bot.SUPPORTED)
-        self.assertIn("ironbrew1", bot.SUPPORTED)
-        self.assertIn("ironbrew2", bot.SUPPORTED)
-        self.assertIn("luraph_v143", bot.SUPPORTED)
-        self.assertIn("luraph_v147", bot.SUPPORTED)
-        self.assertIn("luraph_v148", bot.SUPPORTED)
-        self.assertIn("luraph_v149", bot.SUPPORTED)
-        self.assertNotIn("luraph_all", bot.SUPPORTED)
-        expected_engine_options = set(bot.SUPPORTED)
-        expected_engine_options.discard("moonveil_v145")
-        expected_engine_options.discard("jayfuscator")
-        expected_engine_options.add("moonveil")
-        self.assertEqual(
-            set(option.value for option in bot._EngineSelect().options),
-            expected_engine_options,
-        )
-        self.assertIn("IronBrew1", bot.engines_body())
-        self.assertIn("IronBrew2", bot.engines_body())
-        self.assertIn("Jayfuscator", bot.engines_body())
-        self.assertIn("Fulcrum Deobfuscator", bot.engines_body())
-        self.assertIn("Luraph v14.7", bot.engines_body())
-        self.assertIn("Luraph v14.9", bot.engines_body())
-        self.assertLess(
-            bot.engines_body().index("Luraph v14.3"),
-            bot.engines_body().index("Luraph v15"),
-        )
-        self.assertIn("Luraph v14.3", bot.engines_body())
-        self.assertNotIn("SERVER SETTINGS", bot.engines_body())
-        for engine in bot.SUPPORTED:
-            self.assertEqual(bot.SUPPORTED[engine]["command"], ".do")
 
-    def test_recommended_engine_is_selected_from_confident_supported_matches(self):
-        rows = [
-            ("ironbrew1", 0.81, "IronBrew1", ["header"]),
-            ("ironbrew2", 0.98, "IronBrew2", ["version marker"]),
-            ("obfuscated", 1.0, "Obfuscated", []),
-        ]
-        self.assertEqual(bot._recommended_engine(rows), "ironbrew2")
-        self.assertIsNone(bot._recommended_engine([("ironbrew1", 0.74, "IronBrew1", [])]))
-
-    def test_recommended_engine_is_first_and_both_ironbrew_versions_are_listed(self):
-        options = bot._engine_select_options("ironbrew2")
-        self.assertEqual(options[0].value, "ironbrew2")
-        self.assertEqual(options[0].label, "IronBrew2 (Recommended)")
-        self.assertIn("ironbrew1", {option.value for option in options})
-        self.assertIn("ironbrew2", {option.value for option in options})
-
-    async def test_scanned_source_bytes_are_reused_after_engine_selection(self):
-        payload = b"-- IronBrew2\\nreturn function() end"
-
-        class Attachment:
-            filename = "sample.lua"
-            size = len(payload)
-
-            async def save(self, path):
-                Path(path).write_bytes(payload)
-
-        class Status:
-            view = None
-
-            async def edit(self, **kwargs):
-                self.view = kwargs["view"]
-
+    async def test_deobfuscate_command_answers_with_the_removal_notice(self):
         class Context:
             author = SimpleNamespace(id=123)
-            message = SimpleNamespace(attachments=[Attachment()])
 
             async def reply(self, **kwargs):
-                return status
+                self.sent = kwargs
 
-        status = Status()
-        rows = [("ironbrew2", 0.99, "IronBrew2", ["version marker"])]
         ctx = Context()
-        with patch.object(bot, "_detect_scores", new=AsyncMock(return_value=(rows, "test scan"))) as scanner:
-            await bot.deobfuscate_command.callback(ctx)
-        scanner.assert_awaited_once()
-        self.assertIsInstance(status.view, bot._EnginePickerView)
-        self.assertEqual(status.view.recommended_engine, "ironbrew2")
-        selector = next(item for item in status.view.walk_children() if isinstance(item, bot.discord.ui.Select))
-        self.assertEqual(selector.options[0].label, "IronBrew2 (Recommended)")
-        self.assertEqual(bot._source_preset(status.view.source), ("sample.lua", payload))
-
-    def test_detect_invoker_exposes_guild_file_limit(self):
-        guild = SimpleNamespace(filesize_limit=123456)
-        invoker = bot._DetectInvoker(SimpleNamespace(guild=guild), owner_id=42)
-        self.assertIs(invoker.guild, guild)
-        self.assertEqual(invoker.author.id, 42)
-
-    def test_confirmation_view_contains_single_use_controls(self):
-        view = bot._ConfirmDeobfView("luraph_v15", ("url", "https://example.com/test.lua"), owner_id=42)
-        self.assertFalse(view.claimed)
-        controls = [item.custom_id for item in view.walk_children() if isinstance(item, bot.discord.ui.Button)]
-        self.assertEqual(set(controls), {"deobf_confirm", "deobf_cancel"})
+        await bot.deobfuscate_command.callback(ctx)
+        view = ctx.sent["view"]
+        texts = [item.content for item in view.walk_children() if hasattr(item, "content")]
+        self.assertTrue(any("Deobfuscation engines removed" in text for text in texts))
 
     def test_command_response_views_use_components_v2(self):
         self.assertIsInstance(bot.info_view("Status", "Ready"), bot.discord.ui.LayoutView)
         self.assertIsInstance(bot.error_view("Error", "Failed"), bot.discord.ui.LayoutView)
         self.assertIsInstance(bot.result_view("input.lua", "Engine", 128, "ok", None, "1s"), bot.discord.ui.LayoutView)
-
-
 class OutputDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_output_giver_prefers_rubis_then_falls_back_to_pastefy(self):
         with patch.object(bot, "_rubis_upload", return_value=("https://rubis.app/view/?scrap=abc", "https://api.rubis.app/v2/scrap/abc/raw")):

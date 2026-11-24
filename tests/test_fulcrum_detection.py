@@ -109,33 +109,9 @@ class FulcrumDetectionTests(unittest.TestCase):
         self.assertTrue(any(plugin.name == "fulcrum" for plugin in PLUGINS))
         self.assertEqual(by_name("fulcrum").label, "Fulcrum Deobfuscator")
 
-    def test_unavailable_engine_detection_is_reported_for_jayfuscator_only(self):
-        match = bot_module._unavailable_engine_match([
-            ("jayfuscator", 0.94, "jayfuscator", ["header matched"]),
-        ])
-        self.assertEqual(match, ("jayfuscator", 0.94))
-        # Fulcrum recovery is live now, so even a confident hit is never "unavailable"
-        self.assertIsNone(bot_module._unavailable_engine_match([
-            ("fulcrum", 0.94, "Fulcrum Deobfuscator", ["header matched"]),
-        ]))
-        self.assertIsNone(bot_module._unavailable_engine_match([
-            ("fulcrum", 0.74, "Fulcrum Deobfuscator", ["shape only"]),
-        ]))
-
-    def test_bot_enables_recovery_with_the_full_engine(self):
+    def test_fulcrum_is_registered_for_detection(self):
         self.assertIn("fulcrum", bot_module.SUPPORTED)
-        self.assertTrue(bot_module._engine_is_available("fulcrum"))
-        self.assertTrue(any(option.value == "fulcrum" for option in bot_module._engine_select_options()))
-        context = type("Context", (), {"author": type("Author", (), {"id": 123})()})()
-        view = bot_module._EnginePickerView(context, ("url", "https://example.com/sample.lua"))
-        unavailable = [
-            item for item in view.walk_children()
-            if isinstance(item, bot_module.discord.ui.Button)
-            and "Fulcrum Deobfuscator" in item.label
-        ]
-        # Fulcrum is pickable in the engine select, so it must not appear as an
-        # "unavailable" button anymore
-        self.assertEqual(len(unavailable), 0)
+        self.assertEqual(bot_module.SUPPORTED["fulcrum"]["label"], "Fulcrum Deobfuscator")
 
     def test_deobfuscation_fails_closed_without_emitting_output(self):
         import os

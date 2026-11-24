@@ -15,32 +15,6 @@ class CommandExtensionRegistrationTests(unittest.TestCase):
         self.assertIs(bot.bot.get_command("beautify"), bot.bot.get_command("b"))
 
 
-class ConfirmationExpiryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_confirmation_timeout_deletes_original_message(self):
-        view = bot._ConfirmDeobfView(
-            "luraph_v15",
-            ("url", "https://example.com/script.lua"),
-            owner_id=123,
-        )
-        message = SimpleNamespace(delete=AsyncMock())
-        view.message = message
-
-        await view.on_timeout()
-
-        message.delete.assert_awaited_once_with()
-        self.assertIsNone(view.message)
-
-    async def test_engine_picker_timeout_deletes_original_message(self):
-        context = SimpleNamespace(author=SimpleNamespace(id=123))
-        view = bot._EnginePickerView(context, ("url", "https://example.com/script.lua"))
-        message = SimpleNamespace(delete=AsyncMock())
-        view.message = message
-
-        await view.on_timeout()
-
-        message.delete.assert_awaited_once_with()
-        self.assertIsNone(view.message)
-
 
 class GetLoaderRegressionTests(unittest.TestCase):
     def test_loadstring_scanner_ignores_comments_and_string_contents(self):
