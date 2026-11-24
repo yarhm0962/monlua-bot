@@ -918,7 +918,7 @@ local cfg = {
     outfile = "core/io/dumped_output.lua",
     verbose = false,
     trace_cbs = true,
-    timeout = 30,
+    timeout = 60,
     maxrepeat = 12,
     mindeobf = 150,
     maxsize = 10 * 1024 * 1024,
@@ -15268,6 +15268,93 @@ function oxygen.dumpfile(inpath, outpath)
         end,
     })
     st.sandbox = sbox
+    st.guard_hits = 0
+    st.deadline_hit = false
+    st.running = true
+    do
+        local guard_n = 0
+        local function guard_call(orig, ...)
+            guard_n = guard_n + 1
+            st.guard_hits = guard_n
+            if st.running then
+                if not st.deadline_hit then
+                    if guard_n % 128 == 0 and (_real_clock() - (st.t_start or 0)) > cfg.timeout then
+                        st.deadline_hit = true
+                    end
+                end
+                if st.deadline_hit then
+                    error("TIMEOUT: Time limit exceeded", 0)
+                end
+            end
+            return orig(...)
+        end
+        -- Loaded chunks inherit this script's environment (loadstring ignores
+        -- env arguments), so the script's string library is hstr itself: wrap
+        -- its functions in place so the guard sees every call the script makes.
+        local run_env = getfenv()
+        local hstr_lib = run_env and rawget(run_env, "string") or nil
+        if _type(hstr_lib) ~= "table" then
+            hstr_lib = string
+        end
+        if _type(hstr_lib) == "table" then
+            for k, v in _pairs(hstr_lib) do
+                if _type(v) == "function" then
+                    hstr_lib[k] = function(...)
+                        return guard_call(v, ...)
+                    end
+                end
+            end
+        end
+        -- The frozen stdlib tables reject writes, so shadow them in the env.
+        local function shadow_lib(name)
+            local lib = run_env and rawget(run_env, name) or nil
+            if _type(lib) ~= "table" then
+                lib = rawget(_G, name)
+            end
+            if _type(lib) ~= "table" then
+                return
+            end
+            local wt = {}
+            for k, v in _pairs(lib) do
+                if _type(v) == "function" then
+                    wt[k] = function(...)
+                        return guard_call(v, ...)
+                    end
+                else
+                    wt[k] = v
+                end
+            end
+            local mt = _getmt(lib)
+            if mt then
+                setmetatable(wt, mt)
+            end
+            if run_env then
+                if not pcall(rawset, run_env, name, wt) then
+                    pcall(function()
+                        run_env[name] = wt
+                    end)
+                end
+            end
+        end
+        for _, nm in _ipairs({ "math", "os", "utf8" }) do
+            shadow_lib(nm)
+        end
+        if run_env then
+            for _, nm in _ipairs({ "pairs", "ipairs", "next", "select", "tostring", "tonumber" }) do
+                local v = rawget(run_env, nm) or rawget(_G, nm)
+                if _type(v) == "function" then
+                    local wfn = function(...)
+                        return guard_call(v, ...)
+                    end
+                    if not pcall(rawset, run_env, nm, wfn) then
+                        pcall(function()
+                            run_env[nm] = wfn
+                        end)
+                    end
+                end
+            end
+        end
+    end
     local ok, chunk, le = _pcall(function()
         return _loadstr(code, "script", "bt", sbox)
     end)
@@ -15310,11 +15397,19 @@ function oxygen.dumpfile(inpath, outpath)
         local co = _cor.create(chunk)
         if _sethook then
             local count = 0
+            local instr_cap = 80000000
+            local hits_cap = math.floor(instr_cap / 1000)
+            st.hook_hits = 0
             _sethook(co, function()
                 count = count + 1
-                if count > 80000000 then
+                st.hook_hits = count
+                if count % 64 == 0 and (_real_clock() - st.t_start) > cfg.timeout then
                     _sethook(co, nil)
-                    error("TIMEOUT: Instruction limit exceeded")
+                    error(string.format("TIMEOUT: Time limit exceeded (%ds)", cfg.timeout))
+                end
+                if count > hits_cap then
+                    _sethook(co, nil)
+                    error(string.format("TIMEOUT: Instruction limit exceeded (%d instructions)", instr_cap))
                 end
             end, "", 1000)
         end
@@ -15329,6 +15424,9 @@ function oxygen.dumpfile(inpath, outpath)
                 if not cok then
                     local ce = res[2]
                     _print("COROUTINE ERROR:", ce)
+                    if _type(ce) == "string" and ce:match("TIMEOUT") then
+                        note(ce)
+                    end
                     if _type(ce) == "string" then
                         if ce:match("invalid utf%-8") or ce:match("binary") then
                             break
@@ -15396,6 +15494,13 @@ function oxygen.dumpfile(inpath, outpath)
     if not ok then
         note("terminated " .. (rerr or "unknown"))
     end
+    st.running = false
+    note(string.format(
+        "finished in %.1fs, %d steps, %d trace lines",
+        _real_clock() - st.t_start,
+        st.guard_hits or 0,
+        #st.out
+    ))
     local cs = 0
     for _ in _pairs(st.cap_strings) do
         cs = cs + 1

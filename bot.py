@@ -48,7 +48,7 @@ ENVLOGGER_DIR = DEOB_DIR / "envlogger"
 ENVLOGGER_SCRIPT = ENVLOGGER_DIR / "env_logger.luau"
 ENVLOGGER_APIDUMP = ENVLOGGER_DIR / "core" / "io" / "apidump.json"
 LUNE_BIN = ENVLOGGER_DIR / "bin" / "lune"
-ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "300"))))
+ENVLOGGER_TIMEOUT = max(30, min(600, int(os.getenv("ENVLOGGER_TIMEOUT", "120"))))
 SUPPORTED = {
     "luraph_v143": {"label": "Luraph v14.3"},
     "luraph_v147": {"label": "Luraph v14.7"},
@@ -2043,7 +2043,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 )
                 elapsed = f"{time.monotonic() - started:.1f}s"
                 output_path = Path(directory) / "dump_out.lua"
-                if returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
+                if not output_path.exists() or output_path.stat().st_size == 0:
                     detail = (stderr_text or stdout_text or "").strip()[-700:] or "no diagnostic output"
                     raise RuntimeError(f"The Env Logger run failed: {detail}")
 
@@ -2051,7 +2051,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 final_text = await asyncio.to_thread(_finish_output, raw_dump, "-- Deobfuscated by MonLua [discord.gg/EdrQjndmAW]")
                 notes = stdout_text.strip()
                 if notes:
-                    final_text += "\n-- [Env Logger notes]\n" + notes[:1200] + "\n]\n"
+                    final_text += "\n-- [Env Logger notes]\n" + notes[:1200] + "\n"
                 output_path = Path(directory) / f"envlog_{Path(filename).stem}.lua"
                 await asyncio.to_thread(output_path.write_text, final_text, encoding="utf-8", newline="\n")
                 out_text = final_text
