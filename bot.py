@@ -1009,64 +1009,142 @@ def error_view(title: str, detail: str) -> discord.ui.LayoutView:
 DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator", "fulcrum")
 
 
-def detect_view(filename: str, rows, basis: str, elapsed: str = "") -> discord.ui.LayoutView:
-    """Report card for `.detect` (Components V2): the identified engine with
-    its confidence and the signals behind the score."""
-    rows = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
-    general = next(((c, l, e) for n, c, l, e in rows if n in ("obfuscated", "plain")), None)
-    engines = [(n, c, l, e) for n, c, l, e in rows if n not in ("obfuscated", "plain")]
-    best_name, best_conf, best_label, best_ev = engines[0] if engines else ("", 0.0, "", [])
-    matched = best_conf >= 0.75
-    partial = 0.30 <= best_conf < 0.75
-    unknown_score = general[0] if general else 0.0
-    if matched:
-        title = "### \U0001f50d Obfuscator Identified"
-    elif partial and (unknown_score < 0.5 or best_conf >= unknown_score):
-        title = "### \U0001f50d Possible match"
-    elif general and general[0] >= 0.5:
-        title = "### \U0001f50d Obfuscated, engine not supported"
-    elif general:
-        title = "### \u2139\ufe0f No obfuscation detected"
+PLAIN_CLASS_LABEL = "PlainLua-not-obfuscated"
+BRAND_INVITE = "discord.gg/EdrQjndmAW"
+
+
+def _class_name(label: str) -> str:
+    return str(label or "").strip().replace(" ", "-") or "unknown"
+
+
+def _pct2(value: float) -> str:
+    return f"{max(0.0, min(1.0, float(value))) * 100:.2f}%"
+
+
+def _detect_summary_text(rows) -> str:
+    """Verdict text shared by .detect and the .get detection section."""
+    cleaned = [(n, c, l, e) for n, c, l, e in rows if n != "generic"]
+    engines = sorted(
+        [(n, c, l) for n, c, l, e in cleaned if n not in ("obfuscated", "plain")],
+        key=lambda row: -row[1],
+    )
+    general = next(((n, c) for n, c, _l, _e in cleaned if n in ("obfuscated", "plain")), ("plain", 0.0))
+    general_name, general_conf = general
+    obf_score = general_conf
+    best_name, best_conf, best_label = engines[0] if engines else ("", 0.0, "")
+    lines = []
+    if best_conf >= 0.75:
+        lines.append("MonLua identified a reliable obfuscator match.")
+        lines.append(f"**{best_label}**")
+        lines.append(f"{_pct2(best_conf)} {_class_name(best_label)}")
+        others = [(l, c) for _n, c, l in engines[1:] if c >= 0.05]
+        if others:
+            lines.append("**Possible matches:**")
+            for label, conf in others[:2]:
+                lines.append(f"{_pct2(conf)} {_class_name(label)}")
+    elif best_conf >= 0.30 or obf_score >= 0.5:
+        lines.append("MonLua could not identify a reliable obfuscator match.")
+        lines.append("**Unknown / unsupported**")
+        lines.append("**Possible matches:**")
+        possible = [(l, c) for _n, c, l in engines if c >= 0.05]
+        possible.append((PLAIN_CLASS_LABEL, 1.0 - obf_score))
+        possible.sort(key=lambda row: -row[1])
+        for label, conf in possible[:3]:
+            lines.append(f"{_pct2(conf)} {_class_name(label)}")
     else:
-        title = "### \u2753 Unknown obfuscator"
-    head = f"-# Source: `{filename[:64]}`"
-    if elapsed:
-        head += f" \u00b7 \u23f1\ufe0f {elapsed}"
-    body: list[str] = []
-    if matched or partial:
-        verdict = "Identified" if matched else "Likely"
-        body.append(f"**{verdict}:** {best_label}")
-        body.append(f"**Confidence:** {int(round(best_conf * 100))}%")
-        others = [(l, c) for n, c, l, e in engines[1:] if c > 0]
-        ev = best_ev
-    elif general and general[0] >= 0.5:
-        body.append(f"Obfuscated ({int(round(general[0] * 100))}% structural match), but no supported engine or known family fits.")
-        body.append("Likely a custom or private obfuscator.")
-        others = [(l, c) for n, c, l, e in engines if c > 0]
-        ev = general[2]
-    elif general:
-        body.append("This script looks **unobfuscated** \u2014 no engine or known obfuscator family matched it.")
-        others = []
-        ev = []
-    else:
-        body.append("No engine reached the 75% confidence threshold.")
-        others = [(l, c) for n, c, l, e in engines if c > 0]
-        ev = []
-    body.append(f"-# Matched by {basis}")
-    if others:
-        others_text = " \u00b7 ".join(f"{lab} ({int(round(c * 100))}%)" for lab, c in others[:3])
-        body.append(f"-# Other matches: {others_text}")
-    if ev:
-        shown = " \u00b7 ".join(str(x) for x in ev[:3] if str(x))
-        body.append(f"-# Evidence: {shown}")
-    body.append("-# \U0001f4a1 .detect identifies only. Run .l with the file to trace it in the Env Logger")
+        lines.append("MonLua does **not** see strong obfuscation; this looks like **plain Lua / open-source code**.")
+        lines.append(f"{_pct2(1.0 - obf_score)} {PLAIN_CLASS_LABEL}")
+    return "\n".join(lines)
+
+
+def detect_view(filename: str, rows, basis: str = "", elapsed: str = "") -> discord.ui.LayoutView:
+    """Report card for `.detect` (Components V2): one verdict, percentage lines."""
     view = _LoggedLayoutView()
-    container = discord.ui.Container()
-    container.add_item(discord.ui.TextDisplay(f"{title}\n{head}"))
+    container = discord.ui.Container(accent_color=0x57F287)
+    container.add_item(discord.ui.TextDisplay("### \U0001f552 Detection complete"))
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-    container.add_item(discord.ui.TextDisplay(_fit_text("\n".join(body))))
+    container.add_item(discord.ui.TextDisplay(_fit_text(_detect_summary_text(rows))))
     view.add_item(container)
     return view
+
+
+def _preview_block(source_text: str, total_lines: int) -> str:
+    preview = "\n".join((source_text or "").splitlines()[:5])
+    block = _fit_text(preview, 72) if preview else "(the file has no readable text lines)"
+    if total_lines > 5:
+        block += f"\n... and {total_lines - 5} more!"
+    return block
+
+
+def get_view(host_line, source_text, total_lines, elapsed, file_name, detection_text, online=None) -> discord.ui.LayoutView:
+    """`.get` result card: fetched file with a five-line preview, timing and detection."""
+    view = _LoggedLayoutView()
+    container = discord.ui.Container(accent_color=0x57F287)
+    container.add_item(discord.ui.TextDisplay("## \u2705 Script fetched"))
+    container.add_item(discord.ui.TextDisplay(host_line))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"**Preview (first 5 lines):**\n```lua\n{_preview_block(source_text, total_lines)}\n```"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"Fetched in {elapsed} at {BRAND_INVITE}"))
+    if file_name:
+        container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
+    if online and online[1]:
+        container.add_item(_online_action_row(online))
+    if detection_text:
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"**Detection complete**\n{_fit_text(detection_text)}"))
+    view.add_item(container)
+    return view
+
+
+def envlog_view(file_name, source_text, total_lines, elapsed) -> discord.ui.LayoutView:
+    """Env Logger result card: preview, generation time, attached trace file."""
+    view = _LoggedLayoutView()
+    container = discord.ui.Container(accent_color=0x57F287)
+    container.add_item(discord.ui.TextDisplay("## \u2705 ENV LOGS COMPLETED!"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"**Preview (first 5 lines):**\n```lua\n{_preview_block(source_text, total_lines)}\n```"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(f"This file was generated in {elapsed} at {BRAND_INVITE}"))
+    if file_name:
+        container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
+    view.add_item(container)
+    return view
+
+
+async def _deliver_envlog_output(ctx, status, source_name, output_path, output_size, out_text, elapsed) -> bool:
+    out_name = output_path.name
+    total_lines = len((out_text or "").splitlines())
+    upload_limit = int(getattr(getattr(ctx, "guild", None), "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
+    try:
+        if output_size <= upload_limit:
+            await status.edit(
+                content=None,
+                view=envlog_view(out_name, out_text or "", total_lines, elapsed),
+                file=discord.File(str(output_path), filename=out_name),
+            )
+        else:
+            online = ("", "", "")
+            try:
+                online = await asyncio.to_thread(_upload_output, (out_text or "").rstrip(), Path(out_name).stem)
+            except Exception:
+                online = ("", "", "")
+            if not online[1]:
+                raise RuntimeError("The output exceeded the upload limit and the online upload did not accept it.")
+            view = envlog_view(None, out_text or "", total_lines, elapsed)
+            view.children[0].add_item(_online_action_row(online))
+            await status.edit(content=None, view=view)
+        try:
+            await status.delete()
+        except discord.HTTPException:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            await status.edit(content=None, view=error_view("Output delivery failed", f"{type(exc).__name__}: {str(exc)[:400]}"))
+        except discord.HTTPException:
+            pass
+        return False
 
 
 def _normalize_get_url(url: str) -> str:
@@ -1726,6 +1804,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
     else:
         status = await ctx.reply(view=info_view("⏳ Fetching source", "Checking the URL and resolving embedded links."), mention_author=False)
     temporary = Path(tempfile.gettempdir()) / f"get_{time.time_ns() % 10**10}.bin"
+    fetch_started = time.monotonic()
     try:
         if attachment is not None:
             await attachment.save(temporary)
@@ -1738,50 +1817,47 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
         allowed_names = (".txt", ".lua", ".luau", ".json", ".js", ".py", ".md", ".csv", ".xml", ".html", ".ini", ".cfg", ".yml", ".yaml", ".log")
         if not safe_name.lower().endswith(allowed_names):
             safe_name += ".txt"
-        details = [f"**File** · `{safe_name[:120]}`", f"**Size** · {_human_size(size)}"]
-        if loader_depth:
-            details.append(f"Resolved {loader_depth} embedded loadstring loader(s).")
-        if fetch_note:
-            details.append(f"Note · {fetch_note}")
-        details_text = "\n".join(details)
-        upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
+        host_line = "Read from your attachment."
+        if attachment is None:
+            host_line = f"Downloaded from {urllib.parse.urlsplit(url).netloc or 'the source URL'}."
+        fetch_elapsed = f"{time.monotonic() - fetch_started:.4f}s"
 
-        # Every .get result gets an online copy on Rubis (Pastefy fallback), so
-        # the card always carries Open/View-raw links no matter how it delivers.
-        online = ("", "", "")
+        source_text = ""
         if size:
             try:
                 source_text = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
-                online = await asyncio.to_thread(_upload_output, source_text.rstrip(), Path(filename).stem or "raw")
-            except Exception as exc:
-                print(f".get online upload failed: {type(exc).__name__}: {exc}", flush=True)
-                online = ("", "", "")
+            except Exception:
+                source_text = ""
+        total_lines = len(source_text.splitlines())
 
-        if size <= 1800:
-            preview = await asyncio.to_thread(temporary.read_text, encoding="utf-8-sig", errors="replace")
-            preview = preview[:1200].replace("```", "`\u200b``")
-            body = details_text + "\n\n```text\n" + preview + "\n```"
-            preview_view = info_view("Source preview", body)
-            if online[1]:
-                preview_view.children[0].add_item(_online_action_row(online))
-            await status.edit(content=None, view=preview_view)
-        elif size <= upload_limit:
-            fetched_view = info_view("Source fetched", details_text + "\nThe complete file is attached below.")
-            if online[1]:
-                fetched_view.children[0].add_item(_online_action_row(online))
-            await status.edit(content=None, view=fetched_view)
-            # Components V2 messages only show attachments referenced by a File
-            # component, so the download card carries one pointing at the upload.
-            download_view = info_view("Download ready", "The file is attached.")
-            if online[1]:
-                download_view.children[0].add_item(_online_action_row(online))
-            download_view.children[0].add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{safe_name}")))
-            await ctx.send(view=download_view, file=discord.File(fp=str(temporary), filename=safe_name))
+        detection_text = ""
+        if 0 < size <= LOCAL_INPUT_BYTES:
+            try:
+                async with job_slots:
+                    det_rows, _det_basis = await _detect_scores(temporary)
+                detection_text = _detect_summary_text(det_rows)
+            except Exception as exc:
+                print(f".get detection failed: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
+
+        upload_limit = int(getattr(ctx.guild, "filesize_limit", 8 * 1024 * 1024) or (8 * 1024 * 1024))
+        if size <= upload_limit:
+            await status.edit(
+                content=None,
+                view=get_view(host_line, source_text, total_lines, fetch_elapsed, safe_name, detection_text),
+                file=discord.File(fp=str(temporary), filename=safe_name),
+            )
         else:
+            online = ("", "", "")
+            if source_text:
+                try:
+                    online = await asyncio.to_thread(_upload_output, source_text.rstrip(), Path(filename).stem or "raw")
+                except Exception:
+                    online = ("", "", "")
             if online[1]:
-                fetched_view = info_view("Source fetched", details_text + "\n\nThe complete file is available online.")
-                fetched_view.children[0].add_item(_online_action_row(online))
-                await status.edit(content=None, view=fetched_view)
+                await status.edit(
+                    content=None,
+                    view=get_view(host_line, source_text, total_lines, fetch_elapsed, None, detection_text, online=online),
+                )
             else:
                 await status.edit(content=None, view=error_view("Source exceeds the upload limit", "Too large to attach here, and the online upload did not accept it."))
     except Exception as exc:
@@ -2041,7 +2117,7 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 returncode, stdout_text, stderr_text = await asyncio.to_thread(
                     _run_env_logger, input_path, Path(directory) / "dump_out.lua"
                 )
-                elapsed = f"{time.monotonic() - started:.1f}s"
+                elapsed = f"{time.monotonic() - started:.4f}s"
                 output_path = Path(directory) / "dump_out.lua"
                 if not output_path.exists() or output_path.stat().st_size == 0:
                     detail = (stderr_text or stdout_text or "").strip()[-700:] or "no diagnostic output"
@@ -2057,11 +2133,10 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 out_text = final_text
                 output_size = output_path.stat().st_size
 
-        delivered = await _deliver_deobf_output(
+        delivered = await _deliver_envlog_output(
             ctx,
             status,
             filename,
-            "Env Logger",
             output_path,
             output_size,
             out_text,
