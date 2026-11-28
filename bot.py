@@ -1068,9 +1068,16 @@ def detect_view(filename: str, rows, basis: str = "", elapsed: str = "") -> disc
     return view
 
 
+PREVIEW_CHAR_LIMIT = 3600
+
+
 def _preview_block(source_text: str, total_lines: int) -> str:
     preview = "\n".join((source_text or "").splitlines()[:5])
     block = _fit_text(preview, 72) if preview else "(the file has no readable text lines)"
+    if len(block) > PREVIEW_CHAR_LIMIT:
+        # Discord rejects any component content over 4000 chars, so long
+        # minified lines get cut instead of breaking the whole card.
+        block = block[:PREVIEW_CHAR_LIMIT].rstrip() + "\n... (preview cut off, the full file is attached)"
     if total_lines > 5:
         block += f"\n... and {total_lines - 5} more!"
     return block
@@ -1085,7 +1092,7 @@ def get_view(host_line, source_text, total_lines, elapsed, file_name, detection_
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"**Preview (first 5 lines):**\n```lua\n{_preview_block(source_text, total_lines)}\n```"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay(f"Fetched in {elapsed} at {BRAND_INVITE}"))
+    container.add_item(discord.ui.TextDisplay(f"-# Fetched in {elapsed} at {BRAND_INVITE}"))
     if file_name:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
     if online and online[1]:
@@ -1105,7 +1112,7 @@ def envlog_view(file_name, source_text, total_lines, elapsed) -> discord.ui.Layo
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(f"**Preview (first 5 lines):**\n```lua\n{_preview_block(source_text, total_lines)}\n```"))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay(f"This file was generated in {elapsed} at {BRAND_INVITE}"))
+    container.add_item(discord.ui.TextDisplay(f"-# This file was generated in {elapsed} at {BRAND_INVITE}"))
     if file_name:
         container.add_item(discord.ui.File(discord.UnfurledMediaItem(f"attachment://{file_name}")))
     view.add_item(container)
