@@ -507,7 +507,7 @@ local function _is_internal_fn(f)
         if ok and src == _oxygen_source then
             return true
         end
-        if ok and src == "=[C]" then
+        if ok and (src == "=[C]" or src == "[C]") then
             return true
         end
     end
@@ -8047,6 +8047,14 @@ local function mktypecon(name)
         rawset(px, "__stored", stored)
         pmeta.__typeof = name
         pmeta.__tostring = function()
+            if name == "Vector3" or name == "Vector2" then
+                local s2 = stored or {}
+                local base = _tostring(s2.X or 0) .. ", " .. _tostring(s2.Y or 0)
+                if name == "Vector3" then
+                    base = base .. ", " .. _tostring(s2.Z or 0)
+                end
+                return base
+            end
             return srep
         end
         pmeta.__index = function(t, k)
@@ -11242,8 +11250,23 @@ tonumber = function(...)
     return _tonumber(obj, base)
 end
 reg_c_func(tonumber)
+local _fake_str_mt = nil
+local _fake_clean_mt = nil
 getmetatable = function(...)
     local obj = ...
+    if _type(obj) == "string" then
+        if not _fake_str_mt then
+            _fake_str_mt = {}
+            _fake_str_mt.__index = string
+        end
+        return _fake_str_mt
+    end
+    if rawequal(obj, _G) then
+        if not _fake_clean_mt then
+            _fake_clean_mt = {}
+        end
+        return _fake_clean_mt
+    end
     if isproxy(obj) then
         local raw_result = _getmt(obj)
         if _type(raw_result) == "string" then
@@ -12604,6 +12627,10 @@ iscclosure = function(f)
         out(string.format("iscclosure(%s) -- true", st.reg[f] or "func"))
         return true
     end
+    if _is_internal_fn(f) then
+        out(string.format("iscclosure(%s) -- true (internal)", st.reg[f] or "func"))
+        return true
+    end
     if task then
         for _, v in _pairs(task) do
             if rawequal(v, f) then
@@ -12632,7 +12659,7 @@ iscclosure = function(f)
         end
     end
     local ok, what = pcall(debug.info, f, "s")
-    local result = ok and what == "=[C]"
+    local result = ok and (what == "=[C]" or what == "[C]")
     out(string.format("iscclosure(%s) -- %s", st.reg[f] or "func", _tostring(result)))
     return result
 end
@@ -12654,6 +12681,10 @@ islclosure = function(f)
         out(string.format("islclosure(%s) -- false (is cclosure)", st.reg[f] or "func"))
         return false
     end
+    if _is_internal_fn(f) then
+        out(string.format("islclosure(%s) -- false (internal)", st.reg[f] or "func"))
+        return false
+    end
     local c_natives = {
         print, warn, tostring, tonumber, pairs, ipairs, next,
         rawget, rawset, rawequal, unpack, select, assert,
@@ -12664,7 +12695,7 @@ islclosure = function(f)
     end
     local ok, what = _pcall(dbg.info, f, "s")
     out(string.format("islclosure(%s) -- unknown", st.reg[f] or "func"))
-    return not (ok and what == "=[C]")
+    return not (ok and (what == "=[C]" or what == "[C]"))
 end
 isexecutorclosure = function(f)
     if _type(f) ~= "function" then
@@ -13138,7 +13169,7 @@ debug = {
         local base = {}
         base.func = resolved_f
         if _type(resolved_f) == "function" then
-            local is_c = env_functions[resolved_f] or _cc_closures[resolved_f]
+            local is_c = env_functions[resolved_f] or _cc_closures[resolved_f] or _is_internal_fn(resolved_f)
             if not is_c then
                 local c_natives = {print, warn, tostring, tonumber, pairs, ipairs,
                     next, rawget, rawset, rawequal, unpack, select, assert,
@@ -13344,7 +13375,7 @@ debug = {
         end
         local is_c = false
         if _type(fn) == "function" then
-            if env_functions[fn] or _cc_closures[fn] then
+            if env_functions[fn] or _cc_closures[fn] or _is_internal_fn(fn) then
                 is_c = true
             else
                 local ok, src = _pcall(dbg.info, fn, "s")
