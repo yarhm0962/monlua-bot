@@ -2133,19 +2133,22 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
                 out_text = final_text
                 output_size = output_path.stat().st_size
 
-        delivered = await _deliver_envlog_output(
-            ctx,
-            status,
-            filename,
-            output_path,
-            output_size,
-            out_text,
-            elapsed,
-        )
-        if not delivered:
-            # _deliver_envlog_output already replaced the status card with the
-            # specific "Output delivery failed" error, so leave it in place.
-            return
+                # Deliver while the temp directory still exists: the context
+                # manager deletes the output file when the block exits.
+                delivered = await _deliver_envlog_output(
+                    ctx,
+                    status,
+                    filename,
+                    output_path,
+                    output_size,
+                    out_text,
+                    elapsed,
+                )
+                if not delivered:
+                    # _deliver_envlog_output already replaced the status card
+                    # with the specific "Output delivery failed" error, so
+                    # leave it in place.
+                    return
     except subprocess.TimeoutExpired:
         await status.edit(content=None, view=error_view("Env Logger", f"The run exceeded the {ENVLOGGER_TIMEOUT}s limit."))
     except ValueError as exc:
