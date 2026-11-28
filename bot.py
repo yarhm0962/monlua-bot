@@ -1010,7 +1010,7 @@ DETECT_HEADER_HINTS = ("luraph", "moonsec", "ironbrew", "ironveil", "77fuscator"
 
 
 PLAIN_CLASS_LABEL = "PlainLua-not-obfuscated"
-BRAND_INVITE = "discord.gg/EdrQjndmAW"
+BRAND_INVITE = ".gg/wMdGXmC6Me"
 
 
 def _class_name(label: str) -> str:
