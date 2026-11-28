@@ -1134,10 +1134,7 @@ async def _deliver_envlog_output(ctx, status, source_name, output_path, output_s
             view = envlog_view(None, out_text or "", total_lines, elapsed)
             view.children[0].add_item(_online_action_row(online))
             await status.edit(content=None, view=view)
-        try:
-            await status.delete()
-        except discord.HTTPException:
-            pass
+        # The status card IS the delivered output, so it must stay up.
         return True
     except Exception as exc:
         try:
