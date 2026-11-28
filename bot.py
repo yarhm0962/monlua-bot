@@ -1121,7 +1121,7 @@ async def _deliver_envlog_output(ctx, status, source_name, output_path, output_s
             await status.edit(
                 content=None,
                 view=envlog_view(out_name, out_text or "", total_lines, elapsed),
-                file=discord.File(str(output_path), filename=out_name),
+                attachments=[discord.File(str(output_path), filename=out_name)],
             )
         else:
             online = ("", "", "")
@@ -1844,7 +1844,7 @@ async def get_cmd(ctx: commands.Context, *, url: str = "") -> None:
             await status.edit(
                 content=None,
                 view=get_view(host_line, source_text, total_lines, fetch_elapsed, safe_name, detection_text),
-                file=discord.File(fp=str(temporary), filename=safe_name),
+                attachments=[discord.File(fp=str(temporary), filename=safe_name)],
             )
         else:
             online = ("", "", "")
@@ -2143,7 +2143,9 @@ async def env_logger_command(ctx: commands.Context, *, source: str = "") -> None
             elapsed,
         )
         if not delivered:
-            raise RuntimeError("The logged output could not be delivered.")
+            # _deliver_envlog_output already replaced the status card with the
+            # specific "Output delivery failed" error, so leave it in place.
+            return
     except subprocess.TimeoutExpired:
         await status.edit(content=None, view=error_view("Env Logger", f"The run exceeded the {ENVLOGGER_TIMEOUT}s limit."))
     except ValueError as exc:
